@@ -419,10 +419,12 @@
       support_tickets_last_90d: 0, payment_failures_last_6m: 0,
       discounts_used_last_6m: 0, is_auto_renew_enabled: true,
     },
+    // Deliberately lands within a hair of the decision threshold, so the
+    // marker on the track sits right where the label flips.
     borderline: {
-      tenure_days: 240, plan_type: "basic", monthly_fee: 9.99,
-      avg_session_count_last_30d: 6.0, last_activity_days_ago: 14,
-      support_tickets_last_90d: 1, payment_failures_last_6m: 0,
+      tenure_days: 120, plan_type: "basic", monthly_fee: 9.99,
+      avg_session_count_last_30d: 8.0, last_activity_days_ago: 18,
+      support_tickets_last_90d: 1, payment_failures_last_6m: 1,
       discounts_used_last_6m: 2, is_auto_renew_enabled: true,
     },
   };

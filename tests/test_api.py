@@ -275,13 +275,14 @@ def _dashboard_html() -> str:
 def _extract_presets() -> dict[str, dict[str, Any]]:
     """Pull the ``PRESETS`` object out of the page's inline script.
 
-    The presets are a JavaScript object literal, so unquoted keys and trailing
-    commas are normalised before parsing them as JSON.
+    The presets are a JavaScript object literal, so comments, unquoted keys and
+    trailing commas are normalised before parsing them as JSON.
     """
     match = re.search(r"const PRESETS = (\{.*?\n  \});", _dashboard_html(), re.DOTALL)
     assert match, "PRESETS object not found in the dashboard script"
 
-    literal = re.sub(r"(\w+):", r'"\1":', match.group(1))  # quote the keys
+    literal = re.sub(r"^\s*//.*$", "", match.group(1), flags=re.MULTILINE)  # drop comments
+    literal = re.sub(r"(\w+):", r'"\1":', literal)  # quote the keys
     literal = re.sub(r",(\s*[}\]])", r"\1", literal)  # drop trailing commas
     return json.loads(literal)
 
