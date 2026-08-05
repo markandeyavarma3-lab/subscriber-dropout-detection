@@ -14,7 +14,8 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, status
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 from src.api import service
 from src.api.schemas import (
@@ -66,6 +67,26 @@ async def _model_not_loaded_handler(_request, exc: service.ModelNotLoadedError) 
     return JSONResponse(
         status_code=status.HTTP_503_SERVICE_UNAVAILABLE, content={"detail": str(exc)}
     )
+
+
+if settings.API_STATIC_DIR.is_dir():
+    app.mount("/static", StaticFiles(directory=settings.API_STATIC_DIR), name="static")
+
+
+@app.get("/", include_in_schema=False)
+def dashboard() -> FileResponse:
+    """Serve the browser dashboard.
+
+    Plain HTML/CSS/JS with no build step and no external requests: the page
+    calls this same service's ``/predict``, ``/ready`` and ``/model-info``, so
+    the UI can never drift from the contract the API actually serves.
+    """
+    if not settings.DASHBOARD_PATH.is_file():
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Dashboard assets are not installed.",
+        )
+    return FileResponse(settings.DASHBOARD_PATH, media_type="text/html")
 
 
 @app.get("/health", response_model=HealthResponse, tags=["operations"])

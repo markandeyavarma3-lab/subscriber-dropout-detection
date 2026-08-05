@@ -16,6 +16,7 @@ Built to be understood and extended by a single developer in one to two weeks.
 | Language | Python 3.10+ (developed and tested on 3.11) |
 | ML | scikit-learn (`GradientBoostingClassifier`), pandas, NumPy, joblib |
 | API | FastAPI, Pydantic v2, uvicorn |
+| UI | Dashboard in plain HTML/CSS/JS, served by the same app (no build step) |
 | Testing | pytest, `fastapi.testclient` |
 | Quality | ruff |
 | Packaging | Docker (multi-stage), docker compose |
@@ -44,7 +45,8 @@ python -m src.models.train
 uvicorn src.api.main:app --reload
 ```
 
-Then open **http://127.0.0.1:8000/docs** for interactive Swagger UI.
+Then open **http://127.0.0.1:8000/** for the dashboard, or
+**http://127.0.0.1:8000/docs** for interactive Swagger UI.
 
 A `Makefile` wraps the same commands: `make install`, `make train`, `make serve`,
 `make test`, `make lint`, `make docker-build`, `make docker-run`.
@@ -58,6 +60,40 @@ A `Makefile` wraps the same commands: `make install`, `make train`, `make serve`
 ---
 
 ## Usage
+
+### Dashboard
+
+A browser UI is served at the root of the same app. Pick one of the three
+one-click presets (at-risk / healthy / borderline) or type in your own subscriber, and it
+renders the probability against the model's decision threshold, the risk band, and the
+signals that fired:
+
+```
+┌──────────────────────────────────────────┐
+│  Subscriber Dropout Detection            │
+├──────────────────────────────────────────┤
+│ Tenure (days)   [ 95      ]              │
+│ Plan            [ standard ▾]            │
+│ Last active     [ 34      ] days ago     │
+│ ☐ Auto-renew enabled                     │
+│           [  Score subscriber  ]         │
+├──────────────────────────────────────────┤
+│   99%   HIGH RISK                        │
+│   ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░          │
+│        ╵ threshold 0.26                  │
+│   • inactive for 34 days                 │
+│   • low recent activity (2.0/30d)        │
+│   • 2 payment failures in 6 months       │
+└──────────────────────────────────────────┘
+```
+
+It is a single dependency-free HTML file (`src/api/static/index.html`) with inline CSS and
+JavaScript — no build step, no bundler, no CDN — so it ships inside the same container and
+needs nothing added to `requirements.txt`. It calls this service's own `/predict`, `/ready`
+and `/model-info`, which means the UI cannot drift from the API contract without a test
+failing. The header badge reflects readiness, so a container running without an artifact
+shows *"no model loaded — run training"* rather than a dead page. Light and dark themes
+follow the OS setting.
 
 ### Predict for one subscriber
 
@@ -111,6 +147,7 @@ A healthy subscriber (long tenure, active yesterday, auto-renew on) returns:
 
 | Method | Path | Purpose |
 | --- | --- | --- |
+| `GET` | `/` | Browser dashboard. |
 | `GET` | `/health` | Liveness probe. Always `{"status": "ok"}` while the process is up. |
 | `GET` | `/ready` | Readiness probe. Reports whether the model artifact is loaded. |
 | `GET` | `/model-info` | Metadata: model name, training time, threshold, expected columns. |
@@ -157,6 +194,8 @@ Or with compose:
 docker compose up --build
 ```
 
+Either way the dashboard is then at **http://localhost:8000/**.
+
 The runtime stage is a slim Python 3.11 base running as a non-root user, with a
 `HEALTHCHECK` wired to `/health`. To serve a model trained on your host instead of the
 one baked into the image, uncomment the `volumes:` block in `docker-compose.yml`.
@@ -190,7 +229,9 @@ subscriber-dropout-detection/
 │   └── api/
 │       ├── main.py           # FastAPI app and routes
 │       ├── schemas.py        # Pydantic request/response models
-│       └── service.py        # model loading, prediction, explanations
+│       ├── service.py        # model loading, prediction, explanations
+│       └── static/
+│           └── index.html    # dashboard (inline CSS/JS, no build step)
 ├── tests/
 └── .github/workflows/ci.yml
 ```
@@ -291,9 +332,14 @@ It explains the inputs, not the model internals, which is honest about what it i
 costs nothing at inference time. Swapping in SHAP later is a contained change to
 `build_explanation`.
 
+The dashboard is served from this same app rather than as a separate frontend. That is a
+deliberate trade: one deployable, one port, no CORS configuration and no second build
+pipeline, at the cost of the UI not being independently scalable — the right call at this
+size.
+
 ### Tests
 
-75 tests across three files, all runnable with `pytest`:
+86 tests across three files, all runnable with `pytest`:
 
 - `test_features.py` — derived-column presence, row-count preservation, input immutability,
   finiteness, zero-denominator edge cases, hand-computed formula checks, output shape,
@@ -304,6 +350,9 @@ costs nothing at inference time. Swapping in SHAP later is a contained change to
 - `test_api.py` — every endpoint, validation failures (`422`), the degraded no-model path
   (`503`), batch/single agreement, and a behavioural check that a distressed subscriber
   scores strictly higher than a healthy one
+- the dashboard tests in `test_api.py` parse the page itself: its form fields must match
+  `SubscriberFeaturesRequest` exactly, every path it `fetch`es must be a real route, and
+  each preset must round-trip through `/predict` — so the UI cannot drift from the API
 
 The suite trains one small model per session into a temporary directory, so it runs in
 under a second and never writes into the repository or depends on your working tree.

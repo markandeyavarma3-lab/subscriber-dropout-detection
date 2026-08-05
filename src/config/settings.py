@@ -49,6 +49,10 @@ MODEL_PATH: Path = _env_path("SDD_MODEL_PATH", ARTIFACTS_DIR / "model.joblib")
 METADATA_PATH: Path = ARTIFACTS_DIR / "metadata.json"
 METRICS_PATH: Path = ARTIFACTS_DIR / "metrics.json"
 
+# Static assets for the browser dashboard served at ``/``.
+API_STATIC_DIR: Path = SRC_DIR / "api" / "static"
+DASHBOARD_PATH: Path = API_STATIC_DIR / "index.html"
+
 # --------------------------------------------------------------------------- #
 # Data & splitting
 # --------------------------------------------------------------------------- #
