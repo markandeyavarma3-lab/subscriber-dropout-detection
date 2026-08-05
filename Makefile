@@ -1,0 +1,49 @@
+# Shortcuts for the common workflows. Run `make help` for the list.
+.PHONY: help install data train evaluate serve test lint format docker-build docker-run docker-up clean
+
+PYTHON ?= python
+IMAGE  ?= subscriber-dropout-api
+
+help:  ## Show the available targets
+	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
+		| awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}'
+
+install:  ## Install development dependencies
+	$(PYTHON) -m pip install --upgrade pip
+	$(PYTHON) -m pip install -r requirements-dev.txt
+
+data:  ## Generate the synthetic dataset
+	$(PYTHON) -m src.data.generate
+
+train:  ## Train the model and write the artifacts
+	$(PYTHON) -m src.models.train
+
+evaluate:  ## Evaluate the saved artifact on the held-out test split
+	$(PYTHON) -m src.models.evaluate
+
+serve:  ## Run the API locally with autoreload
+	$(PYTHON) -m uvicorn src.api.main:app --reload
+
+test:  ## Run the test suite
+	$(PYTHON) -m pytest
+
+lint:  ## Lint with ruff
+	$(PYTHON) -m ruff check .
+
+format:  ## Auto-format with ruff
+	$(PYTHON) -m ruff format .
+
+docker-build:  ## Build the Docker image (trains the model during the build)
+	docker build -t $(IMAGE) .
+
+docker-run:  ## Run the built image on port 8000
+	docker run --rm -p 8000:8000 $(IMAGE)
+
+docker-up:  ## Build and start via docker compose
+	docker compose up --build
+
+clean:  ## Remove generated data, artifacts and caches
+	rm -f src/data/raw/*.csv src/data/processed/*.csv
+	rm -f src/models/artifacts/*.joblib src/models/artifacts/*.json
+	rm -rf .pytest_cache .ruff_cache __pycache__
+	find . -type d -name __pycache__ -prune -exec rm -rf {} +

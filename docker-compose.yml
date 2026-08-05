@@ -1,0 +1,32 @@
+# Bring the API up with:  docker compose up --build
+# Then open http://localhost:8000/docs
+
+services:
+  subscriber-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: subscriber-dropout-api:latest
+    container_name: subscriber-dropout-api
+    ports:
+      - "8000:8000"
+    environment:
+      # Override any SDD_* setting from src/config/settings.py here.
+      SDD_API_PORT: "8000"
+      # SDD_DECISION_THRESHOLD: "0.35"
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=4).status == 200 else 1)"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+
+    # The image already contains a trained model.joblib. To serve a model you
+    # trained on the host instead (retrain without rebuilding), uncomment:
+    # volumes:
+    #   - ./src/models/artifacts:/app/src/models/artifacts:ro

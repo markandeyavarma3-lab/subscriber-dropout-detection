@@ -1,0 +1,348 @@
+# Subscriber Dropout Detection System
+
+An end-to-end MLOps project that predicts whether a subscriber is likely to **drop out**
+(cancel or stop using the service) in the near future, and serves those predictions over a
+FastAPI HTTP API. It covers the full path from data generation and feature engineering
+through training, evaluation, containerisation and CI.
+
+Built to be understood and extended by a single developer in one to two weeks.
+
+---
+
+## Tech stack
+
+| Area | Tools |
+| --- | --- |
+| Language | Python 3.10+ (developed and tested on 3.11) |
+| ML | scikit-learn (`GradientBoostingClassifier`), pandas, NumPy, joblib |
+| API | FastAPI, Pydantic v2, uvicorn |
+| Testing | pytest, `fastapi.testclient` |
+| Quality | ruff |
+| Packaging | Docker (multi-stage), docker compose |
+| CI | GitHub Actions |
+
+---
+
+## Quick start
+
+```bash
+# 1. Clone and enter the project
+git clone <your-repo-url>
+cd subscriber-dropout-detection
+
+# 2. Create a virtual environment (Python 3.10+)
+python3 -m venv .venv
+source .venv/bin/activate          # Windows: .venv\Scripts\activate
+
+# 3. Install dependencies
+pip install -r requirements-dev.txt  # or requirements.txt for runtime only
+
+# 4. Train the model (generates the dataset on first run)
+python -m src.models.train
+
+# 5. Serve the API
+uvicorn src.api.main:app --reload
+```
+
+Then open **http://127.0.0.1:8000/docs** for interactive Swagger UI.
+
+A `Makefile` wraps the same commands: `make install`, `make train`, `make serve`,
+`make test`, `make lint`, `make docker-build`, `make docker-run`.
+
+### Prerequisites
+
+- Python 3.10 or newer (3.11 recommended)
+- `pip`
+- Docker (optional, only for the containerised workflow)
+
+---
+
+## Usage
+
+### Predict for one subscriber
+
+```bash
+curl -X POST http://127.0.0.1:8000/predict \
+  -H 'Content-Type: application/json' \
+  -d '{
+        "tenure_days": 95,
+        "plan_type": "standard",
+        "monthly_fee": 19.99,
+        "avg_session_count_last_30d": 2.0,
+        "last_activity_days_ago": 34,
+        "support_tickets_last_90d": 3,
+        "payment_failures_last_6m": 2,
+        "discounts_used_last_6m": 1,
+        "is_auto_renew_enabled": false
+      }'
+```
+
+Response:
+
+```json
+{
+  "dropout_probability": 0.9888,
+  "predicted_label": 1,
+  "risk_level": "high",
+  "threshold": 0.26,
+  "explanation": "High dropout risk (99%): inactive for 34 days, low recent activity (2.0 sessions/30d), 2 payment failures in the last 6 months.",
+  "top_risk_factors": [
+    "inactive for 34 days",
+    "low recent activity (2.0 sessions/30d)",
+    "2 payment failures in the last 6 months"
+  ]
+}
+```
+
+A healthy subscriber (long tenure, active yesterday, auto-renew on) returns:
+
+```json
+{
+  "dropout_probability": 0.0084,
+  "predicted_label": 0,
+  "risk_level": "low",
+  "threshold": 0.26,
+  "explanation": "Low dropout risk (1%): auto-renew enabled, strong recent engagement, active in the last few days, long-tenured subscriber.",
+  "top_risk_factors": []
+}
+```
+
+### Endpoints
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `GET` | `/health` | Liveness probe. Always `{"status": "ok"}` while the process is up. |
+| `GET` | `/ready` | Readiness probe. Reports whether the model artifact is loaded. |
+| `GET` | `/model-info` | Metadata: model name, training time, threshold, expected columns. |
+| `POST` | `/predict` | Score one subscriber. |
+| `POST` | `/predict/batch` | Score up to 1000 subscribers in one call. |
+| `GET` | `/docs` | Swagger UI. |
+
+`/health` and `/ready` are deliberately separate: a missing model artifact leaves the
+service **live but not ready**, so an orchestrator reports a clear degraded state instead
+of crash-looping the container. In that state `/predict` returns `503`, not `500`.
+
+### Input schema
+
+| Field | Type | Constraint |
+| --- | --- | --- |
+| `tenure_days` | int | `>= 0` — days since subscription start |
+| `plan_type` | enum | `basic` \| `standard` \| `premium` (case-insensitive) |
+| `monthly_fee` | float | `>= 0` |
+| `avg_session_count_last_30d` | float | `>= 0` |
+| `last_activity_days_ago` | int | `>= 0`, and **must not exceed `tenure_days`** |
+| `support_tickets_last_90d` | int | `>= 0` |
+| `payment_failures_last_6m` | int | `>= 0` |
+| `discounts_used_last_6m` | int | `>= 0` |
+| `is_auto_renew_enabled` | bool | — |
+
+Invalid payloads return `422` with a field-level explanation. Note that `subscriber_id` is
+**not** accepted: it carries no signal and is dropped before training.
+
+---
+
+## Running with Docker
+
+The image trains the model during the build, so the container ships ready to serve — no
+volume mount or extra step required.
+
+```bash
+docker build -t subscriber-dropout-api .
+docker run -p 8000:8000 subscriber-dropout-api
+```
+
+Or with compose:
+
+```bash
+docker compose up --build
+```
+
+The runtime stage is a slim Python 3.11 base running as a non-root user, with a
+`HEALTHCHECK` wired to `/health`. To serve a model trained on your host instead of the
+one baked into the image, uncomment the `volumes:` block in `docker-compose.yml`.
+
+---
+
+## Project architecture
+
+```
+subscriber-dropout-detection/
+├── README.md
+├── pyproject.toml            # metadata + pytest/ruff config
+├── requirements.txt          # runtime dependencies
+├── requirements-dev.txt      # + pytest, ruff, httpx
+├── Makefile                  # shortcuts for the common commands
+├── Dockerfile                # multi-stage: build & train -> slim runtime
+├── docker-compose.yml
+├── src/
+│   ├── config/settings.py    # all paths, seeds, hyperparameters, thresholds
+│   ├── data/
+│   │   ├── generate.py       # synthetic dataset generator
+│   │   ├── loader.py         # loading + stratified train/val/test split
+│   │   ├── raw/              # subscribers.csv (generated)
+│   │   └── processed/        # test.csv, the persisted held-out split
+│   ├── features/
+│   │   └── build_features.py # derived features + ColumnTransformer pipeline
+│   ├── models/
+│   │   ├── train.py          # training entrypoint
+│   │   ├── evaluate.py       # metrics + standalone evaluation script
+│   │   └── artifacts/        # model.joblib, metrics.json, metadata.json
+│   └── api/
+│       ├── main.py           # FastAPI app and routes
+│       ├── schemas.py        # Pydantic request/response models
+│       └── service.py        # model loading, prediction, explanations
+├── tests/
+└── .github/workflows/ci.yml
+```
+
+### Data
+
+The project ships with a **synthetic dataset** (Option A), so the repository is fully
+self-contained and reproducible with no external downloads — which also keeps CI and
+Docker builds hermetic.
+
+`src/data/generate.py` does not draw columns independently. Each subscriber gets three
+latent traits that are never written to the CSV — `engagement`, `dissatisfaction`,
+`price_sensitivity` — and the observable columns are drawn conditionally on those traits
+and on the plan. Premium subscribers engage more; unhappy ones file more tickets;
+price-sensitive ones redeem more discounts; heavy users were seen more recently. The
+`dropout` label is then drawn from a logistic model over the observable columns plus a
+noise term.
+
+That noise is deliberate. Together with the Bernoulli draw it caps the achievable ROC-AUC
+in a believable 0.85–0.91 band rather than a suspicious 1.0. The generator is seeded, so
+`python -m src.data.generate` reproduces the same 8,000 rows every time, with a dropout
+rate near **20%** — a realistic class imbalance rather than a convenient 50/50 split.
+
+### Features
+
+Feature engineering lives **inside** the saved pipeline. This is the most important design
+decision in the project: the API posts raw columns and the artifact performs every
+transformation itself, so training-time and serving-time feature code cannot drift apart.
+
+Raw counts are hard to compare across subscribers with different tenures and plans, so the
+pipeline adds normalised versions — `recency_ratio`, `engagement_recency_score`,
+`fee_per_session`, `friction_score`, per-month rates, and an `is_dormant` flag. Every
+denominator carries a `+ 1` guard so a brand-new or never-active subscriber cannot divide
+by zero.
+
+Those derived features carry the model. In the current run they take four of the top six
+importance slots, led by `recency_ratio` at **0.52**:
+
+| Feature | Importance |
+| --- | --- |
+| `recency_ratio` (derived) | 0.515 |
+| `is_auto_renew_enabled` | 0.108 |
+| `fee_per_session` (derived) | 0.078 |
+| `last_activity_days_ago` | 0.069 |
+| `friction_score` (derived) | 0.057 |
+| `engagement_recency_score` (derived) | 0.049 |
+
+The preprocessing itself is a `ColumnTransformer`: numeric columns are median-imputed then
+standard-scaled, `plan_type` is one-hot encoded with `handle_unknown="ignore"` (an unseen
+plan encodes to zeros instead of raising), and binary flags pass through.
+
+### Model training
+
+`python -m src.models.train` loads or generates the data, makes a stratified 70/15/15
+split, fits a `GradientBoostingClassifier`, and — rather than assuming 0.5 — **tunes the
+decision threshold on the validation split** to maximise F1. With a 20% base rate the
+tuned threshold lands near 0.26, trading precision for the recall that actually matters
+when the output triggers retention outreach.
+
+Three artifacts are written to `src/models/artifacts/`:
+
+- `model.joblib` — the fitted pipeline; the only file the API needs
+- `metrics.json` — validation and test metrics plus feature importances
+- `metadata.json` — decision threshold, expected input columns, library versions
+
+Current results (seed 42, 8,000 subscribers):
+
+| Metric | Validation | Test |
+| --- | --- | --- |
+| Accuracy | 0.848 | 0.853 |
+| Precision | 0.596 | 0.609 |
+| Recall | 0.741 | 0.724 |
+| F1 | 0.660 | 0.662 |
+| **ROC-AUC** | **0.890** | **0.907** |
+
+Validation and test track each other closely, which is the signal that the model is not
+overfitting the split.
+
+`python -m src.models.evaluate` reloads the saved artifact and re-scores the persisted test
+split, verifying that what was written to disk still generalises.
+
+Everything tunable — paths, seeds, split sizes, hyperparameters, rule thresholds — lives in
+`src/config/settings.py` and can be overridden with `SDD_`-prefixed environment variables
+(`SDD_N_ESTIMATORS`, `SDD_DECISION_THRESHOLD`, `SDD_ARTIFACTS_DIR`, …). No paths are
+hard-coded elsewhere. The training CLI also takes `--n-estimators`, `--max-depth`,
+`--learning-rate`, `--seed`, `--artifacts-dir` and `--no-tune-threshold`.
+
+### API serving layer
+
+The artifact is loaded **once** at startup via a FastAPI lifespan handler and cached in a
+module-level singleton, so the load cost is not paid per request. `service.py` owns model
+loading, prediction and the explanation logic; `schemas.py` owns the public contract;
+`main.py` is thin routing.
+
+The `explanation` field is intentionally **rule-based**, not SHAP — it reads the input
+values against thresholds in `settings.ExplanationRules` and reports which signals fired.
+It explains the inputs, not the model internals, which is honest about what it is and
+costs nothing at inference time. Swapping in SHAP later is a contained change to
+`build_explanation`.
+
+### Tests
+
+75 tests across three files, all runnable with `pytest`:
+
+- `test_features.py` — derived-column presence, row-count preservation, input immutability,
+  finiteness, zero-denominator edge cases, hand-computed formula checks, output shape,
+  scaling, and the unseen-category path
+- `test_train.py` — dataset schema, reproducibility, split stratification, artifact
+  creation, metric validity, better-than-chance performance, joblib round-trip, and that
+  a tuned threshold reproduces its own reported F1
+- `test_api.py` — every endpoint, validation failures (`422`), the degraded no-model path
+  (`503`), batch/single agreement, and a behavioural check that a distressed subscriber
+  scores strictly higher than a healthy one
+
+The suite trains one small model per session into a temporary directory, so it runs in
+under a second and never writes into the repository or depends on your working tree.
+
+### CI pipeline
+
+`.github/workflows/ci.yml` runs on push and pull request to `main`:
+
+**Job 1 — lint and test:** checkout → set up Python 3.11 (with pip caching) → install →
+`ruff check` → `pytest -v` → train end-to-end → evaluate the saved artifact → upload the
+artifacts for download.
+
+**Job 2 — Docker:** runs only after job 1 passes. Builds the image, starts a container,
+polls `/health`, and posts a real request to `/predict`. Building an image proves it
+compiles; the smoke test proves it *serves*. Any failing step fails the workflow.
+
+---
+
+## Future work
+
+- **Real production data.** Replace the synthetic generator with a warehouse extract; the
+  loader and feature pipeline are already isolated behind `src/data/loader.py`, so only
+  that boundary changes.
+- **Model monitoring and drift detection.** Log prediction distributions and input
+  statistics, and alert when live feature distributions diverge from the training
+  reference stored in `metadata.json`.
+- **Experiment tracking.** MLflow or Weights & Biases in place of the hand-rolled
+  `metrics.json`, once more than a handful of runs need comparing.
+- **Event-driven scoring.** Consume subscriber activity events from Kafka or SQS and write
+  risk scores back to the CRM, instead of synchronous request/response only.
+- **True explainability.** Swap the rule-based explanation for SHAP values to attribute
+  each prediction to the model's actual decision surface.
+- **Threshold by business cost.** Tune the cut-off against the real cost ratio of a missed
+  churner versus a wasted retention offer, rather than F1.
+- **Calibration.** Add `CalibratedClassifierCV` so the probabilities can be used directly
+  in expected-value calculations.
+
+---
+
+## License
+
+MIT.

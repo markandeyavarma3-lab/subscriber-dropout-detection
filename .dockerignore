@@ -1,0 +1,23 @@
+# Keep the build context small and the image reproducible.
+.git/
+.github/
+.venv/
+venv/
+
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Data and artifacts are regenerated inside the build, never copied in.
+src/data/raw/*.csv
+src/data/processed/*.csv
+src/models/artifacts/*.joblib
+src/models/artifacts/*.json
+
+tests/
+.idea/
+.vscode/
+.DS_Store

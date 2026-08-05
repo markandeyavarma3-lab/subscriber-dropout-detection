@@ -1,0 +1,135 @@
+"""Central configuration for the Subscriber Dropout Detection System.
+
+Every tunable value (paths, seeds, split sizes, hyperparameters, decision
+thresholds) lives here so that no other module has to hard-code them.  Values
+can be overridden at runtime with ``SDD_``-prefixed environment variables,
+which is how the Docker image and the CI pipeline redirect artifacts without
+touching the code.
+"""
+
+from __future__ import annotations
+
+import os
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any
+
+# --------------------------------------------------------------------------- #
+# Paths
+# --------------------------------------------------------------------------- #
+
+# settings.py -> config/ -> src/ -> <project root>
+PROJECT_ROOT: Path = Path(__file__).resolve().parents[2]
+
+
+def _env_path(name: str, default: Path) -> Path:
+    """Return a path from the environment, falling back to ``default``."""
+    raw = os.getenv(name)
+    return Path(raw).expanduser().resolve() if raw else default
+
+
+def _env_int(name: str, default: int) -> int:
+    return int(os.getenv(name, default))
+
+
+def _env_float(name: str, default: float) -> float:
+    return float(os.getenv(name, default))
+
+
+SRC_DIR: Path = PROJECT_ROOT / "src"
+DATA_DIR: Path = _env_path("SDD_DATA_DIR", SRC_DIR / "data")
+RAW_DATA_DIR: Path = DATA_DIR / "raw"
+PROCESSED_DATA_DIR: Path = DATA_DIR / "processed"
+ARTIFACTS_DIR: Path = _env_path("SDD_ARTIFACTS_DIR", SRC_DIR / "models" / "artifacts")
+
+RAW_DATA_PATH: Path = _env_path("SDD_RAW_DATA_PATH", RAW_DATA_DIR / "subscribers.csv")
+TEST_DATA_PATH: Path = PROCESSED_DATA_DIR / "test.csv"
+
+MODEL_PATH: Path = _env_path("SDD_MODEL_PATH", ARTIFACTS_DIR / "model.joblib")
+METADATA_PATH: Path = ARTIFACTS_DIR / "metadata.json"
+METRICS_PATH: Path = ARTIFACTS_DIR / "metrics.json"
+
+# --------------------------------------------------------------------------- #
+# Data & splitting
+# --------------------------------------------------------------------------- #
+
+RANDOM_SEED: int = _env_int("SDD_RANDOM_SEED", 42)
+N_SUBSCRIBERS: int = _env_int("SDD_N_SUBSCRIBERS", 8000)
+
+TARGET_COLUMN: str = "dropout"
+ID_COLUMN: str = "subscriber_id"
+
+# Fractions of the *full* dataset. Train gets the remainder (0.70 by default).
+TEST_SIZE: float = _env_float("SDD_TEST_SIZE", 0.15)
+VALIDATION_SIZE: float = _env_float("SDD_VALIDATION_SIZE", 0.15)
+
+# --------------------------------------------------------------------------- #
+# Model
+# --------------------------------------------------------------------------- #
+
+MODEL_NAME: str = "gradient_boosting_classifier"
+
+MODEL_PARAMS: dict[str, Any] = {
+    "n_estimators": _env_int("SDD_N_ESTIMATORS", 300),
+    "learning_rate": _env_float("SDD_LEARNING_RATE", 0.05),
+    "max_depth": _env_int("SDD_MAX_DEPTH", 3),
+    "subsample": _env_float("SDD_SUBSAMPLE", 0.9),
+    "min_samples_leaf": _env_int("SDD_MIN_SAMPLES_LEAF", 20),
+    "random_state": RANDOM_SEED,
+}
+
+# Probability at or above which a subscriber is labelled a dropout risk.
+# ``train.py`` can tune this on the validation set and persist the result to
+# ``metadata.json``; this value is the fallback.
+DECISION_THRESHOLD: float = _env_float("SDD_DECISION_THRESHOLD", 0.5)
+
+# When true, training searches for the threshold maximising validation F1.
+TUNE_THRESHOLD: bool = os.getenv("SDD_TUNE_THRESHOLD", "1") not in {"0", "false", "False"}
+
+# --------------------------------------------------------------------------- #
+# Rule-based explanation thresholds (used by the API, not by the model)
+# --------------------------------------------------------------------------- #
+
+
+@dataclass(frozen=True)
+class ExplanationRules:
+    """Cut-offs that turn raw feature values into human-readable risk reasons."""
+
+    dormant_days: int = 21
+    low_session_count: float = 4.0
+    high_support_tickets: int = 3
+    high_payment_failures: int = 2
+    heavy_discount_use: int = 3
+    new_subscriber_days: int = 60
+    loyal_subscriber_days: int = 365
+    healthy_session_count: float = 12.0
+
+
+EXPLANATION_RULES: ExplanationRules = ExplanationRules()
+
+# --------------------------------------------------------------------------- #
+# API
+# --------------------------------------------------------------------------- #
+
+
+@dataclass(frozen=True)
+class APISettings:
+    """Metadata and runtime options for the FastAPI service."""
+
+    title: str = "Subscriber Dropout Detection API"
+    description: str = (
+        "Predicts the probability that a subscriber will drop out "
+        "(cancel or stop using the service) in the near future."
+    )
+    version: str = "1.0.0"
+    host: str = field(default_factory=lambda: os.getenv("SDD_API_HOST", "0.0.0.0"))
+    port: int = field(default_factory=lambda: _env_int("SDD_API_PORT", 8000))
+
+
+API_SETTINGS: APISettings = APISettings()
+
+
+def ensure_directories() -> None:
+    """Create every directory the pipeline writes to (idempotent)."""
+    for directory in (RAW_DATA_DIR, PROCESSED_DATA_DIR, ARTIFACTS_DIR):
+        directory.mkdir(parents=True, exist_ok=True)
