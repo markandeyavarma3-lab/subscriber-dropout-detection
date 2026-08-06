@@ -21,7 +21,10 @@ from src.api import service
 from src.api.schemas import (
     BatchPredictionRequest,
     BatchPredictionResponse,
+    DriftRequest,
+    DriftResponse,
     HealthResponse,
+    MetricsResponse,
     ModelInfoResponse,
     PredictionResponse,
     ReadinessResponse,
@@ -146,6 +149,38 @@ def predict_batch(request: BatchPredictionRequest) -> BatchPredictionResponse:
         ) from exc
     predictions = [PredictionResponse(**result) for result in results]
     return BatchPredictionResponse(predictions=predictions, count=len(predictions))
+
+
+@app.get("/metrics", response_model=MetricsResponse, tags=["monitoring"])
+def metrics() -> MetricsResponse:
+    """Live statistics for the predictions this process has served.
+
+    Always 200, even with no model loaded: a monitoring endpoint that fails
+    when the thing it monitors is unhealthy is worse than useless.
+    """
+    return MetricsResponse(**service.live_metrics())
+
+
+@app.post("/monitoring/drift", response_model=DriftResponse, tags=["monitoring"])
+def drift(request: DriftRequest) -> DriftResponse:
+    """Score a sample of live subscribers against the training distribution.
+
+    Reports a Population Stability Index per feature plus one for the model's
+    own output, so a shift can be traced to the inputs that caused it.
+    """
+    try:
+        report = service.drift_report(
+            [subscriber.to_features() for subscriber in request.subscribers]
+        )
+    except service.ModelNotLoadedError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)
+        ) from exc
+    except service.DriftBaselineUnavailableError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)
+        ) from exc
+    return DriftResponse(**report)
 
 
 if __name__ == "__main__":  # pragma: no cover - convenience entry point

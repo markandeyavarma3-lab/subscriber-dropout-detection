@@ -155,6 +155,8 @@ A healthy subscriber (long tenure, active yesterday, auto-renew on) returns:
 | `GET` | `/model-info` | Metadata: model name, training time, threshold, expected columns. |
 | `POST` | `/predict` | Score one subscriber. |
 | `POST` | `/predict/batch` | Score up to 1000 subscribers in one call. |
+| `GET` | `/metrics` | Live prediction statistics for this process. |
+| `POST` | `/monitoring/drift` | Compare a sample of live traffic against the training data. |
 | `GET` | `/docs` | Swagger UI. |
 
 `/health` and `/ready` are deliberately separate: a missing model artifact leaves the
@@ -227,7 +229,12 @@ subscriber-dropout-detection/
 │   ├── models/
 │   │   ├── train.py          # training entrypoint
 │   │   ├── evaluate.py       # metrics + standalone evaluation script
-│   │   └── artifacts/        # model.joblib, metrics.json, metadata.json
+│   │   └── artifacts/        # model.joblib, metrics.json, metadata.json,
+│   │                         #   reference_profile.json
+│   ├── monitoring/
+│   │   ├── profile.py        # builds the training distribution baseline
+│   │   ├── drift.py          # PSI scoring of live traffic vs baseline
+│   │   └── tracker.py        # rolling window of served predictions
 │   └── api/
 │       ├── main.py           # FastAPI app and routes
 │       ├── schemas.py        # Pydantic request/response models
@@ -293,11 +300,12 @@ decision threshold on the validation split** to maximise F1. With a 20% base rat
 tuned threshold lands near 0.26, trading precision for the recall that actually matters
 when the output triggers retention outreach.
 
-Three artifacts are written to `src/models/artifacts/`:
+Four artifacts are written to `src/models/artifacts/`:
 
 - `model.joblib` — the fitted pipeline; the only file the API needs
 - `metrics.json` — validation and test metrics plus feature importances
 - `metadata.json` — decision threshold, expected input columns, library versions
+- `reference_profile.json` — the training distribution baseline used for drift detection
 
 Current results (seed 42, 8,000 subscribers):
 
@@ -346,9 +354,84 @@ deliberate trade: one deployable, one port, no CORS configuration and no second 
 pipeline, at the cost of the UI not being independently scalable — the right call at this
 size.
 
+### Monitoring & drift detection
+
+A model silently decays when the world stops looking like its training data. This project
+detects that in two directions.
+
+**The baseline.** Every training run writes `reference_profile.json` describing the
+population the model actually learned from: quantile bins for each numeric column,
+category shares for `plan_type` and `is_auto_renew_enabled`, and the model's own score
+distribution. Distributions are stored as **bins, not rows** — the artifact stays small
+and fixed-size instead of shipping a copy of the training data next to the model. The
+baseline is built from the *training* split specifically, not the full dataset, so it
+describes what the model saw rather than what merely existed.
+
+**The metric.** Drift is scored with the Population Stability Index:
+
+```
+PSI = Σ (live_i − ref_i) · ln(live_i / ref_i)
+```
+
+PSI is used in preference to a KS test because it needs no significance level to
+interpret — its conventional bands are directly actionable, which matters when someone is
+reading the number at 3am:
+
+| PSI | Verdict | Meaning |
+| --- | --- | --- |
+| `< 0.10` | `stable` | Ordinary sampling noise |
+| `0.10 – 0.25` | `moderate` | Worth watching |
+| `> 0.25` | `significant` | The population has genuinely moved |
+
+Bins are **quantile-based**, so each holds a comparable share of the reference; equal-width
+bins on a skewed column leave most bins near-empty and make PSI explode on meaningless
+movements. Every proportion carries an epsilon before the logarithm, so a category missing
+from either side cannot send the score to infinity. Live values beyond the training range
+are clipped into the outer bins rather than discarded — a value larger than anything seen
+in training is still evidence.
+
+**`POST /monitoring/drift`** scores a sample and attributes the movement:
+
+```json
+{
+  "overall_verdict": "significant",
+  "n_samples": 400,
+  "sufficient_sample": true,
+  "drifted_features": ["last_activity_days_ago", "dropout_probability"],
+  "features": [
+    {"feature": "last_activity_days_ago", "psi": 10.6784, "verdict": "significant"},
+    {"feature": "avg_session_count_last_30d", "psi": 0.02, "verdict": "stable"}
+  ],
+  "prediction": {"feature": "dropout_probability", "psi": 3.1911, "verdict": "significant"}
+}
+```
+
+Small batches produce noisy PSI, so the response reports `sufficient_sample` rather than
+leaving the caller to discover that the hard way.
+
+Input drift and output drift are scored **separately**, because they fail differently. A
+population can shift while scores hold steady — an unseen `plan_type` registers PSI 5.4 on
+the input while prediction drift stays flat, because `handle_unknown="ignore"` quietly
+absorbs it into an all-zero block. That silent absorption is precisely the failure input
+monitoring exists to catch, and no amount of watching the output would reveal it.
+
+**`GET /metrics`** reports what this process has served — rolling mean, p50/p90, flagged
+rate, risk-band counts, and `probability_mean_shift`, the live mean score minus the
+training-time mean. That last number is the most alertable value here: it moves when the
+model's behaviour changes, whether or not anyone deployed anything.
+
+The tracker is a bounded in-process window, so memory stays flat under load while
+`served_total` stays honest. It is deliberately **not** a metrics backend — it answers
+"what is this replica doing right now". `/metrics` always returns 200, even with no model
+loaded: a monitoring endpoint that fails when the thing it monitors is unhealthy is worse
+than useless.
+
+Nothing here retrains or blocks automatically. Drift is reported; acting on it is a
+judgement call about the business, not about statistics.
+
 ### Tests
 
-86 tests across three files, all runnable with `pytest`:
+166 tests across four files, all runnable with `pytest`:
 
 - `test_features.py` — derived-column presence, row-count preservation, input immutability,
   finiteness, zero-denominator edge cases, hand-computed formula checks, output shape,
@@ -362,6 +445,10 @@ size.
 - the dashboard tests in `test_api.py` parse the page itself: its form fields must match
   `SubscriberFeaturesRequest` exactly, every path it `fetch`es must be a real route, and
   each preset must round-trip through `/predict` — so the UI cannot drift from the API
+- `test_monitoring.py` — PSI algebra (zero for identical inputs, symmetric, finite when a
+  bin empties), quantile binning edge cases (constant and empty columns), the
+  false-positive check that reference data shows no drift against itself, detection and
+  attribution of a real shift, unseen categories, tracker bounds, and both endpoints
 
 The suite trains one small model per session into a temporary directory, so it runs in
 under a second and never writes into the repository or depends on your working tree.
@@ -385,9 +472,12 @@ compiles; the smoke test proves it *serves*. Any failing step fails the workflow
 - **Real production data.** Replace the synthetic generator with a warehouse extract; the
   loader and feature pipeline are already isolated behind `src/data/loader.py`, so only
   that boundary changes.
-- **Model monitoring and drift detection.** Log prediction distributions and input
-  statistics, and alert when live feature distributions diverge from the training
-  reference stored in `metadata.json`.
+- **Durable, cross-replica metrics.** `/metrics` is a bounded in-process window that resets
+  with the process. Export to Prometheus (or write scores to a warehouse) so drift can be
+  tracked across replicas and over weeks rather than since the last deploy.
+- **Scheduled drift checks.** `/monitoring/drift` is pull-based today. Run it nightly over
+  the previous day's traffic and alert on a `significant` verdict, instead of relying on
+  someone remembering to ask.
 - **Experiment tracking.** MLflow or Weights & Biases in place of the hand-rolled
   `metrics.json`, once more than a handful of runs need comparing.
 - **Event-driven scoring.** Consume subscriber activity events from Kafka or SQS and write

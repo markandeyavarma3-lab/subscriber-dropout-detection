@@ -170,6 +170,72 @@ class ReadinessResponse(BaseModel):
     detail: str | None = None
 
 
+class DriftRequest(BaseModel):
+    """A sample of live subscribers to compare against the training data."""
+
+    model_config = ConfigDict(
+        json_schema_extra={"example": {"subscribers": [_EXAMPLE_SUBSCRIBER]}}
+    )
+
+    subscribers: list[SubscriberFeaturesRequest] = Field(
+        ...,
+        min_length=1,
+        max_length=50_000,
+        description=(
+            "Recent live subscribers. PSI is noisy below a few hundred rows; the "
+            "response reports whether the sample was large enough to trust."
+        ),
+    )
+
+
+class FeatureDrift(BaseModel):
+    """Drift measured for a single feature."""
+
+    feature: str
+    psi: float = Field(..., description="Population Stability Index against the training data.")
+    verdict: str = Field(..., description="stable | moderate | significant")
+    kind: str = Field(..., description="numeric | discrete | prediction")
+    reference_mean: float | None = None
+    live_mean: float | None = None
+    unseen_categories: list[str] = Field(default_factory=list)
+
+
+class DriftResponse(BaseModel):
+    """Per-feature and overall drift between live traffic and training."""
+
+    n_samples: int
+    sufficient_sample: bool = Field(
+        ..., description="False when the batch is too small for PSI to be meaningful."
+    )
+    min_samples: int
+    overall_verdict: str
+    drifted_features: list[str]
+    features: list[FeatureDrift]
+    prediction: FeatureDrift | None = None
+    reference_created_at: str | None = None
+    reference_rows: int | None = None
+    thresholds: dict[str, float]
+
+
+class MetricsResponse(BaseModel):
+    """Live statistics for the predictions this process has served."""
+
+    model_config = ConfigDict(protected_namespaces=())
+
+    served_total: int
+    window_size: int
+    window_capacity: int
+    flagged_rate: float
+    probability: dict[str, float]
+    risk_levels: dict[str, int]
+    model_loaded: bool
+    threshold: float | None = None
+    reference: dict[str, Any] | None = None
+    probability_mean_shift: float | None = Field(
+        None, description="Live mean score minus the training-time mean score."
+    )
+
+
 class ModelInfoResponse(BaseModel):
     """Metadata about the currently served artifact."""
 

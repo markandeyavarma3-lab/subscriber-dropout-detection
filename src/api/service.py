@@ -19,6 +19,9 @@ from sklearn.pipeline import Pipeline
 
 from src.config import settings
 from src.features.build_features import frame_from_records
+from src.monitoring.drift import detect_drift
+from src.monitoring.profile import load_reference_profile
+from src.monitoring.tracker import get_tracker
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +36,10 @@ class ModelNotLoadedError(RuntimeError):
     """Raised when a prediction is requested before an artifact is available."""
 
 
+class DriftBaselineUnavailableError(RuntimeError):
+    """Raised when drift is requested but the model shipped no reference profile."""
+
+
 @dataclass
 class LoadedModel:
     """A fitted pipeline together with the metadata saved alongside it."""
@@ -40,6 +47,9 @@ class LoadedModel:
     pipeline: Pipeline
     threshold: float
     metadata: dict[str, Any]
+    # Absent when the artifact predates monitoring or was trained elsewhere;
+    # prediction still works, drift reporting is simply unavailable.
+    reference_profile: dict[str, Any] | None = None
 
 
 _loaded_model: LoadedModel | None = None
@@ -58,13 +68,17 @@ def _read_metadata(metadata_path: Path) -> dict[str, Any]:
 
 
 def load_model(
-    model_path: Path | None = None, metadata_path: Path | None = None
+    model_path: Path | None = None,
+    metadata_path: Path | None = None,
+    profile_path: Path | None = None,
 ) -> LoadedModel:
-    """Load the pipeline and its metadata from disk and cache them.
+    """Load the pipeline, its metadata and its drift baseline, and cache them.
 
     Args:
         model_path: Location of ``model.joblib``. Defaults to settings.
         metadata_path: Location of ``metadata.json``. Defaults to settings.
+        profile_path: Location of ``reference_profile.json``. Defaults to
+            settings; a missing file disables drift reporting only.
 
     Raises:
         ModelNotLoadedError: If the artifact file does not exist.
@@ -81,9 +95,17 @@ def load_model(
     pipeline = joblib.load(path)
     metadata = _read_metadata(meta_path)
     threshold = float(metadata.get("decision_threshold", settings.DECISION_THRESHOLD))
+    profile = load_reference_profile(profile_path)
 
-    _loaded_model = LoadedModel(pipeline=pipeline, threshold=threshold, metadata=metadata)
-    logger.info("Loaded model from %s (threshold=%.2f)", path, threshold)
+    _loaded_model = LoadedModel(
+        pipeline=pipeline, threshold=threshold, metadata=metadata, reference_profile=profile
+    )
+    logger.info(
+        "Loaded model from %s (threshold=%.2f, drift baseline=%s)",
+        path,
+        threshold,
+        "yes" if profile else "no",
+    )
     return _loaded_model
 
 
@@ -95,7 +117,10 @@ def get_model() -> LoadedModel:
 
 
 def set_model(
-    pipeline: Pipeline, threshold: float | None = None, metadata: dict[str, Any] | None = None
+    pipeline: Pipeline,
+    threshold: float | None = None,
+    metadata: dict[str, Any] | None = None,
+    reference_profile: dict[str, Any] | None = None,
 ) -> LoadedModel:
     """Inject an already-fitted pipeline into the cache (used by tests)."""
     global _loaded_model
@@ -103,6 +128,7 @@ def set_model(
         pipeline=pipeline,
         threshold=float(threshold if threshold is not None else settings.DECISION_THRESHOLD),
         metadata=metadata or {},
+        reference_profile=reference_profile,
     )
     return _loaded_model
 
@@ -257,6 +283,10 @@ def predict_batch(
                 "top_risk_factors": top_factors,
             }
         )
+
+    # Recorded here rather than in the routes so that every path to a
+    # prediction - single, batch, or a future one - is counted exactly once.
+    get_tracker().record_many(responses)
     return responses
 
 
@@ -265,6 +295,61 @@ def predict_one(
 ) -> dict[str, Any]:
     """Score a single subscriber and return the response payload."""
     return predict_batch([features], model=model)[0]
+
+
+def live_metrics() -> dict[str, Any]:
+    """Summarise what this process has served, plus its drift baseline status."""
+    snapshot = get_tracker().snapshot()
+    loaded = _loaded_model
+    snapshot["model_loaded"] = loaded is not None
+    snapshot["threshold"] = round(loaded.threshold, 4) if loaded else None
+
+    profile = loaded.reference_profile if loaded else None
+    reference = profile.get("prediction") if profile else None
+    snapshot["reference"] = (
+        {
+            "created_at": profile.get("created_at"),
+            "rows": profile.get("n_reference_rows"),
+            "probability_mean": reference.get("mean") if reference else None,
+        }
+        if profile
+        else None
+    )
+
+    # The single number most worth alerting on: how far the live score mean has
+    # moved from what the model produced on its own training data.
+    if reference and snapshot["window_size"]:
+        snapshot["probability_mean_shift"] = round(
+            snapshot["probability"]["mean"] - float(reference.get("mean", 0.0)), 4
+        )
+    else:
+        snapshot["probability_mean_shift"] = None
+
+    return snapshot
+
+
+def drift_report(
+    records: list[dict[str, Any]], model: LoadedModel | None = None
+) -> dict[str, Any]:
+    """Compare a batch of live subscribers against the training reference.
+
+    Scores the batch as a side effect so prediction drift can be reported
+    alongside input drift.
+
+    Raises:
+        ModelNotLoadedError: If no artifact is available.
+        DriftBaselineUnavailableError: If the artifact shipped no profile.
+    """
+    loaded = model or get_model()
+    if loaded.reference_profile is None:
+        raise DriftBaselineUnavailableError(
+            "This model has no reference_profile.json. Retrain with "
+            "`python -m src.models.train` to generate a drift baseline."
+        )
+
+    frame = frame_from_records(records)
+    probabilities = loaded.pipeline.predict_proba(frame)[:, 1]
+    return detect_drift(frame, loaded.reference_profile, probabilities=probabilities)
 
 
 def model_info() -> dict[str, Any]:

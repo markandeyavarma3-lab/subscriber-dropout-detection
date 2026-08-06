@@ -53,6 +53,31 @@ METRICS_PATH: Path = ARTIFACTS_DIR / "metrics.json"
 API_STATIC_DIR: Path = SRC_DIR / "api" / "static"
 DASHBOARD_PATH: Path = API_STATIC_DIR / "index.html"
 
+# Distribution snapshot of the training data, written at training time and used
+# as the baseline that live traffic is compared against.
+REFERENCE_PROFILE_PATH: Path = ARTIFACTS_DIR / "reference_profile.json"
+
+# --------------------------------------------------------------------------- #
+# Monitoring & drift detection
+# --------------------------------------------------------------------------- #
+
+# Number of quantile bins used to summarise each numeric feature.
+DRIFT_BIN_COUNT: int = _env_int("SDD_DRIFT_BIN_COUNT", 10)
+
+# Population Stability Index cut-offs.  These are the long-standing convention
+# in credit-risk monitoring, where PSI originated: below 0.10 a shift is noise,
+# 0.10-0.25 is worth watching, and above 0.25 the population has moved enough
+# that the model's training data no longer describes it.
+PSI_MODERATE: float = _env_float("SDD_PSI_MODERATE", 0.10)
+PSI_SIGNIFICANT: float = _env_float("SDD_PSI_SIGNIFICANT", 0.25)
+
+# A PSI computed on a handful of rows is dominated by sampling noise rather
+# than by any real shift, so report it but mark it untrustworthy.
+DRIFT_MIN_SAMPLES: int = _env_int("SDD_DRIFT_MIN_SAMPLES", 100)
+
+# How many recent predictions ``/metrics`` keeps in memory.
+METRICS_WINDOW: int = _env_int("SDD_METRICS_WINDOW", 5_000)
+
 # --------------------------------------------------------------------------- #
 # Data & splitting
 # --------------------------------------------------------------------------- #

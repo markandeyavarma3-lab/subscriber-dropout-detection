@@ -52,6 +52,10 @@ from src.models.evaluate import (  # noqa: E402
     evaluate_pipeline,
     format_metrics,
 )
+from src.monitoring.profile import (  # noqa: E402
+    build_reference_profile,
+    save_reference_profile,
+)
 
 
 @dataclass(frozen=True)
@@ -65,6 +69,7 @@ class TrainingResult:
     model_path: Path
     metrics_path: Path
     metadata_path: Path
+    reference_profile_path: Path
 
 
 def build_model_pipeline(model_params: dict[str, Any] | None = None) -> Pipeline:
@@ -221,6 +226,7 @@ def run_training(
     model_path = output_dir / "model.joblib"
     metrics_path = output_dir / "metrics.json"
     metadata_path = output_dir / "metadata.json"
+    profile_path = output_dir / "reference_profile.json"
 
     joblib.dump(model, model_path)
     metrics_report = {
@@ -242,6 +248,16 @@ def run_training(
         json.dumps(_build_metadata(model, threshold, splits, resolved_params), indent=2)
     )
 
+    # The baseline is built from the *training* split specifically: it has to
+    # describe the population the model actually learned from, not the whole
+    # dataset including rows the model never saw.
+    save_reference_profile(
+        build_reference_profile(
+            splits.X_train, probabilities=model.predict_proba(splits.X_train)[:, 1]
+        ),
+        profile_path,
+    )
+
     if persist_test_split:
         destination = test_split_path
         if destination is None:
@@ -253,6 +269,7 @@ def run_training(
     log(f"Saved model           -> {model_path}")
     log(f"Saved metrics report  -> {metrics_path}")
     log(f"Saved model metadata  -> {metadata_path}")
+    log(f"Saved drift baseline  -> {profile_path}")
 
     return TrainingResult(
         model=model,
@@ -262,6 +279,7 @@ def run_training(
         model_path=model_path,
         metrics_path=metrics_path,
         metadata_path=metadata_path,
+        reference_profile_path=profile_path,
     )
 
 

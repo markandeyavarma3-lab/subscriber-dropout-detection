@@ -20,6 +20,7 @@ from src.api import service
 from src.api.main import app
 from src.data.generate import generate_subscribers, write_dataset
 from src.models.train import TrainingResult, run_training
+from src.monitoring.tracker import get_tracker
 
 TINY_MODEL_PARAMS: dict[str, Any] = {"n_estimators": 25, "max_depth": 2, "learning_rate": 0.2}
 
@@ -85,9 +86,18 @@ def trained_metadata(trained_model: TrainingResult) -> dict[str, Any]:
     return json.loads(trained_model.metadata_path.read_text())
 
 
+@pytest.fixture(scope="session")
+def reference_profile(trained_model: TrainingResult) -> dict[str, Any]:
+    """The drift baseline written alongside the session's model."""
+    return json.loads(trained_model.reference_profile_path.read_text())
+
+
 @pytest.fixture()
 def client(
-    trained_model: TrainingResult, trained_metadata: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+    trained_model: TrainingResult,
+    trained_metadata: dict[str, Any],
+    reference_profile: dict[str, Any],
+    monkeypatch: pytest.MonkeyPatch,
 ) -> Iterator[TestClient]:
     """A TestClient whose app serves the session's small model.
 
@@ -98,13 +108,17 @@ def client(
 
     def _load_tiny_model(*_args: Any, **_kwargs: Any) -> service.LoadedModel:
         return service.set_model(
-            trained_model.model, trained_model.threshold, trained_metadata
+            trained_model.model, trained_model.threshold, trained_metadata, reference_profile
         )
 
     monkeypatch.setattr(service, "load_model", _load_tiny_model)
+    # The tracker is process-wide, so a previous test's predictions would
+    # otherwise leak into this one's /metrics assertions.
+    get_tracker().reset()
     with TestClient(app) as test_client:
         yield test_client
     service.reset_model()
+    get_tracker().reset()
 
 
 @pytest.fixture()
