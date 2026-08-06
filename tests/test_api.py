@@ -236,11 +236,31 @@ def test_model_info_returns_503_without_model(client_without_model: TestClient) 
 
 @pytest.mark.parametrize(
     ("probability", "expected"),
-    [(0.02, "low"), (0.35, "low"), (0.5, "medium"), (0.64, "medium"), (0.65, "high"), (0.99, "high")],
+    # With a threshold of 0.26, "high" starts at 0.26 + 0.74/2 = 0.63.
+    [(0.02, "low"), (0.25, "low"), (0.26, "medium"), (0.5, "medium"), (0.63, "high"), (0.99, "high")],
 )
 def test_classify_risk_level(probability: float, expected: str) -> None:
-    """Risk bands follow the documented cut-offs."""
-    assert service.classify_risk_level(probability) == expected
+    """Risk bands hang off the decision threshold."""
+    assert service.classify_risk_level(probability, 0.26) == expected
+
+
+@pytest.mark.parametrize("threshold", [0.1, 0.26, 0.5, 0.8])
+@pytest.mark.parametrize("probability", [0.0, 0.05, 0.2, 0.26, 0.4, 0.6, 0.8, 0.99, 1.0])
+def test_low_band_is_exactly_the_unflagged_region(probability: float, threshold: float) -> None:
+    """The band can never contradict the label, at any tuned threshold.
+
+    Regression guard: fixed cut-offs once reported "low risk" for subscribers
+    the model had flagged for retention outreach.
+    """
+    is_low = service.classify_risk_level(probability, threshold) == "low"
+    assert is_low == (probability < threshold)
+
+
+def test_risk_level_agrees_with_label_over_the_api(client: TestClient) -> None:
+    """End to end: a flagged subscriber is never described as low risk."""
+    for subscriber in (HIGH_RISK_SUBSCRIBER, LOW_RISK_SUBSCRIBER):
+        payload = client.post("/predict", json=subscriber).json()
+        assert (payload["risk_level"] == "low") == (payload["predicted_label"] == 0)
 
 
 def test_collect_risk_factors_flags_known_problems() -> None:

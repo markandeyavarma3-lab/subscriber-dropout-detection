@@ -22,9 +22,11 @@ from src.features.build_features import frame_from_records
 
 logger = logging.getLogger(__name__)
 
-# Risk-band cut-offs applied to the predicted probability.
-LOW_RISK_CEILING: float = 0.35
-HIGH_RISK_FLOOR: float = 0.65
+# Risk bands are anchored to the model's decision threshold rather than to
+# fixed cut-offs, so a band can never contradict the label: "low" is exactly
+# the not-flagged region, and "high" starts halfway from the threshold to
+# certainty.  Because training tunes the threshold, the bands move with it.
+HIGH_RISK_SPAN: float = 0.5
 
 
 class ModelNotLoadedError(RuntimeError):
@@ -116,12 +118,23 @@ def is_model_loaded() -> bool:
     return _loaded_model is not None
 
 
-def classify_risk_level(probability: float) -> str:
-    """Map a probability onto a coarse ``low`` / ``medium`` / ``high`` band."""
-    if probability >= HIGH_RISK_FLOOR:
-        return "high"
-    if probability <= LOW_RISK_CEILING:
+def classify_risk_level(probability: float, threshold: float | None = None) -> str:
+    """Map a probability onto a ``low`` / ``medium`` / ``high`` band.
+
+    The bands hang off the decision threshold, which guarantees the invariant
+    ``(level == "low") == (predicted_label == 0)``.  Fixed cut-offs used to
+    break that: with a tuned threshold of 0.26, a subscriber scoring 0.30 was
+    flagged for outreach while being described as low risk.
+
+    Args:
+        probability: Predicted dropout probability.
+        threshold: Decision threshold in use; defaults to the configured one.
+    """
+    cutoff = settings.DECISION_THRESHOLD if threshold is None else threshold
+    if probability < cutoff:
         return "low"
+    if probability >= cutoff + (1.0 - cutoff) * HIGH_RISK_SPAN:
+        return "high"
     return "medium"
 
 
@@ -232,7 +245,7 @@ def predict_batch(
     responses: list[dict[str, Any]] = []
     for record, probability in zip(records, probabilities, strict=True):
         probability = float(probability)
-        risk_level = classify_risk_level(probability)
+        risk_level = classify_risk_level(probability, loaded.threshold)
         explanation, top_factors = build_explanation(record, probability, risk_level)
         responses.append(
             {

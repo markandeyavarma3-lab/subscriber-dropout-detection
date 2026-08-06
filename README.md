@@ -332,6 +332,13 @@ It explains the inputs, not the model internals, which is honest about what it i
 costs nothing at inference time. Swapping in SHAP later is a contained change to
 `build_explanation`.
 
+`risk_level` is derived from the **decision threshold**, not from fixed cut-offs: `low` is
+exactly the not-flagged region (`probability < threshold`), and `high` begins halfway
+between the threshold and 1.0. This enforces the invariant that a `low` band always means
+`predicted_label == 0`. Fixed bands broke it — at a tuned threshold of 0.26 a subscriber
+scoring 0.30 was flagged for retention outreach while the API called them *low risk*.
+Because the bands hang off the threshold, retraining retunes them automatically.
+
 The dashboard is served from this same app rather than as a separate frontend. That is a
 deliberate trade: one deployable, one port, no CORS configuration and no second build
 pipeline, at the cost of the UI not being independently scalable — the right call at this
