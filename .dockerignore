@@ -18,6 +18,9 @@ htmlcov/
 # Data and artifacts are regenerated inside the build, never copied in.
 src/data/raw/*.csv
 src/data/processed/*.csv
+src/data/*.db
+*.sqlite
+*.sqlite3
 src/models/artifacts/*.joblib
 src/models/artifacts/*.json
 

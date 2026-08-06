@@ -79,6 +79,30 @@ DRIFT_MIN_SAMPLES: int = _env_int("SDD_DRIFT_MIN_SAMPLES", 100)
 METRICS_WINDOW: int = _env_int("SDD_METRICS_WINDOW", 5_000)
 
 # --------------------------------------------------------------------------- #
+# Event warehouse
+# --------------------------------------------------------------------------- #
+
+# SQLite by default so the project runs with no database server; the compose
+# stack overrides this with a Postgres URL.
+DATABASE_URL: str = os.getenv("SDD_DATABASE_URL", f"sqlite:///{DATA_DIR / 'warehouse.db'}")
+
+# The window the simulator generates events across.
+SIMULATION_START: str = os.getenv("SDD_SIMULATION_START", "2024-01-01")
+SIMULATION_END: str = os.getenv("SDD_SIMULATION_END", "2025-06-30")
+
+# --------------------------------------------------------------------------- #
+# Point-in-time feature computation
+# --------------------------------------------------------------------------- #
+
+# How far back from a cutoff behavioural features look.
+OBSERVATION_WINDOW_DAYS: int = _env_int("SDD_OBSERVATION_WINDOW_DAYS", 30)
+
+# How far forward the label looks.  A subscriber is a dropout if their
+# subscription lapses within this many days *after* the cutoff, so the feature
+# window and the label window never overlap.
+PREDICTION_HORIZON_DAYS: int = _env_int("SDD_PREDICTION_HORIZON_DAYS", 30)
+
+# --------------------------------------------------------------------------- #
 # Data & splitting
 # --------------------------------------------------------------------------- #
 

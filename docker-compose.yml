@@ -2,6 +2,27 @@
 # Then open http://localhost:8000/docs
 
 services:
+  # The event warehouse. Locally the project falls back to SQLite, so this is
+  # only needed once you want the full stack; SDD_DATABASE_URL switches it.
+  postgres:
+    image: postgres:16-alpine
+    container_name: subscriber-warehouse
+    environment:
+      POSTGRES_USER: subscriber
+      POSTGRES_PASSWORD: subscriber
+      POSTGRES_DB: warehouse
+    ports:
+      - "5432:5432"
+    volumes:
+      - warehouse-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U subscriber -d warehouse"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
   subscriber-api:
     build:
       context: .
@@ -30,3 +51,6 @@ services:
     # trained on the host instead (retrain without rebuilding), uncomment:
     # volumes:
     #   - ./src/models/artifacts:/app/src/models/artifacts:ro
+
+volumes:
+  warehouse-data:

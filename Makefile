@@ -1,5 +1,5 @@
 # Shortcuts for the common workflows. Run `make help` for the list.
-.PHONY: help install data train evaluate serve test lint format docker-build docker-run docker-up clean
+.PHONY: help install data simulate warehouse-up train evaluate serve test lint format docker-build docker-run docker-up clean
 
 PYTHON ?= python
 IMAGE  ?= subscriber-dropout-api
@@ -14,6 +14,12 @@ install:  ## Install development dependencies
 
 data:  ## Generate the synthetic dataset
 	$(PYTHON) -m src.data.generate
+
+simulate:  ## Populate the event warehouse with simulated subscriber events
+	$(PYTHON) -m src.warehouse.simulate
+
+warehouse-up:  ## Start the Postgres warehouse only
+	docker compose up -d postgres
 
 train:  ## Train the model and write the artifacts
 	$(PYTHON) -m src.models.train

@@ -28,6 +28,9 @@ coverage.xml
 # version control. The directories themselves are kept via .gitkeep.
 src/data/raw/*.csv
 src/data/processed/*.csv
+src/data/*.db
+*.sqlite
+*.sqlite3
 src/models/artifacts/*.joblib
 src/models/artifacts/*.json
 

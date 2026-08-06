@@ -245,11 +245,59 @@ subscriber-dropout-detection/
 └── .github/workflows/ci.yml
 ```
 
-### Data
+### Temporal event warehouse
 
-The project ships with a **synthetic dataset** (Option A), so the repository is fully
-self-contained and reproducible with no external downloads — which also keeps CI and
-Docker builds hermetic.
+> See [ROADMAP.md](ROADMAP.md) for where this is heading. Stage 1 is done.
+
+Churn is a **time-series** problem, and the original design got that wrong: one row per
+subscriber with pre-aggregated columns and a random train/test split. That silently lets a
+model learn from behaviour that happened *after* the outcome it predicts — a validation
+score built that way is a lie, because at serving time the future is not available.
+
+`src/warehouse/` replaces the flat CSV with the shape production data actually arrives in:
+immutable timestamped events across five tables (`subscribers`, `subscription_events`,
+`sessions`, `payments`, `support_tickets`). Nothing is pre-aggregated. The same schema runs
+on **SQLite locally and Postgres in the compose stack**, so the queries are exercised by
+every test run rather than only in deployment.
+
+`src/features/point_in_time.py` then builds training data with a strict separation around
+a cutoff `T`:
+
+```
+[ T − 30d , T )        features  — only ever looks backwards
+[ T , T + 30d ]        label     — never visible to the features
+```
+
+The windows are disjoint by construction, and the test suite **asserts it rather than
+trusting the comment**: a snapshot is taken, 200 sessions and 25 tickets are then written
+*after* the cutoff, and the snapshot is rebuilt. If any feature moves, the test fails. That
+guard is mutation-checked — deleting the `< :cutoff` bound from the SQL makes it fail, so
+it cannot pass vacuously.
+
+Aggregation happens **in SQL**, not pandas, because pulling every session row into memory
+would not survive the volumes this schema exists for. One subtlety worth noting: session
+*recency* deliberately scans all history rather than the observation window, since a
+subscriber dormant for 90 days has no rows in a 30-day window at all — treating that as
+"no data" instead of "long absent" would erase the strongest signal in the model.
+
+Because features are a function of the cutoff, the same call over a series of cutoffs
+gives **backfills** for free, which is what makes scheduled retraining do real work instead
+of refitting identical data.
+
+```bash
+make simulate                      # populate the warehouse
+python -m src.warehouse.simulate --subscribers 4000 --start 2024-01-01 --end 2025-06-30
+```
+
+**Injectable drift.** `DriftScenario` changes subscriber behaviour from a chosen date
+onward — engagement collapse, payment failures, a new plan tier appearing. This is the
+reason to simulate rather than download: you cannot demonstrate a drift detector firing, or
+a challenger overtaking a champion, on a static dataset.
+
+### Data (legacy flat path)
+
+The original **synthetic flat dataset** still exists and is what training currently uses,
+so the repository stays self-contained and CI stays hermetic.
 
 `src/data/generate.py` does not draw columns independently. Each subscriber gets three
 latent traits that are never written to the CSV — `engagement`, `dissatisfaction`,
@@ -431,7 +479,7 @@ judgement call about the business, not about statistics.
 
 ### Tests
 
-166 tests across four files, all runnable with `pytest`:
+189 tests across six files, all runnable with `pytest`:
 
 - `test_features.py` — derived-column presence, row-count preservation, input immutability,
   finiteness, zero-denominator edge cases, hand-computed formula checks, output shape,
