@@ -4,6 +4,10 @@
 .venv/
 venv/
 
+# Secrets must never be baked into an image layer.
+.env
+.env.*
+
 __pycache__/
 *.py[cod]
 .pytest_cache/

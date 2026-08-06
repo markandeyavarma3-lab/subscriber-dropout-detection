@@ -11,6 +11,11 @@ dist/
 venv/
 env/
 
+# Secrets. Never commit these - the repository is public.
+.env
+.env.*
+!.env.example
+
 # Testing and tooling caches
 .pytest_cache/
 .ruff_cache/
