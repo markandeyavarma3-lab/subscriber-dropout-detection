@@ -29,9 +29,13 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
+from typing import TYPE_CHECKING
 
 import pandas as pd
 from sqlalchemy import Engine
+
+if TYPE_CHECKING:  # pragma: no cover - import cycle avoided at runtime
+    from src.data.loader import DataSplits
 
 from src.config import settings
 from src.warehouse.database import read_sql
@@ -309,6 +313,75 @@ def build_backfill(
     if not frames:
         return pd.DataFrame()
     return pd.concat(frames, ignore_index=True)
+
+
+def build_temporal_splits(
+    cutoffs: list[str | date],
+    observation_days: int | None = None,
+    horizon_days: int | None = None,
+    engine: Engine | None = None,
+) -> tuple[DataSplits, dict[str, list[str]]]:
+    """Split by *time*, not at random: train on the past, score the future.
+
+    A random split is the single most common way churn models are validated
+    dishonestly.  Rows from the same week land on both sides of the split, the
+    model effectively sees its own answers, and the offline score bears no
+    relation to how the model will behave next month.
+
+    Here the latest cutoff becomes the test set, the one before it becomes
+    validation, and everything earlier is training - which is exactly the
+    situation the model faces in production: fit on history, predict forward.
+
+    Args:
+        cutoffs: Ordered cutoff dates. At least three are required.
+        observation_days: Feature window length. Defaults to settings.
+        horizon_days: Label window length. Defaults to settings.
+        engine: Optional SQLAlchemy engine.
+
+    Returns:
+        ``(splits, assignment)`` where ``assignment`` records which cutoffs fed
+        each split, so a trained model can say what period it learned from.
+    """
+    from src.data.loader import DataSplits, split_features_target
+
+    ordered = sorted(
+        cutoff if isinstance(cutoff, date) else date.fromisoformat(cutoff) for cutoff in cutoffs
+    )
+    if len(ordered) < 3:
+        raise ValueError(
+            f"Temporal splitting needs at least 3 cutoffs (train/val/test), got {len(ordered)}."
+        )
+
+    assignment = {
+        "train": [cutoff.isoformat() for cutoff in ordered[:-2]],
+        "validation": [ordered[-2].isoformat()],
+        "test": [ordered[-1].isoformat()],
+    }
+
+    def panel(subset: list[date]) -> pd.DataFrame:
+        return build_backfill(list(subset), observation_days, horizon_days, engine=engine)
+
+    train_frame = panel(ordered[:-2])
+    val_frame = panel([ordered[-2]])
+    test_frame = panel([ordered[-1]])
+
+    for name, frame in (("train", train_frame), ("validation", val_frame), ("test", test_frame)):
+        if frame.empty:
+            raise ValueError(f"The {name} split came back empty; widen the simulation window.")
+
+    X_train, y_train = split_features_target(train_frame.drop(columns=["cutoff"]))
+    X_val, y_val = split_features_target(val_frame.drop(columns=["cutoff"]))
+    X_test, y_test = split_features_target(test_frame.drop(columns=["cutoff"]))
+
+    splits = DataSplits(
+        X_train=X_train.reset_index(drop=True),
+        y_train=y_train.reset_index(drop=True),
+        X_val=X_val.reset_index(drop=True),
+        y_val=y_val.reset_index(drop=True),
+        X_test=X_test.reset_index(drop=True),
+        y_test=y_test.reset_index(drop=True),
+    )
+    return splits, assignment
 
 
 def monthly_cutoffs(start: str | date, end: str | date, step_days: int = 30) -> list[date]:

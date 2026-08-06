@@ -22,6 +22,8 @@ Built to be understood and extended by a single developer in one to two weeks.
 | Testing | pytest, `fastapi.testclient` |
 | Quality | ruff |
 | Packaging | Docker (multi-stage), docker compose |
+| Data | SQLAlchemy, Postgres (SQLite locally) |
+| MLOps | MLflow tracking + model registry with gated promotion |
 | CI | GitHub Actions |
 
 ---
@@ -294,6 +296,82 @@ onward — engagement collapse, payment failures, a new plan tier appearing. Thi
 reason to simulate rather than download: you cannot demonstrate a drift detector firing, or
 a challenger overtaking a champion, on a static dataset.
 
+### Temporal validation, and what it cost
+
+With the warehouse in place, training can split by **time** instead of at random — fit on
+earlier cutoffs, score a strictly later one, which is the situation the model actually
+faces in production:
+
+```bash
+python -m src.models.train --source warehouse            # temporal split
+python -m src.models.train --source warehouse --promote  # + register and gate
+```
+
+```
+Temporal split over 15 cutoffs -> train: 2024-01-01 … 2024-12-26 (13 cutoffs)
+                                  validation: 2025-01-25
+                                  test:       2025-02-24
+Split -> train=4,207 validation=481 test=499
+```
+
+Honest reporting of the result, because the headline number moved a long way:
+
+| | ROC-AUC | PR-AUC | Recall |
+| --- | --- | --- | --- |
+| Old flat CSV, random split | 0.907 | 0.766 | 0.724 |
+| Warehouse, temporal split | **0.709** | **0.442** | **0.653** |
+
+**That drop is not a regression — it is the removal of a fiction.** The old generator drew
+the `dropout` label from a logistic function of the very columns it then handed the model,
+so 0.907 was the model rediscovering a rule we wrote. The warehouse draws cancellations
+from a daily hazard over latent traits that are only partially visible in behaviour. ~0.71
+is ordinary territory for a real churn model; 0.907 never was.
+
+One measurement worth recording, since it contradicts the usual claim: switching from a
+random to a temporal split changed ROC-AUC by only **−0.065** on this data. Random
+splitting was *not* what inflated the old number. The temporal split is still the correct
+default — it is the only scheme that stays honest once `DriftScenario` introduces a
+time-varying regime — but on stationary data it buys correctness, not points.
+
+### Experiment tracking and gated promotion
+
+Training used to overwrite `model.joblib` in place: a deployment with no gate, where an
+unlucky seed silently replaced a good model and rollback meant retraining and hoping.
+
+`src/registry/` replaces that with MLflow. Every run records its params, metrics and the
+window it trained on; every model becomes an immutable registered version. Promotion is a
+separate, **gated** decision:
+
+```
+[run 1] v1  PROMOTED: no incumbent champion (pr_auc=0.3707)
+[run 2] v2  REJECTED: improvement -0.0524 below required +0.0050
+            | pr_auc challenger=0.3183 champion=0.3707
+[run 3] v3  REJECTED: improvement +0.0000 below required +0.0050
+```
+
+Three properties make it a gate rather than a formality:
+
+- **Comparable.** Champion and challenger are scored on the *same* held-out data in the
+  same process. Comparing a fresh challenger score against a number the champion recorded
+  months ago is the classic way to promote a worse model — those two numbers were never
+  measured on the same population.
+- **Marginal.** A challenger must win by `PROMOTION_MIN_IMPROVEMENT` (default 0.005), not
+  merely tie. Run 3 above is the identical model retrained: a zero-margin gate would
+  promote it, and noise alone would churn the registry on roughly half of all retrains.
+- **Reversible.** Losing deletes nothing. Promotion moves the `@champion` alias, so
+  `rollback()` moves it back.
+
+The gating metric is **PR-AUC, not ROC-AUC** — at a ~20% positive rate, average precision
+reflects retention-outreach performance far more honestly.
+
+Browse it with `make mlflow-ui` at http://127.0.0.1:5000.
+
+> **Note on serialisation.** MLflow 3 defaults to `skops`, which refuses to serialise
+> custom callables — and this pipeline deliberately embeds `add_derived_features` as a
+> `FunctionTransformer` so feature engineering travels with the artifact. The two collide,
+> so the registry uses `cloudpickle`, at the same trust level as the `joblib` file the API
+> already loads.
+
 ### Data (legacy flat path)
 
 The original **synthetic flat dataset** still exists and is what training currently uses,
@@ -479,7 +557,7 @@ judgement call about the business, not about statistics.
 
 ### Tests
 
-189 tests across six files, all runnable with `pytest`:
+203 tests across seven files, all runnable with `pytest`:
 
 - `test_features.py` — derived-column presence, row-count preservation, input immutability,
   finiteness, zero-denominator edge cases, hand-computed formula checks, output shape,

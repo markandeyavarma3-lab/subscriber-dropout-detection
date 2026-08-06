@@ -117,6 +117,33 @@ TEST_SIZE: float = _env_float("SDD_TEST_SIZE", 0.15)
 VALIDATION_SIZE: float = _env_float("SDD_VALIDATION_SIZE", 0.15)
 
 # --------------------------------------------------------------------------- #
+# Experiment tracking & model registry (MLflow)
+# --------------------------------------------------------------------------- #
+
+# The registry needs a database-backed store, so a bare file:// path will not
+# do.  SQLite keeps it serverless locally; the compose stack points this at the
+# MLflow server instead.
+MLFLOW_TRACKING_URI: str = os.getenv(
+    "MLFLOW_TRACKING_URI", f"sqlite:///{PROJECT_ROOT / 'mlflow.db'}"
+)
+MLFLOW_EXPERIMENT: str = os.getenv("SDD_MLFLOW_EXPERIMENT", "subscriber-dropout")
+REGISTERED_MODEL_NAME: str = os.getenv("SDD_REGISTERED_MODEL", "subscriber-dropout-classifier")
+
+# MLflow 3 removed model stages, so promotion is expressed with aliases.
+CHAMPION_ALIAS: str = "champion"
+CHALLENGER_ALIAS: str = "challenger"
+
+# The gate a challenger must clear to take over.  PR-AUC rather than ROC-AUC:
+# with a ~20% positive rate, average precision reflects retention-outreach
+# performance far more honestly than ROC-AUC, which flatters imbalanced data.
+PROMOTION_METRIC: str = os.getenv("SDD_PROMOTION_METRIC", "pr_auc")
+
+# A challenger must beat the champion by this margin, not merely tie it.
+# Without a margin, noise alone would promote a new model roughly half the time
+# and the registry would churn forever.
+PROMOTION_MIN_IMPROVEMENT: float = _env_float("SDD_PROMOTION_MIN_IMPROVEMENT", 0.005)
+
+# --------------------------------------------------------------------------- #
 # Model
 # --------------------------------------------------------------------------- #
 

@@ -23,6 +23,26 @@ services:
       start_period: 10s
     restart: unless-stopped
 
+  # Experiment tracking and the model registry. The registry requires a
+  # database-backed store, so this points at Postgres rather than a file path.
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:v3.1.1
+    container_name: subscriber-mlflow
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: >
+      sh -c "pip install --no-cache-dir psycopg2-binary &&
+             mlflow server
+             --host 0.0.0.0 --port 5000
+             --backend-store-uri postgresql://subscriber:subscriber@postgres:5432/warehouse
+             --default-artifact-root /mlflow/artifacts"
+    ports:
+      - "5000:5000"
+    volumes:
+      - mlflow-artifacts:/mlflow/artifacts
+    restart: unless-stopped
+
   subscriber-api:
     build:
       context: .
@@ -54,3 +74,4 @@ services:
 
 volumes:
   warehouse-data:
+  mlflow-artifacts:

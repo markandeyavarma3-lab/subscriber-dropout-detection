@@ -1,5 +1,5 @@
 # Shortcuts for the common workflows. Run `make help` for the list.
-.PHONY: help install data simulate warehouse-up train evaluate serve test lint format docker-build docker-run docker-up clean
+.PHONY: help install data simulate warehouse-up train train-warehouse train-promote mlflow-ui evaluate serve test lint format docker-build docker-run docker-up clean
 
 PYTHON ?= python
 IMAGE  ?= subscriber-dropout-api
@@ -23,6 +23,15 @@ warehouse-up:  ## Start the Postgres warehouse only
 
 train:  ## Train the model and write the artifacts
 	$(PYTHON) -m src.models.train
+
+train-warehouse:  ## Train on point-in-time warehouse data with a temporal split
+	$(PYTHON) -m src.models.train --source warehouse
+
+train-promote:  ## Train, register in MLflow, and run the promotion gate
+	$(PYTHON) -m src.models.train --source warehouse --promote
+
+mlflow-ui:  ## Browse runs and the registry at http://127.0.0.1:5000
+	$(PYTHON) -m mlflow ui --backend-store-uri $${MLFLOW_TRACKING_URI:-sqlite:///mlflow.db}
 
 evaluate:  ## Evaluate the saved artifact on the held-out test split
 	$(PYTHON) -m src.models.evaluate

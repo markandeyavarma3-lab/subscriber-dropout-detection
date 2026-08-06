@@ -20,7 +20,7 @@ import argparse
 import json
 import sys
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -147,6 +147,55 @@ def _build_metadata(
     }
 
 
+def _load_splits(
+    source: str,
+    data_path: Path | None,
+    n_subscribers: int | None,
+    test_size: float,
+    validation_size: float,
+    seed: int,
+    cutoffs: list[str] | None,
+    log,
+) -> tuple[DataSplits, dict[str, Any]]:
+    """Build train/validation/test splits from the chosen data source.
+
+    ``warehouse`` splits by *time* - fit on earlier cutoffs, score later ones -
+    which is the only honest way to validate a churn model.  ``csv`` keeps the
+    original random stratified split so the legacy path, CI and the existing
+    tests continue to work unchanged.
+    """
+    if source == "warehouse":
+        from src.features.point_in_time import build_temporal_splits, monthly_cutoffs
+
+        chosen = cutoffs or [
+            cutoff.isoformat()
+            for cutoff in monthly_cutoffs(
+                settings.SIMULATION_START,
+                # Leave room at the end for the label horizon, or the final
+                # cutoff's labels would be censored by the simulation ending.
+                date.fromisoformat(settings.SIMULATION_END)
+                - timedelta(days=settings.PREDICTION_HORIZON_DAYS),
+            )
+        ]
+        splits, assignment = build_temporal_splits(chosen)
+        log(f"Temporal split over {len(chosen)} cutoffs -> {assignment}")
+        return splits, {"source": "warehouse", "cutoffs": assignment}
+
+    dataset_path = ensure_dataset(data_path, n_subscribers=n_subscribers)
+    frame = load_raw_data(dataset_path)
+    log(f"Loaded {len(frame):,} subscribers from {dataset_path}")
+    log(f"Dropout rate: {frame[settings.TARGET_COLUMN].mean():.1%}")
+    splits = split_data(
+        frame, test_size=test_size, validation_size=validation_size, seed=seed
+    )
+    return splits, {
+        "source": "csv",
+        "path": str(dataset_path),
+        "rows": int(len(frame)),
+        "dropout_rate": round(float(frame[settings.TARGET_COLUMN].mean()), 4),
+    }
+
+
 def run_training(
     data_path: Path | None = None,
     artifacts_dir: Path | None = None,
@@ -159,6 +208,10 @@ def run_training(
     persist_test_split: bool = True,
     test_split_path: Path | None = None,
     verbose: bool = True,
+    source: str = "csv",
+    cutoffs: list[str] | None = None,
+    track: bool = False,
+    promote_model: bool = False,
 ) -> TrainingResult:
     """Run the full training pipeline and persist the artifacts.
 
@@ -188,12 +241,9 @@ def run_training(
         if verbose:
             print(message)
 
-    dataset_path = ensure_dataset(data_path, n_subscribers=n_subscribers)
-    frame = load_raw_data(dataset_path)
-    log(f"Loaded {len(frame):,} subscribers from {dataset_path}")
-    log(f"Dropout rate: {frame[settings.TARGET_COLUMN].mean():.1%}")
-
-    splits = split_data(frame, test_size=test_size, validation_size=validation_size, seed=seed)
+    splits, dataset_info = _load_splits(
+        source, data_path, n_subscribers, test_size, validation_size, seed, cutoffs, log
+    )
     log(
         "Split -> train={train_rows:,} validation={validation_rows:,} "
         "test={test_rows:,}".format(**splits.summary())
@@ -233,12 +283,7 @@ def run_training(
         "model_name": settings.MODEL_NAME,
         "trained_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "decision_threshold": threshold,
-        "dataset": {
-            "path": str(dataset_path),
-            "rows": int(len(frame)),
-            "dropout_rate": round(float(frame[settings.TARGET_COLUMN].mean()), 4),
-            **splits.summary(),
-        },
+        "dataset": {**dataset_info, **splits.summary()},
         "validation": validation_metrics,
         "test": test_metrics,
         "top_feature_importances": importances,
@@ -271,6 +316,19 @@ def run_training(
     log(f"Saved model metadata  -> {metadata_path}")
     log(f"Saved drift baseline  -> {profile_path}")
 
+    if track:
+        _track_and_maybe_promote(
+            model=model,
+            resolved_params=resolved_params,
+            threshold=threshold,
+            validation_metrics=validation_metrics,
+            test_metrics=test_metrics,
+            dataset_info=dataset_info,
+            splits=splits,
+            promote_model=promote_model,
+            log=log,
+        )
+
     return TrainingResult(
         model=model,
         threshold=threshold,
@@ -281,6 +339,60 @@ def run_training(
         metadata_path=metadata_path,
         reference_profile_path=profile_path,
     )
+
+
+def _track_and_maybe_promote(
+    model: Pipeline,
+    resolved_params: dict[str, Any],
+    threshold: float,
+    validation_metrics: dict[str, Any],
+    test_metrics: dict[str, Any],
+    dataset_info: dict[str, Any],
+    splits: DataSplits,
+    promote_model: bool,
+    log,
+) -> None:
+    """Log the run to MLflow and, if asked, run it through the promotion gate.
+
+    Imported lazily so the core training path keeps working - and CI keeps
+    passing - on an install without MLflow.
+    """
+    from src.registry import promote as promotion
+    from src.registry import tracking
+
+    run_id, version = tracking.log_training_run(
+        model=model,
+        params={**resolved_params, "decision_threshold": threshold, **_flat_dataset(dataset_info)},
+        validation_metrics=validation_metrics,
+        test_metrics=test_metrics,
+        training_window=None,
+        input_example=splits.X_train.head(5),
+    )
+    log(f"Logged MLflow run     -> {run_id}")
+    if version is not None:
+        log(f"Registered version    -> {version.version} (@challenger)")
+
+    if not promote_model:
+        return
+
+    # The gate is scored on the test split: data the challenger did not train
+    # on, and which the champion has never seen either.
+    decision = promotion.evaluate_promotion(
+        challenger=model,
+        features=splits.X_test,
+        target=splits.y_test,
+        challenger_version=version.version if version else None,
+    )
+    promotion.promote(decision)
+    log(decision.summary())
+
+
+def _flat_dataset(dataset_info: dict[str, Any]) -> dict[str, Any]:
+    """Flatten dataset provenance into MLflow-loggable scalar params."""
+    flat: dict[str, Any] = {}
+    for key, value in dataset_info.items():
+        flat[f"data_{key}"] = str(value) if isinstance(value, dict) else value
+    return flat
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -298,6 +410,27 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--no-tune-threshold",
         action="store_true",
         help="Use the configured threshold instead of tuning it on validation.",
+    )
+    parser.add_argument(
+        "--source",
+        choices=("csv", "warehouse"),
+        default="csv",
+        help="csv: legacy flat file with a random split. warehouse: "
+        "point-in-time features from the event log, split by time.",
+    )
+    parser.add_argument(
+        "--cutoffs",
+        nargs="+",
+        default=None,
+        help="Explicit cutoff dates for --source warehouse (default: every 30 days).",
+    )
+    parser.add_argument(
+        "--track", action="store_true", help="Log the run to MLflow and register the model."
+    )
+    parser.add_argument(
+        "--promote",
+        action="store_true",
+        help="Run the challenger through the promotion gate against the champion.",
     )
     return parser.parse_args(argv)
 
@@ -323,6 +456,11 @@ def main(argv: list[str] | None = None) -> TrainingResult:
         validation_size=args.validation_size,
         seed=args.seed,
         tune_threshold=not args.no_tune_threshold,
+        source=args.source,
+        cutoffs=args.cutoffs,
+        # Promotion implies tracking: an unregistered model cannot be promoted.
+        track=args.track or args.promote,
+        promote_model=args.promote,
     )
 
 

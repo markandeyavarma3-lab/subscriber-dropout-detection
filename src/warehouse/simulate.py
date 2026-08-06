@@ -85,6 +85,7 @@ class _Subscriber:
     active: bool = True
     cancelled_on: date | None = None
     failures: int = 0
+    last_session_on: date | None = None
 
 
 @dataclass
@@ -150,6 +151,15 @@ def _daily_cancellation_hazard(
     hazard += 0.005 * sub.dissatisfaction
     hazard += 0.0015 * sub.price_sensitivity
     hazard += 0.0035 * min(sub.failures, 4)
+
+    # Dormancy is the strongest churn signal in real subscription businesses,
+    # and unlike the latent traits above it is *observable*: it shows up in the
+    # session log, so the model can actually learn it.  Without this term the
+    # hazard depends only on hidden state and no feature set could do better
+    # than guess.
+    dormant_days = 0 if sub.last_session_on is None else (day - sub.last_session_on).days
+    hazard += 0.0009 * min(dormant_days, 45)
+
     if not sub.auto_renew:
         hazard *= 2.4
     # Early-tenure subscribers churn far more readily than settled ones.
@@ -259,7 +269,8 @@ def simulate_events(
             rate = sub.engagement * 1.4
             if drifting:
                 rate *= scenario.engagement_multiplier
-            for _ in range(int(rng.poisson(rate))):
+            todays_sessions = int(rng.poisson(rate))
+            for _ in range(todays_sessions):
                 session_rows.append(
                     {
                         "subscriber_id": sub.subscriber_id,
@@ -267,6 +278,8 @@ def simulate_events(
                         "duration_minutes": round(float(rng.gamma(2.0, 12.0)), 2),
                     }
                 )
+            if todays_sessions:
+                sub.last_session_on = day
 
             # --- support tickets ------------------------------------------
             ticket_rate = 0.004 + 0.02 * sub.dissatisfaction

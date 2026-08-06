@@ -38,3 +38,5 @@ src/models/artifacts/*.json
 .idea/
 .vscode/
 .DS_Store
+mlflow.db
+mlruns/

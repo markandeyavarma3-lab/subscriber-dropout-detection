@@ -39,7 +39,7 @@ cannot show a drift detector firing on a static Kaggle download.
 
 ## Stages
 
-### 1. Temporal data layer
+### 1. Temporal data layer — ✅ done
 Event tables (`subscribers`, `subscription_events`, `sessions`, `payments`,
 `support_tickets`) in Postgres, written by an event simulator that runs over a date range
 and accepts injectable drift. Features are computed **in SQL** against a cutoff date, from
@@ -48,12 +48,18 @@ prediction window after the cutoff.
 
 *Proves:* point-in-time correctness, leak-free feature engineering, backfills.
 
-### 2. Experiment tracking and model registry — MLflow
-Every run logs params, metrics and artifacts. Models enter a registry and move through
-`Staging` → `Production`. Promotion is **gated**: a challenger is only promoted if it beats
-the incumbent on a held-out window. The API loads from the registry, not from a file.
+### 2. Experiment tracking and model registry — MLflow — ✅ done
+Every run logs params, metrics and artifacts. Promotion is **gated**: a challenger only
+takes over if it beats the incumbent by a margin, scored on the same held-out window in the
+same process. Rollback is an alias move, because nothing is ever deleted.
+
+MLflow 3 removed model *stages*, so production status is an alias — `@champion` is what
+serves, `@challenger` is what is being judged.
 
 *Proves:* reproducibility, model governance, no silent overwrites.
+
+*Still open:* the API loads `model.joblib` from disk rather than pulling `@champion` from
+the registry. That belongs with Stage 5, where serving has to resolve two models anyway.
 
 ### 3. Orchestration — Prefect
 One flow: `ingest → build features → train → evaluate → gate → deploy`. Scheduled,
