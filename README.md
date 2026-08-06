@@ -1,5 +1,7 @@
 # Subscriber Dropout Detection System
 
+[![CI](https://github.com/markandeyavarma3-lab/subscriber-dropout-detection/actions/workflows/ci.yml/badge.svg)](https://github.com/markandeyavarma3-lab/subscriber-dropout-detection/actions/workflows/ci.yml)
+
 An end-to-end MLOps project that predicts whether a subscriber is likely to **drop out**
 (cancel or stop using the service) in the near future, and serves those predictions over a
 FastAPI HTTP API. It covers the full path from data generation and feature engineering
@@ -28,7 +30,7 @@ Built to be understood and extended by a single developer in one to two weeks.
 
 ```bash
 # 1. Clone and enter the project
-git clone <your-repo-url>
+git clone https://github.com/markandeyavarma3-lab/subscriber-dropout-detection.git
 cd subscriber-dropout-detection
 
 # 2. Create a virtual environment (Python 3.10+)
