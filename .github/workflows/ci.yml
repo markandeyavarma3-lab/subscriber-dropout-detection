@@ -148,6 +148,50 @@ jobs:
           print("idempotent ingest and gate rejection both confirmed")
           PY
 
+      - name: Train a distinct challenger and prove shadow scoring works
+        run: |
+          # A second model, registered as @challenger but never promoted.
+          python -m src.models.train --source warehouse --track \
+            --n-estimators 40 --max-depth 5 --learning-rate 0.3
+
+          python -m uvicorn src.api.main:app --host 127.0.0.1 --port 8020 &
+          for _ in $(seq 1 30); do
+            if curl -sf http://127.0.0.1:8020/health > /dev/null; then break; fi
+            sleep 1
+          done
+
+          # Drive real traffic through the served endpoint.
+          for _ in $(seq 1 12); do
+            curl -sf -X POST http://127.0.0.1:8020/predict \
+              -H 'Content-Type: application/json' \
+              -d '{"tenure_days":95,"plan_type":"standard","monthly_fee":19.99,
+                   "avg_session_count_last_30d":2.0,"last_activity_days_ago":34,
+                   "support_tickets_last_90d":3,"payment_failures_last_6m":2,
+                   "discounts_used_last_6m":1,"is_auto_renew_enabled":false}' > /dev/null
+          done
+
+          curl -sf http://127.0.0.1:8020/monitoring/shadow | tee /tmp/shadow.json
+
+          python - <<'PY'
+          import json, pathlib
+
+          report = json.loads(pathlib.Path("/tmp/shadow.json").read_text())
+
+          # A distinct challenger must actually be shadowing.
+          assert report["active"] is True, "shadow scoring never activated"
+          assert report["compared_total"] >= 12, report["compared_total"]
+
+          # The hard rule: the shadow model must not be failing on live input.
+          assert report["errors_total"] == 0, "challenger errored on live traffic"
+
+          # And it must make no accuracy claim it has no labels to support.
+          for field in ("accuracy", "auc", "pr_auc", "better", "winner"):
+              assert field not in report, f"shadow report claims {field} without labels"
+
+          print("shadow active:", report["compared_total"], "comparisons,",
+                "agreement", report["agreement_rate"])
+          PY
+
       - name: Third run - inject drift, which must be detected
         run: |
           python -m src.orchestration.flows run --drift

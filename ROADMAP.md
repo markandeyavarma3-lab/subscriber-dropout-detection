@@ -94,9 +94,17 @@ values after a job stops existing.
 *Still open:* alerts are defined but no Alertmanager is wired up, so they evaluate without
 routing anywhere. Adding one is configuration, not code.
 
-### 5. Champion / challenger with shadow scoring
+### 5. Champion / challenger with shadow scoring — ✅ done
 Both models score every request. The challenger's scores are **logged, never served**.
-After enough traffic, promotion is decided on evidence rather than on a hunch.
+`/monitoring/shadow` reports agreement rate, divergence, and how much the outreach list
+would change on promotion.
+
+The important nuance, stated plainly because it is usually got wrong: **shadow scoring
+cannot tell you which model is more accurate.** Live traffic is unlabelled — nobody has
+churned yet — so accuracy still comes from the labelled holdout the promotion gate uses.
+What shadow proves is everything else that breaks on deployment day: whether the challenger
+survives production input at all, how many decisions change, and what that does to outreach
+volume. The two mechanisms answer different questions and both are needed.
 
 *Proves:* safe deployment. This is the most senior-signal piece in the roadmap.
 

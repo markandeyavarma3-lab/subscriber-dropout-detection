@@ -105,3 +105,49 @@ groups:
             Either a challenger was rejected by the promotion gate or drift was
             significant. Neither is a failure - the gate rejecting a worse
             model is the system working - but it is worth a look.
+
+  - name: shadow
+    rules:
+      - alert: ShadowChallengerErroring
+        # The finding shadow deployment exists to produce. A model that raises
+        # on live traffic would have taken the service down had it been
+        # promoted - and the offline gate, which only sees a clean holdout,
+        # would never have caught it.
+        expr: increase(subscriber_shadow_errors_total[15m]) > 0
+        labels:
+          severity: warning
+        annotations:
+          summary: "The challenger is failing to score live traffic"
+          description: >-
+            The shadow model raised on real input. No caller was affected -
+            shadow failures never reach a response - but this challenger must
+            not be promoted until it is fixed.
+
+      - alert: ShadowLargeBehaviourChange
+        # Agreement below 70% means promoting rewrites nearly a third of all
+        # decisions. That may still be correct, but it should be a decision
+        # somebody makes knowingly rather than discovers afterwards.
+        expr: subscriber_shadow_active == 1 and subscriber_shadow_agreement_rate < 0.7
+        for: 30m
+        labels:
+          severity: info
+        annotations:
+          summary: "Champion and challenger disagree on most decisions"
+          description: >-
+            Agreement is {{ $value | humanizePercentage }}. Promotion would
+            change a large share of outcomes; check
+            subscriber_shadow_flagged_rate_delta for the effect on outreach
+            volume before deciding.
+
+      - alert: ShadowOutreachVolumeShift
+        expr: subscriber_shadow_active == 1 and abs(subscriber_shadow_flagged_rate_delta) > 0.1
+        for: 30m
+        labels:
+          severity: info
+        annotations:
+          summary: "Promoting the challenger would change outreach volume sharply"
+          description: >-
+            The challenger flags {{ $value | humanizePercentage }} more or
+            fewer subscribers than the champion. This is a cost the offline
+            promotion gate cannot see: it scores accuracy, not the size of the
+            list somebody has to act on.

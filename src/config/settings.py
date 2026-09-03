@@ -141,6 +141,27 @@ MODEL_SOURCE: str = os.getenv("SDD_MODEL_SOURCE", "auto")
 CHAMPION_ALIAS: str = "champion"
 CHALLENGER_ALIAS: str = "challenger"
 
+# --------------------------------------------------------------------------- #
+# Shadow scoring
+# --------------------------------------------------------------------------- #
+
+# Score every request with @challenger as well as @champion, returning only the
+# champion's answer. Off by default in the image build, on wherever you want
+# deployment evidence before promoting.
+SHADOW_ENABLED: bool = os.getenv("SDD_SHADOW_ENABLED", "1") not in {"0", "false", "False"}
+
+# Fraction of requests also scored by the challenger. Shadow scoring runs a
+# second model inline, so it costs real latency; sampling trades evidence
+# accumulation speed against that cost.
+SHADOW_SAMPLE_RATE: float = _env_float("SDD_SHADOW_SAMPLE_RATE", 1.0)
+
+# How many paired comparisons the rolling window keeps.
+SHADOW_WINDOW: int = _env_int("SDD_SHADOW_WINDOW", 5_000)
+
+# Below this many comparisons, agreement rates are noise dressed as evidence:
+# 100% agreement over four requests says nothing at all.
+SHADOW_MIN_COMPARISONS: int = _env_int("SDD_SHADOW_MIN_COMPARISONS", 200)
+
 # The gate a challenger must clear to take over.  PR-AUC rather than ROC-AUC:
 # with a ~20% positive rate, average precision reflects retention-outreach
 # performance far more honestly than ROC-AUC, which flatters imbalanced data.

@@ -158,6 +158,58 @@ DRIFT_SAMPLE_SIZE = Gauge(
 
 
 # --------------------------------------------------------------------------- #
+# Shadow scoring - the challenger running on live traffic, never served
+# --------------------------------------------------------------------------- #
+
+SHADOW_COMPARISONS = Counter(
+    "subscriber_shadow_comparisons_total",
+    "Requests scored by both champion and challenger, by whether they agreed.",
+    ["agreed"],
+    registry=REGISTRY,
+)
+
+SHADOW_DIVERGENCE = Histogram(
+    "subscriber_shadow_divergence",
+    "Absolute gap between champion and challenger probabilities.",
+    buckets=(0.01, 0.025, 0.05, 0.1, 0.15, 0.2, 0.3, 0.5, 1.0),
+    registry=REGISTRY,
+)
+
+SHADOW_LATENCY = Histogram(
+    "subscriber_shadow_latency_seconds",
+    "Time spent scoring a batch with the challenger. This is added to request "
+    "latency, since shadow scoring runs inline.",
+    registry=REGISTRY,
+)
+
+SHADOW_ERRORS = Counter(
+    "subscriber_shadow_errors_total",
+    "Batches the challenger failed to score. Never affects the response, but a "
+    "rising count is exactly what should block a promotion.",
+    registry=REGISTRY,
+)
+
+SHADOW_ACTIVE = Gauge(
+    "subscriber_shadow_active",
+    "1 when a distinct challenger is loaded and shadow-scoring live traffic.",
+    registry=REGISTRY,
+)
+
+SHADOW_AGREEMENT_RATE = Gauge(
+    "subscriber_shadow_agreement_rate",
+    "Share of shadowed requests where both models produced the same label.",
+    registry=REGISTRY,
+)
+
+SHADOW_FLAGGED_RATE_DELTA = Gauge(
+    "subscriber_shadow_flagged_rate_delta",
+    "Challenger flagged rate minus champion flagged rate: how much the outreach "
+    "list would change in size on promotion.",
+    registry=REGISTRY,
+)
+
+
+# --------------------------------------------------------------------------- #
 # Recording
 # --------------------------------------------------------------------------- #
 
@@ -176,6 +228,25 @@ def record_predictions(responses: list[dict[str, Any]]) -> None:
             response["predicted_label"],
             response["risk_level"],
         )
+
+
+def record_shadow_comparison(comparison: Any) -> None:
+    """Record one champion/challenger pair."""
+    SHADOW_COMPARISONS.labels(agreed=str(comparison.agreed).lower()).inc()
+    SHADOW_DIVERGENCE.observe(comparison.divergence)
+
+
+def refresh_shadow_gauges(report: dict[str, Any]) -> None:
+    """Publish the current shadow comparison summary as gauges."""
+    SHADOW_ACTIVE.set(1 if report.get("active") else 0)
+
+    agreement = report.get("agreement_rate")
+    if agreement is not None:
+        SHADOW_AGREEMENT_RATE.set(float(agreement))
+
+    delta = report.get("flagged_rate_delta")
+    if delta is not None:
+        SHADOW_FLAGGED_RATE_DELTA.set(float(delta))
 
 
 def refresh_serving_gauges(live: dict[str, Any]) -> None:
@@ -256,6 +327,7 @@ def render() -> tuple[bytes, str]:
         refresh_model_source(
             loaded.metadata.get("served_from", "local") if loaded else None
         )
+        refresh_shadow_gauges(service.shadow_report())
     except Exception:  # noqa: BLE001 - scraping must never fail on a degraded service
         # A monitoring endpoint that 500s when the thing it monitors is
         # unhealthy is worse than useless: that is exactly when it is read.

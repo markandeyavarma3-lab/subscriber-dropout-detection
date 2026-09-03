@@ -25,7 +25,8 @@ Built to be understood and extended by a single developer in one to two weeks.
 | Data | SQLAlchemy, Postgres (SQLite locally) |
 | MLOps | MLflow tracking + model registry with gated promotion |
 | Orchestration | Prefect (scheduled retraining, backfills, retries) |
-| Observability | Prometheus + Grafana (provisioned dashboard, 7 alert rules) |
+| Observability | Prometheus + Grafana (provisioned dashboard, 10 alert rules) |
+| Safe deployment | Champion/challenger shadow scoring on live traffic |
 | CI | GitHub Actions |
 
 ---
@@ -196,6 +197,7 @@ A healthy subscriber (long tenure, active yesterday, auto-renew on) returns:
 | `POST` | `/predict/batch` | Score up to 1000 subscribers in one call. |
 | `GET` | `/metrics` | Live prediction statistics for this process. |
 | `POST` | `/monitoring/drift` | Compare a sample of live traffic against the training data. |
+| `GET` | `/monitoring/shadow` | Champion vs challenger comparison from live traffic. |
 | `GET` | `/docs` | Swagger UI. |
 
 `/health` and `/ready` are deliberately separate: a missing model artifact leaves the
@@ -728,9 +730,71 @@ dashboard panel query is cross-checked against the metrics the code actually exp
 alert on a renamed metric never fires and never complains, which is the worst failure mode
 monitoring has.
 
+### Shadow scoring — the challenger on live traffic
+
+Every request is scored twice. `@champion` answers the caller; `@challenger` scores the
+same input and its answer is **recorded and thrown away**. The challenger sees exactly the
+traffic production sees, and no caller is ever affected by it.
+
+```bash
+curl localhost:8000/monitoring/shadow
+```
+
+A real run against two genuinely different models, over 300 live requests:
+
+```
+compared_total            300      errors_total              0
+agreement_rate            0.7833   sufficient_evidence       true
+champion_flagged_rate     0.3167   challenger_flagged_rate   0.4067
+flagged_rate_delta        0.09     challenger_flags_more     46
+mean_abs_divergence       0.0553   challenger_flags_fewer    19
+```
+
+That is a finding the offline gate cannot produce. PR-AUC says the challenger is more
+accurate; shadow says promoting it **grows the retention outreach list by 28% relative** —
+an operational cost somebody should agree to in advance rather than discover from a
+surprised marketing team.
+
+#### What shadow scoring does *not* prove
+
+It is tempting to read this as "which model is better". It is not, and that is the most
+common mistake made with shadow deployment. **Live traffic has no labels** — nobody has
+churned yet — so there is no ground truth to score either model against. Accuracy still
+comes from the labelled holdout in
+[the promotion gate](#experiment-tracking-and-gated-promotion).
+
+What shadow answers instead:
+
+- **Does the challenger survive production input?** Real traffic contains shapes no
+  fixture has. A model raising on 1% of requests would have taken the service down had it
+  been promoted — and a clean offline holdout would never have revealed it.
+- **What is the blast radius?** 97% agreement means promotion changes almost nothing. 78%
+  means a fifth of all decisions flip.
+- **What does it cost?** The flagged-rate delta is the size of the list someone has to act
+  on, which no accuracy metric measures.
+
+#### The one hard rule
+
+A shadow model must never affect a response. The whole scoring block is wrapped in a bare
+`except`: a challenger that raises, hangs on odd input, or returns the wrong shape costs a
+counted error and nothing else. Verified directly — with a challenger that raises on
+*every* call, `/predict` still returns `200` with a valid probability, and
+`errors_total` increments so the failure is visible rather than silent. A rising
+`subscriber_shadow_errors_total` is exactly what should block a promotion.
+
+Shadow runs **inline**, so it adds a second forward pass to request latency. That cost is
+measured (`subscriber_shadow_latency_seconds`) rather than hidden, and
+`SDD_SHADOW_SAMPLE_RATE` trades evidence-gathering speed against it. A background thread
+would hide the latency but add a queue that silently falls behind under load — a worse
+failure to debug than an honest one.
+
+Shadow stays **idle** when `@challenger` is unset or points at the same version as
+`@champion` — the normal state right after a promotion, where shadowing would compare a
+model to itself.
+
 ### Tests
 
-248 tests across nine files, all runnable with `pytest`:
+264 tests across ten files, all runnable with `pytest`:
 
 - `test_features.py` — derived-column presence, row-count preservation, input immutability,
   finiteness, zero-denominator edge cases, hand-computed formula checks, output shape,
@@ -754,6 +818,10 @@ monitoring has.
 - `test_prometheus.py` — exposition format, counter/histogram wiring through the real
   endpoint, pipeline gauges loaded from a run report, and the dead-alert guards that
   cross-check every alert rule and dashboard panel against the exposed metric names
+- `test_shadow.py` — the safety contract above all: a challenger that raises on every
+  request must not change a single served response, and the served answer must always be
+  the champion's. Plus agreement/divergence arithmetic, evidence-sufficiency gating, and
+  a check that the response contains no accuracy verdict it has no basis to make
 
 The suite trains one small model per session into a temporary directory, so it runs in
 under a second and never writes into the repository or depends on your working tree.

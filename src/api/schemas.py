@@ -236,6 +236,50 @@ class MetricsResponse(BaseModel):
     )
 
 
+class ShadowResponse(BaseModel):
+    """Champion/challenger comparison gathered from live traffic.
+
+    Carries no accuracy verdict on purpose. Shadow traffic is unlabelled -
+    nobody has churned yet - so it answers "how differently would the
+    challenger behave", not "is the challenger better". Accuracy comes from the
+    labelled holdout the promotion gate uses.
+    """
+
+    model_config = ConfigDict(protected_namespaces=())
+
+    enabled: bool = Field(..., description="Whether shadow scoring is switched on.")
+    active: bool = Field(..., description="Whether a distinct challenger is loaded.")
+    sample_rate: float
+    champion_version: str | None = None
+    challenger_version: str | None = None
+
+    compared_total: int
+    errors_total: int = Field(
+        0, description="Batches the challenger failed to score. Should block a promotion."
+    )
+    window_size: int
+    window_capacity: int
+
+    sufficient_evidence: bool = Field(
+        ..., description="False while too few comparisons have accumulated to conclude anything."
+    )
+    required: int
+
+    agreement_rate: float | None = Field(
+        None, description="Share of requests where both models produced the same label."
+    )
+    mean_absolute_divergence: float | None = None
+    max_absolute_divergence: float | None = None
+    champion_flagged_rate: float | None = None
+    challenger_flagged_rate: float | None = None
+    flagged_rate_delta: float | None = Field(
+        None, description="How much the outreach list would change in size on promotion."
+    )
+    challenger_flags_more: int = 0
+    challenger_flags_fewer: int = 0
+    detail: str | None = None
+
+
 class ModelInfoResponse(BaseModel):
     """Metadata about the currently served artifact."""
 

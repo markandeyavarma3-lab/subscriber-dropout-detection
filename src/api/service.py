@@ -14,9 +14,11 @@ from pathlib import Path
 from typing import Any
 
 import joblib
+import numpy as np
 import pandas as pd
 from sklearn.pipeline import Pipeline
 
+from src.api.shadow import ShadowComparison, get_shadow_tracker
 from src.config import settings
 from src.features.build_features import frame_from_records
 from src.monitoring import prometheus
@@ -51,9 +53,24 @@ class LoadedModel:
     # Absent when the artifact predates monitoring or was trained elsewhere;
     # prediction still works, drift reporting is simply unavailable.
     reference_profile: dict[str, Any] | None = None
+    # The shadow model. Always optional: there may be no challenger
+    # registered, or it may be the same version as the champion (which is the
+    # normal state right after a promotion), and neither is a problem.
+    challenger: Pipeline | None = None
+    challenger_threshold: float | None = None
+    challenger_version: str | None = None
+
+    @property
+    def shadow_active(self) -> bool:
+        """Whether a distinct challenger is available to shadow-score with."""
+        return self.challenger is not None
 
 
 _loaded_model: LoadedModel | None = None
+
+# Used only to decide whether a request is sampled for shadow scoring, so it
+# needs no reproducibility guarantee - and must not disturb the global seed.
+_rng = np.random.default_rng()
 
 
 def _read_metadata(metadata_path: Path) -> dict[str, Any]:
@@ -128,6 +145,10 @@ def _load_from_registry(model_name: str | None = None) -> LoadedModel:
     # MLflow. Its absence only disables /monitoring/drift, never /predict.
     profile = load_reference_profile()
 
+    challenger, challenger_threshold, challenger_version = _load_challenger(
+        name, champion_version=str(version.version)
+    )
+
     logger.info(
         "Loaded %r @%s -> registry version %s (threshold=%.2f)",
         name,
@@ -136,8 +157,67 @@ def _load_from_registry(model_name: str | None = None) -> LoadedModel:
         threshold,
     )
     return LoadedModel(
-        pipeline=pipeline, threshold=threshold, metadata=metadata, reference_profile=profile
+        pipeline=pipeline,
+        threshold=threshold,
+        metadata=metadata,
+        reference_profile=profile,
+        challenger=challenger,
+        challenger_threshold=challenger_threshold,
+        challenger_version=challenger_version,
     )
+
+
+def _load_challenger(
+    model_name: str, champion_version: str
+) -> tuple[Pipeline | None, float | None, str | None]:
+    """Load ``@challenger`` for shadow scoring, if there is a distinct one.
+
+    Never raises. A missing, broken or unreachable challenger disables shadow
+    scoring and nothing else - the whole point of a shadow model is that
+    production does not depend on it.
+
+    Returns ``(None, None, None)`` when the challenger alias is unset, points
+    at the same version as the champion (the normal state straight after a
+    promotion, where shadowing would just compare a model to itself), or
+    cannot be loaded.
+    """
+    if not settings.SHADOW_ENABLED:
+        return None, None, None
+
+    from src.registry import tracking
+
+    try:
+        version = tracking.get_alias_version(settings.CHALLENGER_ALIAS, model_name)
+        if version is None:
+            return None, None, None
+        if str(version.version) == champion_version:
+            logger.info(
+                "Shadow scoring idle: @%s and @%s both point at version %s",
+                settings.CHALLENGER_ALIAS,
+                settings.CHAMPION_ALIAS,
+                champion_version,
+            )
+            return None, None, None
+
+        pipeline = tracking.load_aliased_model(settings.CHALLENGER_ALIAS, model_name)
+        if pipeline is None:
+            return None, None, None
+
+        client = tracking.configure()
+        run = client.get_run(version.run_id) if version.run_id else None
+        params = run.data.params if run else {}
+        threshold = float(params.get("decision_threshold", settings.DECISION_THRESHOLD))
+
+        logger.info(
+            "Shadow scoring enabled against @%s version %s (threshold=%.2f)",
+            settings.CHALLENGER_ALIAS,
+            version.version,
+            threshold,
+        )
+        return pipeline, threshold, str(version.version)
+    except Exception:  # noqa: BLE001 - a shadow model must never break startup
+        logger.warning("Could not load a challenger for shadow scoring", exc_info=True)
+        return None, None, None
 
 
 def _load_from_disk(
@@ -398,7 +478,87 @@ def predict_batch(
     # prediction - single, batch, or a future one - is counted exactly once.
     get_tracker().record_many(responses)
     prometheus.record_predictions(responses)
+
+    _shadow_score(loaded, frame, probabilities)
     return responses
+
+
+def _shadow_score(
+    loaded: LoadedModel, frame: pd.DataFrame, champion_probabilities: np.ndarray
+) -> None:
+    """Score the same batch with the challenger, recording but never serving it.
+
+    Wrapped whole in a bare ``except``, deliberately. The single rule of shadow
+    scoring is that the shadow can never affect the response: a challenger that
+    raises, hangs on a weird input, or returns the wrong shape must cost a
+    logged error and nothing else. Letting it propagate would mean a model
+    nobody is serving could take down the service - the exact failure shadow
+    deployment exists to prevent.
+
+    Runs inline rather than in a background thread. That costs real latency
+    (roughly a second forward pass), which is why ``SDD_SHADOW_SAMPLE_RATE``
+    exists; a thread pool would hide the cost but add a queue that can silently
+    fall behind under load, which is a worse failure to debug.
+    """
+    if not loaded.shadow_active or not settings.SHADOW_ENABLED:
+        return
+
+    tracker = get_shadow_tracker()
+    try:
+        if settings.SHADOW_SAMPLE_RATE < 1.0 and _rng.random() >= settings.SHADOW_SAMPLE_RATE:
+            return
+
+        threshold = (
+            loaded.challenger_threshold
+            if loaded.challenger_threshold is not None
+            else settings.DECISION_THRESHOLD
+        )
+        with prometheus.SHADOW_LATENCY.time():
+            challenger_probabilities = loaded.challenger.predict_proba(frame)[:, 1]
+
+        for champion_probability, challenger_probability in zip(
+            champion_probabilities, challenger_probabilities, strict=True
+        ):
+            comparison = ShadowComparison(
+                champion_probability=float(champion_probability),
+                champion_label=int(champion_probability >= loaded.threshold),
+                challenger_probability=float(challenger_probability),
+                challenger_label=int(challenger_probability >= threshold),
+            )
+            tracker.record(comparison)
+            prometheus.record_shadow_comparison(comparison)
+    except Exception:  # noqa: BLE001 - the shadow must never break serving
+        tracker.record_error()
+        prometheus.SHADOW_ERRORS.inc()
+        logger.warning("Challenger failed to shadow-score this batch", exc_info=True)
+
+
+def shadow_report() -> dict[str, Any]:
+    """Summarise what shadow traffic says about promoting the challenger.
+
+    Deliberately reports no accuracy verdict. Shadow traffic has no labels, so
+    it cannot say which model is *better* - only how differently they behave,
+    and whether the challenger survives production input at all.
+    """
+    loaded = _loaded_model
+    tracker = get_shadow_tracker()
+
+    report: dict[str, Any] = {
+        "enabled": settings.SHADOW_ENABLED,
+        "active": bool(loaded and loaded.shadow_active),
+        "sample_rate": settings.SHADOW_SAMPLE_RATE,
+        "champion_version": (loaded.metadata.get("registry_version") if loaded else None),
+        "challenger_version": (loaded.challenger_version if loaded else None),
+        **tracker.snapshot(),
+        **tracker.readiness(),
+    }
+
+    if not report["active"]:
+        report["detail"] = (
+            "No distinct challenger is registered. Shadow scoring stays idle when "
+            "@challenger is unset or points at the same version as @champion."
+        )
+    return report
 
 
 def predict_one(

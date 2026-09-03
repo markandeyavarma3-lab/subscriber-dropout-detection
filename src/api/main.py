@@ -28,6 +28,7 @@ from src.api.schemas import (
     ModelInfoResponse,
     PredictionResponse,
     ReadinessResponse,
+    ShadowResponse,
     SubscriberFeaturesRequest,
 )
 from src.config import settings
@@ -159,6 +160,16 @@ def metrics() -> MetricsResponse:
     when the thing it monitors is unhealthy is worse than useless.
     """
     return MetricsResponse(**service.live_metrics())
+
+
+@app.get("/monitoring/shadow", response_model=ShadowResponse, tags=["monitoring"])
+def shadow() -> ShadowResponse:
+    """Report what shadow traffic says about promoting the challenger.
+
+    Deliberately returns no accuracy verdict: shadow traffic has no labels, so
+    it can show how differently the two models behave but not which is right.
+    """
+    return ShadowResponse(**service.shadow_report())
 
 
 @app.get("/metrics/prometheus", tags=["monitoring"], include_in_schema=False)
