@@ -166,6 +166,13 @@ def _load_splits(
     """
     if source == "warehouse":
         from src.features.point_in_time import build_temporal_splits, monthly_cutoffs
+        from src.warehouse.simulate import ensure_warehouse
+
+        populated = ensure_warehouse(
+            n_subscribers=n_subscribers, seed=seed
+        )
+        if populated is not None:
+            log(f"Warehouse was empty; simulated it -> {populated.summary()}")
 
         chosen = cutoffs or [
             cutoff.isoformat()

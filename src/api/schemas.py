@@ -246,3 +246,9 @@ class ModelInfoResponse(BaseModel):
     decision_threshold: float
     required_input_columns: list[str]
     library_versions: dict[str, str] = Field(default_factory=dict)
+    served_from: str = Field(
+        "local", description="Where this model was loaded from: 'registry' or 'local'."
+    )
+    registry_version: str | None = Field(
+        None, description="MLflow registered model version, when served_from='registry'."
+    )

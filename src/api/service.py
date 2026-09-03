@@ -67,24 +67,90 @@ def _read_metadata(metadata_path: Path) -> dict[str, Any]:
         return {}
 
 
-def load_model(
-    model_path: Path | None = None,
-    metadata_path: Path | None = None,
-    profile_path: Path | None = None,
-) -> LoadedModel:
-    """Load the pipeline, its metadata and its drift baseline, and cache them.
+def _load_from_registry(model_name: str | None = None) -> LoadedModel:
+    """Load the ``@champion`` model directly from the MLflow registry.
 
-    Args:
-        model_path: Location of ``model.joblib``. Defaults to settings.
-        metadata_path: Location of ``metadata.json``. Defaults to settings.
-        profile_path: Location of ``reference_profile.json``. Defaults to
-            settings; a missing file disables drift reporting only.
+    This is what makes gated promotion (:mod:`src.registry.promote`) actually
+    affect what the API serves.  Without it, promoting a challenger only
+    changed a database row - the running service kept serving whatever
+    ``model.joblib`` happened to be on disk.
+
+    Raises:
+        ModelNotLoadedError: If MLflow is unreachable, no ``@champion`` alias
+            is set for this model name, or the aliased version fails to load.
+    """
+    from src.registry import tracking
+
+    name = model_name or settings.REGISTERED_MODEL_NAME
+    try:
+        version = tracking.get_alias_version(settings.CHAMPION_ALIAS, name)
+    except Exception as exc:  # noqa: BLE001 - MLflow raises several transport/DB types
+        raise ModelNotLoadedError(
+            f"MLflow registry unreachable at {settings.MLFLOW_TRACKING_URI!r}: {exc}"
+        ) from exc
+
+    if version is None:
+        raise ModelNotLoadedError(
+            f"No @{settings.CHAMPION_ALIAS} alias is set for {name!r} in the MLflow "
+            "registry. Train and promote one with "
+            "`python -m src.models.train --source warehouse --promote`."
+        )
+
+    pipeline = tracking.load_aliased_model(settings.CHAMPION_ALIAS, name)
+    if pipeline is None:  # pragma: no cover - alias resolved but artifact unreadable
+        raise ModelNotLoadedError(
+            f"@{settings.CHAMPION_ALIAS} version {version.version} of {name!r} could "
+            "not be deserialised from the MLflow artifact store."
+        )
+
+    # The threshold travels as a logged run param (see
+    # `_track_and_maybe_promote` in train.py), since the registry has nowhere
+    # else to carry it - the pipeline itself is just an sklearn estimator.
+    client = tracking.configure()
+    run = client.get_run(version.run_id) if version.run_id else None
+    params = run.data.params if run else {}
+    threshold = float(params.get("decision_threshold", settings.DECISION_THRESHOLD))
+
+    from src.features.build_features import REQUIRED_INPUT_COLUMNS
+
+    metadata: dict[str, Any] = {
+        "model_name": settings.MODEL_NAME,
+        "decision_threshold": threshold,
+        "required_input_columns": REQUIRED_INPUT_COLUMNS,
+        "served_from": "registry",
+        "registry_version": str(version.version),
+        "registry_run_id": version.run_id,
+    }
+
+    # Best-effort: the drift baseline is a local file, not a registry
+    # artifact, so it still applies even when the model itself came from
+    # MLflow. Its absence only disables /monitoring/drift, never /predict.
+    profile = load_reference_profile()
+
+    logger.info(
+        "Loaded %r @%s -> registry version %s (threshold=%.2f)",
+        name,
+        settings.CHAMPION_ALIAS,
+        version.version,
+        threshold,
+    )
+    return LoadedModel(
+        pipeline=pipeline, threshold=threshold, metadata=metadata, reference_profile=profile
+    )
+
+
+def _load_from_disk(
+    model_path: Path | None, metadata_path: Path | None, profile_path: Path | None
+) -> LoadedModel:
+    """Load the pipeline, its metadata and its drift baseline from the filesystem.
+
+    This is the original loading path, unchanged: it is what ``load_model``
+    falls back to when the registry is unavailable, and what it uses outright
+    when ``SDD_MODEL_SOURCE=local``.
 
     Raises:
         ModelNotLoadedError: If the artifact file does not exist.
     """
-    global _loaded_model
-
     path = model_path or settings.MODEL_PATH
     meta_path = metadata_path or settings.METADATA_PATH
     if not path.exists():
@@ -97,15 +163,58 @@ def load_model(
     threshold = float(metadata.get("decision_threshold", settings.DECISION_THRESHOLD))
     profile = load_reference_profile(profile_path)
 
-    _loaded_model = LoadedModel(
-        pipeline=pipeline, threshold=threshold, metadata=metadata, reference_profile=profile
-    )
     logger.info(
         "Loaded model from %s (threshold=%.2f, drift baseline=%s)",
         path,
         threshold,
         "yes" if profile else "no",
     )
+    return LoadedModel(
+        pipeline=pipeline, threshold=threshold, metadata=metadata, reference_profile=profile
+    )
+
+
+def load_model(
+    model_path: Path | None = None,
+    metadata_path: Path | None = None,
+    profile_path: Path | None = None,
+    source: str | None = None,
+) -> LoadedModel:
+    """Load the model the API will serve, and cache it.
+
+    ``SDD_MODEL_SOURCE`` (default ``"auto"``) decides where from:
+
+    - ``"registry"`` - only ever load ``@champion`` from MLflow; raise if it
+      is not there. Use this once you want promotion to be the only way a new
+      model reaches production.
+    - ``"local"`` - only ever load ``model.joblib`` from disk, ignoring the
+      registry entirely. The original behaviour.
+    - ``"auto"`` - try the registry first, and fall back to the local
+      artifact if MLflow is unreachable or has no ``@champion`` set. This is
+      the default so a fresh clone with no MLflow server still serves.
+
+    Raises:
+        ModelNotLoadedError: If neither source (per the mode above) produced
+            a usable model.
+    """
+    global _loaded_model
+
+    resolved = source or settings.MODEL_SOURCE
+    if resolved not in ("auto", "registry", "local"):
+        raise ValueError(
+            f"Unknown model source {resolved!r}; expected 'auto', 'registry' or 'local'."
+        )
+
+    if resolved in ("auto", "registry"):
+        try:
+            _loaded_model = _load_from_registry()
+            return _loaded_model
+        except ModelNotLoadedError as exc:
+            if resolved == "registry":
+                raise
+            logger.info("Registry model unavailable (%s); falling back to local artifact.", exc)
+
+    _loaded_model = _load_from_disk(model_path, metadata_path, profile_path)
     return _loaded_model
 
 
@@ -366,4 +475,6 @@ def model_info() -> dict[str, Any]:
             "required_input_columns", REQUIRED_INPUT_COLUMNS
         ),
         "library_versions": metadata.get("library_versions", {}),
+        "served_from": metadata.get("served_from", "local"),
+        "registry_version": metadata.get("registry_version"),
     }

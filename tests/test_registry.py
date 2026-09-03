@@ -388,3 +388,166 @@ def test_promotion_metric_is_pr_auc_by_default() -> None:
     """PR-AUC, not ROC-AUC: the label is imbalanced and outreach cares about precision."""
     assert settings.PROMOTION_METRIC == "pr_auc"
     assert settings.PROMOTION_MIN_IMPROVEMENT > 0
+
+
+# --------------------------------------------------------------------------- #
+# API service: loading the champion model from the registry
+# --------------------------------------------------------------------------- #
+
+
+def test_load_model_falls_back_to_local_when_no_champion_is_set(
+    trained_model, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """'auto' mode must not fail startup just because nothing is promoted yet.
+
+    Points settings.MODEL_PATH at a real, self-contained temp artifact rather
+    than whatever happens to be on disk in the working tree - this must pass
+    on a fresh clone with no prior training run, not just in this repo.
+    """
+    from src.api import service
+
+    monkeypatch.setattr(settings, "REGISTERED_MODEL_NAME", "test-service-empty-registry")
+    monkeypatch.setattr(settings, "MODEL_SOURCE", "auto")
+    monkeypatch.setattr(settings, "MODEL_PATH", trained_model.model_path)
+    monkeypatch.setattr(settings, "METADATA_PATH", trained_model.metadata_path)
+    monkeypatch.setattr(settings, "REFERENCE_PROFILE_PATH", trained_model.reference_profile_path)
+    service.reset_model()
+
+    loaded = service.load_model()
+    assert loaded.metadata.get("served_from", "local") == "local"
+    assert loaded.threshold == pytest.approx(trained_model.threshold)
+    service.reset_model()
+
+
+def test_load_model_registry_mode_raises_without_a_champion(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """'registry' mode is strict: no fallback, no silent local load."""
+    from src.api import service
+
+    monkeypatch.setattr(settings, "REGISTERED_MODEL_NAME", "test-service-strict-registry")
+    monkeypatch.setattr(settings, "MODEL_SOURCE", "registry")
+    service.reset_model()
+
+    with pytest.raises(service.ModelNotLoadedError, match="No @champion alias"):
+        service.load_model()
+    service.reset_model()
+
+
+def test_load_model_rejects_an_unknown_source(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A typo'd SDD_MODEL_SOURCE must fail loudly, not silently default somewhere."""
+    from src.api import service
+
+    monkeypatch.setattr(settings, "MODEL_SOURCE", "s3")
+    service.reset_model()
+
+    with pytest.raises(ValueError, match="Unknown model source"):
+        service.load_model()
+    service.reset_model()
+
+
+def test_load_model_prefers_the_registry_when_a_champion_exists(
+    holdout, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The whole point of this wiring: promotion must change what the API serves.
+
+    Trains a real model, promotes it, then asserts the API's own load_model()
+    - not a mocked stand-in - resolves it from MLflow rather than from disk.
+    """
+    from src.api import service
+    from src.registry import tracking
+
+    features, target = holdout
+    name = "test-service-registry-preferred"
+
+    model = _fit({"n_estimators": 25, "max_depth": 2}, features, target)
+    _, version = tracking.log_training_run(
+        model=model,
+        params={"decision_threshold": 0.33},
+        validation_metrics={"f1": 0.5},
+        test_metrics={"f1": 0.5, "pr_auc": 0.4},
+        model_name=name,
+    )
+    tracking.set_alias(settings.CHAMPION_ALIAS, version.version, name)
+
+    monkeypatch.setattr(settings, "REGISTERED_MODEL_NAME", name)
+    monkeypatch.setattr(settings, "MODEL_SOURCE", "auto")
+    service.reset_model()
+
+    loaded = service.load_model()
+    assert loaded.metadata["served_from"] == "registry"
+    assert loaded.metadata["registry_version"] == str(version.version)
+    # The threshold travelled as a logged run param, not the local default.
+    assert loaded.threshold == pytest.approx(0.33)
+
+    predictions = service.predict_one(features.iloc[0].to_dict())
+    assert 0.0 <= predictions["dropout_probability"] <= 1.0
+    service.reset_model()
+
+
+def test_model_info_reports_registry_version_over_the_api(
+    holdout, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """/model-info must let a caller prove which source served the prediction."""
+    from fastapi.testclient import TestClient
+
+    from src.api import service
+    from src.api.main import app
+    from src.registry import tracking
+
+    features, target = holdout
+    name = "test-service-model-info-registry"
+
+    model = _fit({"n_estimators": 20, "max_depth": 2}, features, target)
+    _, version = tracking.log_training_run(
+        model=model,
+        params={},
+        validation_metrics={"f1": 0.5},
+        test_metrics={"f1": 0.5, "pr_auc": 0.4},
+        model_name=name,
+    )
+    tracking.set_alias(settings.CHAMPION_ALIAS, version.version, name)
+
+    monkeypatch.setattr(settings, "REGISTERED_MODEL_NAME", name)
+    monkeypatch.setattr(settings, "MODEL_SOURCE", "auto")
+    service.reset_model()
+
+    with TestClient(app) as client:
+        info = client.get("/model-info").json()
+
+    assert info["served_from"] == "registry"
+    assert info["registry_version"] == str(version.version)
+    service.reset_model()
+
+
+def test_load_model_local_mode_ignores_a_registered_champion(
+    holdout, trained_model, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """'local' mode is an explicit escape hatch back to the original behaviour."""
+    from src.api import service
+    from src.registry import tracking
+
+    features, target = holdout
+    name = "test-service-local-mode-ignores-registry"
+
+    model = _fit({"n_estimators": 15, "max_depth": 2}, features, target)
+    _, version = tracking.log_training_run(
+        model=model,
+        params={},
+        validation_metrics={"f1": 0.4},
+        test_metrics={"f1": 0.4},
+        model_name=name,
+    )
+    tracking.set_alias(settings.CHAMPION_ALIAS, version.version, name)
+
+    monkeypatch.setattr(settings, "REGISTERED_MODEL_NAME", name)
+    monkeypatch.setattr(settings, "MODEL_SOURCE", "local")
+    monkeypatch.setattr(settings, "MODEL_PATH", trained_model.model_path)
+    monkeypatch.setattr(settings, "METADATA_PATH", trained_model.metadata_path)
+    monkeypatch.setattr(settings, "REFERENCE_PROFILE_PATH", trained_model.reference_profile_path)
+    service.reset_model()
+
+    loaded = service.load_model()
+    assert loaded.metadata.get("served_from", "local") == "local"
+    assert "registry_version" not in loaded.metadata
+    service.reset_model()

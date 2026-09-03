@@ -28,7 +28,7 @@ import numpy as np
 
 from src.config import settings
 from src.warehouse import schema
-from src.warehouse.database import create_schema, insert_rows, truncate_all
+from src.warehouse.database import create_schema, insert_rows, table_counts, truncate_all
 
 logger = logging.getLogger(__name__)
 
@@ -356,6 +356,36 @@ def simulate_events(
     }
 
     return SimulationResult(counts=counts, start=first, end=last, n_subscribers=n_subscribers)
+
+
+def ensure_warehouse(
+    n_subscribers: int | None = None,
+    start: str | date | None = None,
+    end: str | date | None = None,
+    seed: int = settings.RANDOM_SEED,
+    engine=None,
+) -> SimulationResult | None:
+    """Populate the warehouse on first use, mirroring ``ensure_dataset`` for the
+    legacy CSV path.
+
+    A clean clone has no warehouse, so ``--source warehouse`` would otherwise
+    fail with a confusing "empty split" error instead of just working.  This
+    keeps the warehouse path exactly as zero-friction as the CSV path: the
+    first training run generates what it needs.
+
+    Returns ``None`` when the warehouse already had data (nothing was done),
+    or the :class:`SimulationResult` when it populated one from scratch.
+    """
+    create_schema(engine)
+    if table_counts(engine).get("subscribers", 0) > 0:
+        return None
+    return simulate_events(
+        n_subscribers=n_subscribers or 4_000,
+        start=start,
+        end=end,
+        seed=seed,
+        engine=engine,
+    )
 
 
 def main() -> None:  # pragma: no cover - CLI convenience

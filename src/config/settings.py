@@ -129,6 +129,14 @@ MLFLOW_TRACKING_URI: str = os.getenv(
 MLFLOW_EXPERIMENT: str = os.getenv("SDD_MLFLOW_EXPERIMENT", "subscriber-dropout")
 REGISTERED_MODEL_NAME: str = os.getenv("SDD_REGISTERED_MODEL", "subscriber-dropout-classifier")
 
+# Where the API loads its model from at startup.
+#   "registry" - only ever load @champion from MLflow; fail loudly if absent.
+#   "local"    - only ever load model.joblib from disk (the original behaviour).
+#   "auto"     - try the registry first, fall back to the local artifact if the
+#                registry is unreachable or has no @champion set. This is the
+#                default so a fresh clone with no MLflow server still serves.
+MODEL_SOURCE: str = os.getenv("SDD_MODEL_SOURCE", "auto")
+
 # MLflow 3 removed model stages, so promotion is expressed with aliases.
 CHAMPION_ALIAS: str = "champion"
 CHALLENGER_ALIAS: str = "challenger"

@@ -42,24 +42,59 @@ source .venv/bin/activate          # Windows: .venv\Scripts\activate
 # 3. Install dependencies
 pip install -r requirements-dev.txt  # or requirements.txt for runtime only
 
-# 4. Train the model (generates the dataset on first run)
-python -m src.models.train
+# 4. Train on the event warehouse with a temporal split, register it in
+#    MLflow, and promote it to @champion. The warehouse auto-populates on
+#    first use, so there is no separate "load data" step to remember.
+python -m src.models.train --source warehouse --promote
 
-# 5. Serve the API
+# 5. Serve the API - it loads @champion straight from the MLflow registry
 uvicorn src.api.main:app --reload
 ```
 
 Then open **http://127.0.0.1:8000/** for the dashboard, or
-**http://127.0.0.1:8000/docs** for interactive Swagger UI.
+**http://127.0.0.1:8000/docs** for interactive Swagger UI. Check
+**http://127.0.0.1:8000/model-info** and look for `"served_from": "registry"` -
+that is the proof the API is serving the model the promotion gate approved,
+not a stale file on disk.
 
-A `Makefile` wraps the same commands: `make install`, `make train`, `make serve`,
-`make test`, `make lint`, `make docker-build`, `make docker-run`.
+**No Docker and no external database are required for any of this.** Both the
+event warehouse and the MLflow tracking store default to local SQLite files
+(`SDD_DATABASE_URL`, `MLFLOW_TRACKING_URI`) - Postgres and a standalone MLflow
+server only come into play if you choose to run the full `docker compose`
+stack (see [Running with Docker](#running-with-docker)).
+
+A `Makefile` wraps the same workflow:
+
+```bash
+make simulate          # populate the event warehouse (optional - training does this automatically)
+make train-warehouse   # train on it with a temporal split
+make train-promote     # + register in MLflow and run the gate
+make serve              # uvicorn --reload
+```
+
+### The fastest path, if you just want something running
+
+The original flat-CSV path still works, needs no warehouse or MLflow store at
+all, and is what CI's primary test job uses because it has zero moving parts:
+
+```bash
+python -m src.models.train   # or: make train
+uvicorn src.api.main:app --reload
+```
+
+This trains on a random split of a single generated CSV rather than a
+point-in-time temporal split - see
+[Temporal validation, and what it cost](#temporal-validation-and-what-it-cost)
+for why that distinction matters and what it costs the reported metrics.
+`/model-info` will show `"served_from": "local"` in this mode, since nothing
+was registered or promoted.
 
 ### Prerequisites
 
 - Python 3.10 or newer (3.11 recommended)
 - `pip`
-- Docker (optional, only for the containerised workflow)
+- Docker (optional - only for the containerised `docker compose` stack with
+  Postgres and a standalone MLflow server; everything above runs without it)
 
 ---
 
@@ -154,7 +189,7 @@ A healthy subscriber (long tenure, active yesterday, auto-renew on) returns:
 | `GET` | `/` | Browser dashboard. |
 | `GET` | `/health` | Liveness probe. Always `{"status": "ok"}` while the process is up. |
 | `GET` | `/ready` | Readiness probe. Reports whether the model artifact is loaded. |
-| `GET` | `/model-info` | Metadata: model name, training time, threshold, expected columns. |
+| `GET` | `/model-info` | Metadata: model name, threshold, expected columns, and `served_from` (`"registry"` or `"local"`). |
 | `POST` | `/predict` | Score one subscriber. |
 | `POST` | `/predict/batch` | Score up to 1000 subscribers in one call. |
 | `GET` | `/metrics` | Live prediction statistics for this process. |
@@ -372,6 +407,34 @@ Browse it with `make mlflow-ui` at http://127.0.0.1:5000.
 > so the registry uses `cloudpickle`, at the same trust level as the `joblib` file the API
 > already loads.
 
+#### The API serves from the registry, not from a stale file
+
+A gate only matters if the thing it gates actually changes what runs. `SDD_MODEL_SOURCE`
+(default `auto`) controls where `load_model()` gets its pipeline from at startup:
+
+| Value | Behaviour |
+| --- | --- |
+| `auto` *(default)* | Try `@champion` from the MLflow registry first; fall back to the local `model.joblib` if the registry is unreachable or nothing has been promoted yet. A fresh clone with no MLflow server still serves. |
+| `registry` | Only ever load `@champion`; raise loudly at startup if there is none. Use this once promotion is meant to be the *only* way a new model reaches production. |
+| `local` | Only ever load `model.joblib` from disk, ignoring the registry entirely — the original behaviour, as an explicit escape hatch. |
+
+`GET /model-info` reports which one actually happened, so a promotion can be verified from
+the outside rather than trusted on faith:
+
+```json
+{
+  "served_from": "registry",
+  "registry_version": "1",
+  "decision_threshold": 0.2,
+  ...
+}
+```
+
+The decision threshold travels as a logged MLflow run parameter — the registry has nowhere
+else to carry it, since the artifact itself is just a fitted `sklearn` pipeline. The drift
+baseline (`reference_profile.json`) remains a local file either way: it is not a registry
+artifact, so `/monitoring/drift` keeps working whether the model came from MLflow or disk.
+
 ### Data (legacy flat path)
 
 The original **synthetic flat dataset** still exists and is what training currently uses,
@@ -584,10 +647,19 @@ under a second and never writes into the repository or depends on your working t
 `.github/workflows/ci.yml` runs on push and pull request to `main`:
 
 **Job 1 — lint and test:** checkout → set up Python 3.11 (with pip caching) → install →
-`ruff check` → `pytest -v` → train end-to-end → evaluate the saved artifact → upload the
-artifacts for download.
+`ruff check` → `pytest -v` → train end-to-end (flat CSV) → evaluate the saved artifact →
+upload the artifacts for download. Deliberately the simplest possible path — zero external
+services — so it fails fast and fails clearly.
 
-**Job 2 — Docker:** runs only after job 1 passes. Builds the image, starts a container,
+**Job 2 — warehouse:** runs only after job 1 passes. Simulates the event warehouse from
+scratch, trains on a temporal split, registers and promotes the result in MLflow, then
+starts the API and asserts `/model-info` reports `"served_from":"registry"` before posting
+a real `/predict` request. This needs no Postgres and no Docker — both the warehouse and
+MLflow default to local SQLite files — so it runs on a bare GitHub-hosted runner. This job
+is the one that actually proves promotion changes what gets served, not just that the gate
+logic passes in isolation.
+
+**Job 3 — Docker:** runs only after job 1 passes. Builds the image, starts a container,
 polls `/health`, and posts a real request to `/predict`. Building an image proves it
 compiles; the smoke test proves it *serves*. Any failing step fails the workflow.
 
