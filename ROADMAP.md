@@ -108,9 +108,19 @@ volume. The two mechanisms answer different questions and both are needed.
 
 *Proves:* safe deployment. This is the most senior-signal piece in the roadmap.
 
-### 6. Scale
-Full `docker-compose` stack, then Kubernetes if warranted. Streaming inference over
-Redpanda last — the event layer from Stage 1 already makes the data the right shape.
+### 6. Scale — ✅ built, ⚠️ partly unverified
+Streaming inference over Redpanda, plus Kubernetes manifests and a seven-service compose
+stack.
+
+`src/streaming/` splits transport from logic the same way Stage 3 split Prefect from the
+pipeline: the consume → score → produce loop, dead-lettering, and commit ordering are all
+driven by an in-memory broker in tests, and `kafka.py` does nothing but translate.
+
+**What is not verified.** This machine has no Docker and no cluster, so the compose stack
+has never been started, no Redpanda broker has ever been contacted, and the manifests have
+never been applied. The Kafka adapter is the one module in the project with no test
+coverage — deliberately kept to pure translation so that gap is small and visible rather
+than hidden. Everything above the transport protocol *is* tested.
 
 ---
 

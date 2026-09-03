@@ -1,0 +1,99 @@
+# The serving deployment.
+#
+# The probe split is the point of this file. /health and /ready were built as
+# separate endpoints in the API precisely so Kubernetes could tell "the process
+# is alive" apart from "the process can actually serve": a pod with no model
+# loaded is live but not ready, so it is pulled out of the Service's endpoints
+# without being killed and restarted into the same state forever.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: subscriber-api
+  labels: { app: subscriber-api }
+spec:
+  replicas: 2
+  selector:
+    matchLabels: { app: subscriber-api }
+  template:
+    metadata:
+      labels: { app: subscriber-api }
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8000"
+        # Not /metrics: that path serves JSON. See src/monitoring/prometheus.py.
+        prometheus.io/path: "/metrics/prometheus"
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+      containers:
+        - name: api
+          image: subscriber-dropout-api:latest
+          ports:
+            - { name: http, containerPort: 8000 }
+          envFrom:
+            - configMapRef: { name: subscriber-config }
+          resources:
+            # A request without a limit lets one noisy pod starve its
+            # neighbours; a limit without a request makes the scheduler blind.
+            requests: { cpu: "250m", memory: "512Mi" }
+            limits:   { cpu: "1000m", memory: "1Gi" }
+
+          # Liveness: is the process wedged? Restart only then.
+          livenessProbe:
+            httpGet: { path: /health, port: http }
+            initialDelaySeconds: 15
+            periodSeconds: 20
+            failureThreshold: 3
+
+          # Readiness: can it serve? A missing model fails this and the pod is
+          # removed from load balancing - but never restarted, because a restart
+          # would not conjure a model and would crash-loop instead.
+          readinessProbe:
+            httpGet: { path: /ready, port: http }
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            failureThreshold: 3
+
+          # Startup: loading a model from the registry can take longer than the
+          # liveness period. Without this, a slow start looks like a hang and
+          # the pod is killed before it ever finishes booting.
+          startupProbe:
+            httpGet: { path: /health, port: http }
+            periodSeconds: 5
+            failureThreshold: 30
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: subscriber-api
+  labels: { app: subscriber-api }
+spec:
+  type: ClusterIP
+  selector: { app: subscriber-api }
+  ports:
+    - { name: http, port: 80, targetPort: http }
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: subscriber-api
+spec:
+  scaleTargetRef: { apiVersion: apps/v1, kind: Deployment, name: subscriber-api }
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target: { type: Utilization, averageUtilization: 70 }
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: subscriber-api
+spec:
+  # Keeps a node drain from taking every replica at once.
+  minAvailable: 1
+  selector:
+    matchLabels: { app: subscriber-api }

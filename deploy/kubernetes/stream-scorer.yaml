@@ -1,0 +1,35 @@
+# The streaming consumer.
+#
+# Replica count is capped by partition count, not by CPU: a Kafka consumer
+# group cannot usefully have more consumers than partitions, so extra pods
+# would sit idle. That is why this has no HPA - scaling it means repartitioning
+# the topic first.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: subscriber-stream-scorer
+  labels: { app: subscriber-stream-scorer }
+spec:
+  replicas: 2
+  selector:
+    matchLabels: { app: subscriber-stream-scorer }
+  template:
+    metadata:
+      labels: { app: subscriber-stream-scorer }
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+      # The runner traps SIGTERM, finishes the batch in flight and commits
+      # before exiting. This gives it room to do that: killed mid-batch, scores
+      # that were computed but never produced would simply be lost.
+      terminationGracePeriodSeconds: 60
+      containers:
+        - name: scorer
+          image: subscriber-dropout-api:latest
+          command: ["python", "-m", "src.streaming.kafka"]
+          envFrom:
+            - configMapRef: { name: subscriber-config }
+          resources:
+            requests: { cpu: "250m", memory: "512Mi" }
+            limits:   { cpu: "1000m", memory: "1Gi" }

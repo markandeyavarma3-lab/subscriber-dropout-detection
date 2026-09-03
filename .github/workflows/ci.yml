@@ -211,6 +211,80 @@ jobs:
           print("drift detected:", drift["drifted_features"])
           PY
 
+  streaming:
+    name: Streaming scorer (in-memory broker)
+    runs-on: ubuntu-latest
+    needs: test
+
+    steps:
+      - name: Check out the code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
+      - name: Train a model for the scorer to use
+        run: python -m src.models.train
+
+      - name: Drive the consume-score-produce loop, including poison messages
+        # No broker: the loop runs against the in-memory transport, which is
+        # what makes the failure paths testable at all. Only the thin Kafka
+        # adapter needs real infrastructure, and it is pure translation.
+        run: |
+          python - <<'PY'
+          import json
+
+          from src.streaming.runner import StreamingScorer
+          from src.streaming.transport import InMemoryBroker
+
+          SUB = {
+              "tenure_days": 95, "plan_type": "standard", "monthly_fee": 19.99,
+              "avg_session_count_last_30d": 2.0, "last_activity_days_ago": 34,
+              "support_tickets_last_90d": 3, "payment_failures_last_6m": 2,
+              "discounts_used_last_6m": 1, "is_auto_renew_enabled": False,
+          }
+
+          broker = InMemoryBroker()
+          for i in range(30):
+              broker.publish("subscriber-events", {**SUB, "subscriber_id": f"SUB-{i}"})
+          broker.publish("subscriber-events", b"{{{ not json")
+          broker.publish("subscriber-events", {"subscriber_id": "SUB-BAD", "tenure_days": 1})
+
+          scorer = StreamingScorer(
+              consumer=broker.consumer("subscriber-events"),
+              producer=broker.producer(),
+              output_topic="subscriber-scores",
+              dead_letter_topic="subscriber-scores-dlq",
+              batch_size=10,
+          )
+          stats = scorer.run(max_batches=10)
+
+          scores = broker.messages("subscriber-scores")
+          dlq = broker.messages("subscriber-scores-dlq")
+
+          # Good records scored, bad ones isolated - not the other way round.
+          assert len(scores) == 30, len(scores)
+          assert len(dlq) == 2, len(dlq)
+          assert stats.produce_failures == 0
+
+          # Everything accounted for: nothing silently dropped.
+          assert broker.committed["subscriber-events"] == 32
+
+          # Dead letters must be replayable, or they are just log lines.
+          assert dlq[0]["payload"], "dead letter lost its payload"
+          assert dlq[1]["reason"], "dead letter lost its reason"
+
+          print("streaming:", stats.summary())
+          PY
+
   docker:
     name: Build Docker image
     runs-on: ubuntu-latest

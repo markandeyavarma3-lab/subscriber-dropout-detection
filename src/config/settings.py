@@ -162,6 +162,27 @@ SHADOW_WINDOW: int = _env_int("SDD_SHADOW_WINDOW", 5_000)
 # 100% agreement over four requests says nothing at all.
 SHADOW_MIN_COMPARISONS: int = _env_int("SDD_SHADOW_MIN_COMPARISONS", 200)
 
+# --------------------------------------------------------------------------- #
+# Streaming inference
+# --------------------------------------------------------------------------- #
+
+# Redpanda speaks the Kafka protocol, so any Kafka client works against it.
+STREAM_BROKERS: str = os.getenv("SDD_STREAM_BROKERS", "localhost:19092")
+STREAM_INPUT_TOPIC: str = os.getenv("SDD_STREAM_INPUT_TOPIC", "subscriber-events")
+STREAM_OUTPUT_TOPIC: str = os.getenv("SDD_STREAM_OUTPUT_TOPIC", "subscriber-scores")
+
+# Messages that cannot be scored land here instead of stopping the consumer.
+# Without a dead-letter topic, one malformed record poisons the partition and
+# the consumer crash-loops on it forever.
+STREAM_DEAD_LETTER_TOPIC: str = os.getenv("SDD_STREAM_DLQ_TOPIC", "subscriber-scores-dlq")
+
+STREAM_CONSUMER_GROUP: str = os.getenv("SDD_STREAM_GROUP", "subscriber-scorer")
+
+# Scoring is vectorised, so batching is most of the throughput story: 200 rows
+# in one predict_proba call is far cheaper than 200 separate ones.
+STREAM_BATCH_SIZE: int = _env_int("SDD_STREAM_BATCH_SIZE", 200)
+STREAM_POLL_TIMEOUT: float = _env_float("SDD_STREAM_POLL_TIMEOUT", 1.0)
+
 # The gate a challenger must clear to take over.  PR-AUC rather than ROC-AUC:
 # with a ~20% positive rate, average precision reflects retention-outreach
 # performance far more honestly than ROC-AUC, which flatters imbalanced data.

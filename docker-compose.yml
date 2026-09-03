@@ -115,8 +115,55 @@ services:
       - grafana-data:/var/lib/grafana
     restart: unless-stopped
 
+  # Kafka-compatible broker, but a single binary with no ZooKeeper or KRaft
+  # quorum to run. For a demo stack that is the whole argument: same protocol,
+  # a fraction of the operational surface.
+  redpanda:
+    image: redpandadata/redpanda:v24.2.7
+    container_name: subscriber-redpanda
+    command:
+      - redpanda
+      - start
+      - --smp=1
+      - --overprovisioned
+      - --node-id=0
+      - --kafka-addr=PLAINTEXT://0.0.0.0:9092,OUTSIDE://0.0.0.0:19092
+      - --advertise-kafka-addr=PLAINTEXT://redpanda:9092,OUTSIDE://localhost:19092
+      - --check=false
+    ports:
+      - "19092:19092"
+    volumes:
+      - redpanda-data:/var/lib/redpanda/data
+    healthcheck:
+      test: ["CMD-SHELL", "rpk cluster health | grep -q 'Healthy:.*true'"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    restart: unless-stopped
+
+  # Consumes subscriber events, scores them, writes risk scores back. Shares
+  # the API image - it is the same model and the same feature pipeline, just a
+  # different entry point.
+  stream-scorer:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: subscriber-dropout-api:latest
+    container_name: subscriber-stream-scorer
+    depends_on:
+      redpanda:
+        condition: service_healthy
+    command: >
+      sh -c "pip install --no-cache-dir kafka-python &&
+             python -m src.streaming.kafka --brokers redpanda:9092"
+    environment:
+      SDD_STREAM_BROKERS: redpanda:9092
+    restart: unless-stopped
+
 volumes:
   warehouse-data:
+  redpanda-data:
   mlflow-artifacts:
   prometheus-data:
   grafana-data:

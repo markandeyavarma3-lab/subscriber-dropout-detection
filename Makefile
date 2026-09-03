@@ -1,5 +1,5 @@
 # Shortcuts for the common workflows. Run `make help` for the list.
-.PHONY: help install data simulate warehouse-up train train-warehouse train-promote pipeline pipeline-drift backfill schedule observability-up metrics mlflow-ui evaluate serve test lint format docker-build docker-run docker-up clean
+.PHONY: help install data simulate warehouse-up train train-warehouse train-promote pipeline pipeline-drift backfill schedule stream stream-up observability-up metrics mlflow-ui evaluate serve test lint format docker-build docker-run docker-up clean
 
 PYTHON ?= python
 IMAGE  ?= subscriber-dropout-api
@@ -41,6 +41,12 @@ backfill:  ## Replay training across historical cutoffs, oldest first
 
 schedule:  ## Serve the pipeline on a nightly cron (blocks; Ctrl-C to stop)
 	$(PYTHON) -m src.orchestration.flows serve --cron "0 3 * * *"
+
+stream:  ## Run the streaming scorer against Redpanda (needs the broker up)
+	$(PYTHON) -m src.streaming.kafka
+
+stream-up:  ## Start Redpanda and the streaming scorer
+	docker compose up -d redpanda stream-scorer
 
 observability-up:  ## Start Prometheus + Grafana (needs the API running)
 	docker compose up -d prometheus grafana

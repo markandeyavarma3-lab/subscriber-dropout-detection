@@ -27,6 +27,8 @@ Built to be understood and extended by a single developer in one to two weeks.
 | Orchestration | Prefect (scheduled retraining, backfills, retries) |
 | Observability | Prometheus + Grafana (provisioned dashboard, 10 alert rules) |
 | Safe deployment | Champion/challenger shadow scoring on live traffic |
+| Streaming | Redpanda (Kafka protocol), at-least-once with dead-lettering |
+| Deployment | Kubernetes manifests (probes, HPA, PDB) |
 | CI | GitHub Actions |
 
 ---
@@ -792,9 +794,93 @@ Shadow stays **idle** when `@challenger` is unset or points at the same version 
 `@champion` — the normal state right after a promotion, where shadowing would compare a
 model to itself.
 
+### Streaming inference
+
+The warehouse has been event-shaped since Stage 1, so scoring a stream is a natural fit
+rather than a bolt-on. `src/streaming/` consumes subscriber events, scores them in batches,
+and writes risk scores back to an output topic:
+
+```
+subscriber-events  ──▶  score  ──▶  subscriber-scores
+                          │
+                          └──────▶  subscriber-scores-dlq
+```
+
+```bash
+docker compose up -d redpanda stream-scorer   # or: make stream-up
+```
+
+A real run over 52 messages, two of them deliberately poisoned:
+
+```
+polls=10 messages=52 scored=50 dead_lettered=2 retries=0 commits=3 produce_failures=0
+
+  offset 50: message at offset 50 is not valid JSON: Expecting property name…
+  offset 51: missing required fields: monthly_fee, avg_session_count_last_30d, …
+```
+
+#### A stream is not a request/response API
+
+That difference drives every design choice here. A malformed HTTP body gets a `422` and the
+caller's problem stays the caller's. A malformed *message* sits in the topic forever — a
+consumer that dies on it dies on it again on every restart. That is the poison-pill loop
+that takes a pipeline down for a day over one bad record.
+
+So nothing raises on bad data. Every message ends in exactly one of three places:
+
+- **Scored** — onto the output topic, keyed by subscriber so one person's scores stay in
+  order on a single partition.
+- **Dead-lettered** — with a reason *and the original payload*, because a dead-letter topic
+  you cannot replay from is just an expensive log line.
+- **Left uncommitted** — when the *model* is unavailable. Those messages are fine;
+  dead-lettering good data because a model was briefly missing would be destroying it.
+
+Valid and invalid messages are separated *before* scoring, so one bad record cannot cost
+the whole batch — the good ones still go through in a single vectorised call.
+
+#### At-least-once, deliberately
+
+Offsets are committed **only after** scored records are flushed to the output topic. Crash
+in between and those messages are re-read and re-scored — a duplicate, which is harmless
+because scoring is deterministic and output is keyed by subscriber.
+
+Committing first would be at-most-once and would silently lose predictions on any crash.
+For a churn model that means a subscriber is quietly never scored, never contacted, and
+nobody ever finds out. **Duplicates are cheap; silence is not.** A test asserts that a
+failed produce does not commit.
+
+#### What is tested, and what is not
+
+The transport is a protocol, and the tests drive an in-memory broker through the real loop
+— including malformed payloads, produce failures, and a missing model. `kafka.py` does
+nothing but translate between `kafka-python` and that protocol, and it is **the one module
+in this project with no test coverage**: there has never been a broker here to run it
+against. Keeping it to pure translation is what makes that gap small and visible instead of
+hidden.
+
+`kafka-python` is imported lazily, so the project installs and runs without it.
+
+### Kubernetes
+
+`deploy/kubernetes/` carries manifests for both workloads. Two decisions worth reading the
+files for:
+
+**The probe split is why `/health` and `/ready` were built separately.** A pod with no model
+is *live but not ready*: it leaves the Service's endpoints without being restarted into the
+same state forever. A `startupProbe` gives model loading room so a slow boot is not
+mistaken for a hang.
+
+**Only the API is autoscaled.** A Kafka consumer group cannot usefully have more consumers
+than partitions, so an HPA on the stream scorer would just schedule idle pods — scaling it
+means repartitioning the topic first. The manifests say so rather than leaving it to be
+discovered.
+
+> **Never applied.** No cluster and no Docker on the development machine, so these are
+> structurally validated by tests and nothing more. See [ROADMAP.md](ROADMAP.md).
+
 ### Tests
 
-264 tests across ten files, all runnable with `pytest`:
+292 tests across eleven files, all runnable with `pytest`:
 
 - `test_features.py` — derived-column presence, row-count preservation, input immutability,
   finiteness, zero-denominator edge cases, hand-computed formula checks, output shape,
@@ -822,6 +908,10 @@ model to itself.
   request must not change a single served response, and the served answer must always be
   the champion's. Plus agreement/divergence arithmetic, evidence-sufficiency gating, and
   a check that the response contains no accuracy verdict it has no basis to make
+- `test_streaming.py` — mostly the bad paths, because that is where streaming differs from
+  HTTP: poison messages, partial batch failures, a produce failure that must not commit,
+  and a missing model that must leave good data uncommitted rather than dead-letter it.
+  Plus structural checks on the Kubernetes manifests and compose wiring
 
 The suite trains one small model per session into a temporary directory, so it runs in
 under a second and never writes into the repository or depends on your working tree.
