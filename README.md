@@ -24,6 +24,7 @@ Built to be understood and extended by a single developer in one to two weeks.
 | Packaging | Docker (multi-stage), docker compose |
 | Data | SQLAlchemy, Postgres (SQLite locally) |
 | MLOps | MLflow tracking + model registry with gated promotion |
+| Orchestration | Prefect (scheduled retraining, backfills, retries) |
 | CI | GitHub Actions |
 
 ---
@@ -618,9 +619,66 @@ than useless.
 Nothing here retrains or blocks automatically. Drift is reported; acting on it is a
 judgement call about the business, not about statistics.
 
+### Scheduled retraining pipeline
+
+`src/orchestration/` turns the pieces above into one job that can run unattended:
+
+```
+ingest  ──▶  drift  ──▶  train + gate  ──▶  report
+```
+
+```bash
+make pipeline         # run it once, now
+make pipeline-drift   # inject a behavioural shift first, to watch drift fire
+make backfill         # replay training across historical cutoffs
+make schedule         # serve it on a nightly cron (blocks)
+```
+
+**The ordering is load-bearing.** Drift is checked *after* ingest (it needs the fresh data)
+but *before* training — because training overwrites `reference_profile.json`. Checking it
+afterwards would compare a baseline against the very data it was just built from, report
+`stable` every single time, and detect nothing, ever.
+
+**Ingest is idempotent by default.** A scheduled job that regenerates the world on every
+run would retrain on different data each night while claiming to be reproducible. Only
+`--force-ingest`, or injecting a drift scenario, rewrites the warehouse.
+
+The whole loop, run three times against the same warehouse:
+
+```
+run 1   ingest: regenerated=True  · drift: skipped, no baseline yet
+        promotion ACCEPTED - no incumbent champion
+
+run 2   ingest: regenerated=False ← idempotent
+        promotion REJECTED - improvement +0.0000 below required +0.0050
+
+run 3   (--drift injected)
+        drift: significant - avg_session_count_last_30d (PSI 4.46),
+                             last_activity_days_ago (PSI 0.58)
+        promotion ACCEPTED - beat champion by +0.0240
+```
+
+Run 3 is the whole thesis of this project in four lines: behaviour changed, the detector
+named *exactly* the two features that moved and left `tenure_days` alone, retraining on the
+new reality produced a genuinely better model, and the gate let it through on evidence.
+
+Each run writes `last_pipeline_run.json` with a **`needs_attention`** flag, set when a
+challenger is rejected or drift is significant. Neither *fails* the run — a rejected
+challenger means the gate did its job, and drift means the world moved. Failing on either
+would train whoever is on call to ignore the alert.
+
+**Prefect is kept at arm's length.** The pipeline itself is plain functions in
+`pipeline.py` with no Prefect import; `flows.py` wraps each in a `@task` for retries and
+run history. Retries sit on ingest and training, where failures are plausibly transient —
+deliberately *not* on the drift check, where a failure is a data problem and retrying it
+three times just produces the same answer more slowly.
+
+No Prefect server is required: Prefect 3 starts a temporary API automatically. Point
+`PREFECT_API_URL` at a real one for the hosted UI.
+
 ### Tests
 
-203 tests across seven files, all runnable with `pytest`:
+227 tests across eight files, all runnable with `pytest`:
 
 - `test_features.py` — derived-column presence, row-count preservation, input immutability,
   finiteness, zero-denominator edge cases, hand-computed formula checks, output shape,
@@ -638,6 +696,9 @@ judgement call about the business, not about statistics.
   bin empties), quantile binning edge cases (constant and empty columns), the
   false-positive check that reference data shows no drift against itself, detection and
   attribution of a real shift, unseen categories, tracker bounds, and both endpoints
+- `test_orchestration.py` — ingest idempotency (the property a scheduled job lives or dies
+  on), the empty-early-cutoff regression guard, run-report escalation rules, and one real
+  Prefect flow run marked `slow` so `pytest -m "not slow"` stays fast
 
 The suite trains one small model per session into a temporary directory, so it runs in
 under a second and never writes into the repository or depends on your working tree.

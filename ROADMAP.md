@@ -58,14 +58,24 @@ serves, `@challenger` is what is being judged.
 
 *Proves:* reproducibility, model governance, no silent overwrites.
 
-*Still open:* the API loads `model.joblib` from disk rather than pulling `@champion` from
-the registry. That belongs with Stage 5, where serving has to resolve two models anyway.
+The API resolves `@champion` from the registry at startup (`SDD_MODEL_SOURCE`, default
+`auto`), falling back to the local artifact when MLflow is unreachable — so promotion
+changes what actually gets served, not just a database row.
 
-### 3. Orchestration — Prefect
-One flow: `ingest → build features → train → evaluate → gate → deploy`. Scheduled,
-retryable, and backfillable across historical cutoffs.
+### 3. Orchestration — Prefect — ✅ done
+One flow: `ingest → drift → train + gate → report`. Scheduled, retryable, and backfillable
+across historical cutoffs.
+
+The pipeline logic lives in `src/orchestration/pipeline.py` as **plain functions with no
+Prefect import**; `flows.py` wraps each in a `@task`. That keeps the test suite fast
+(Prefect starts a temporary API server per flow run) and means swapping orchestrator later
+touches one thin module rather than the pipeline itself.
 
 *Proves:* automation, idempotency, recovery.
+
+*Still open:* alerting is a `needs_attention` flag in the run report, not a page or an
+email. Wiring it to a real notifier belongs with Stage 4, where there is somewhere to send
+it.
 
 ### 4. Observability — Prometheus + Grafana
 Replaces the in-process `/metrics` window, which resets when the process does. Scheduled

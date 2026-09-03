@@ -70,6 +70,10 @@ class TrainingResult:
     metrics_path: Path
     metadata_path: Path
     reference_profile_path: Path
+    # Populated only when --promote ran. An orchestrator needs the verdict as
+    # data, not as a log line it would have to scrape.
+    promotion: dict[str, Any] | None = None
+    mlflow_run_id: str | None = None
 
 
 def build_model_pipeline(model_params: dict[str, Any] | None = None) -> Pipeline:
@@ -323,8 +327,10 @@ def run_training(
     log(f"Saved model metadata  -> {metadata_path}")
     log(f"Saved drift baseline  -> {profile_path}")
 
+    promotion_outcome: dict[str, Any] | None = None
+    mlflow_run_id: str | None = None
     if track:
-        _track_and_maybe_promote(
+        mlflow_run_id, promotion_outcome = _track_and_maybe_promote(
             model=model,
             resolved_params=resolved_params,
             threshold=threshold,
@@ -345,6 +351,8 @@ def run_training(
         metrics_path=metrics_path,
         metadata_path=metadata_path,
         reference_profile_path=profile_path,
+        promotion=promotion_outcome,
+        mlflow_run_id=mlflow_run_id,
     )
 
 
@@ -358,11 +366,15 @@ def _track_and_maybe_promote(
     splits: DataSplits,
     promote_model: bool,
     log,
-) -> None:
+) -> tuple[str | None, dict[str, Any] | None]:
     """Log the run to MLflow and, if asked, run it through the promotion gate.
 
     Imported lazily so the core training path keeps working - and CI keeps
     passing - on an install without MLflow.
+
+    Returns:
+        ``(run_id, promotion_decision)``; the decision is ``None`` when
+        promotion was not requested.
     """
     from src.registry import promote as promotion
     from src.registry import tracking
@@ -380,7 +392,7 @@ def _track_and_maybe_promote(
         log(f"Registered version    -> {version.version} (@challenger)")
 
     if not promote_model:
-        return
+        return run_id, None
 
     # The gate is scored on the test split: data the challenger did not train
     # on, and which the champion has never seen either.
@@ -392,6 +404,7 @@ def _track_and_maybe_promote(
     )
     promotion.promote(decision)
     log(decision.summary())
+    return run_id, decision.to_dict()
 
 
 def _flat_dataset(dataset_info: dict[str, Any]) -> dict[str, Any]:

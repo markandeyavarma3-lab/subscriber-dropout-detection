@@ -31,6 +31,11 @@ testpaths = ["tests"]
 pythonpath = ["."]
 addopts = "-q --strict-markers"
 filterwarnings = ["error::DeprecationWarning:src.*"]
+markers = [
+    # Prefect starts a temporary API server per flow run, so the handful of
+    # tests that exercise a real flow are separable: `pytest -m "not slow"`.
+    "slow: exercises a real Prefect flow run (seconds, not milliseconds)",
+]
 
 [tool.ruff]
 line-length = 100

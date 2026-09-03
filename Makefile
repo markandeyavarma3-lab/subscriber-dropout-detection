@@ -1,5 +1,5 @@
 # Shortcuts for the common workflows. Run `make help` for the list.
-.PHONY: help install data simulate warehouse-up train train-warehouse train-promote mlflow-ui evaluate serve test lint format docker-build docker-run docker-up clean
+.PHONY: help install data simulate warehouse-up train train-warehouse train-promote pipeline pipeline-drift backfill schedule mlflow-ui evaluate serve test lint format docker-build docker-run docker-up clean
 
 PYTHON ?= python
 IMAGE  ?= subscriber-dropout-api
@@ -29,6 +29,18 @@ train-warehouse:  ## Train on point-in-time warehouse data with a temporal split
 
 train-promote:  ## Train, register in MLflow, and run the promotion gate
 	$(PYTHON) -m src.models.train --source warehouse --promote
+
+pipeline:  ## Run the full retraining pipeline once (ingest -> drift -> train -> gate)
+	$(PYTHON) -m src.orchestration.flows run
+
+pipeline-drift:  ## Same, but inject a behavioural shift first to demo drift detection
+	$(PYTHON) -m src.orchestration.flows run --drift
+
+backfill:  ## Replay training across historical cutoffs, oldest first
+	$(PYTHON) -m src.orchestration.flows backfill
+
+schedule:  ## Serve the pipeline on a nightly cron (blocks; Ctrl-C to stop)
+	$(PYTHON) -m src.orchestration.flows serve --cron "0 3 * * *"
 
 mlflow-ui:  ## Browse runs and the registry at http://127.0.0.1:5000
 	$(PYTHON) -m mlflow ui --backend-store-uri $${MLFLOW_TRACKING_URI:-sqlite:///mlflow.db}

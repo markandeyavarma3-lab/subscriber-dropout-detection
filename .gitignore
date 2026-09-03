@@ -40,3 +40,6 @@ src/models/artifacts/*.json
 .DS_Store
 mlflow.db
 mlruns/
+.prefect/
+prefect.db
+src/models/artifacts/last_pipeline_run.json
