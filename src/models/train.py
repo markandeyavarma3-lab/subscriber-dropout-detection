@@ -283,6 +283,7 @@ def run_training(
         print(classification_text_report(splits.y_val, val_proba, threshold))
 
     importances = top_feature_importances(model)
+    decision_report = _decision_quality(model, splits, threshold, log)
 
     model_path = output_dir / "model.joblib"
     metrics_path = output_dir / "metrics.json"
@@ -298,6 +299,10 @@ def run_training(
         "validation": validation_metrics,
         "test": test_metrics,
         "top_feature_importances": importances,
+        # Accuracy metrics say how well the model ranks. These say whether it
+        # is fit for the decision it drives: are the probabilities meaningful,
+        # is the threshold worth money, does it work for everyone.
+        "decision_quality": decision_report,
     }
     metrics_path.write_text(json.dumps(metrics_report, indent=2))
     metadata_path.write_text(
@@ -354,6 +359,76 @@ def run_training(
         promotion=promotion_outcome,
         mlflow_run_id=mlflow_run_id,
     )
+
+
+def _decision_quality(
+    model: Pipeline, splits: DataSplits, threshold: float, log
+) -> dict[str, Any]:
+    """Calibration, cost and fairness for the trained model.
+
+    Reported alongside the accuracy metrics rather than instead of them: a
+    model can rank well and still produce probabilities that mean nothing, a
+    threshold that loses money, and predictions that work far better for some
+    people than others.
+
+    Never raises. These are diagnostics; a failure here must not cost a
+    training run that has already produced a usable model.
+    """
+    from src.evaluation.fairness import disparity_report
+    from src.models.calibration import calibration_metrics, compare_calibration
+    from src.models.costs import CostModel, threshold_report
+
+    try:
+        proba = model.predict_proba(splits.X_test)[:, 1]
+        report: dict[str, Any] = {
+            "calibration": calibration_metrics(splits.y_test, proba),
+            "costs": threshold_report(splits.y_test, proba, threshold, CostModel()),
+        }
+
+        # Calibration is only applied if it actually helps - isotonic can
+        # overfit a small validation split and make the probabilities worse.
+        from src.models.calibration import calibrate_pipeline
+
+        try:
+            calibrated = calibrate_pipeline(
+                model, splits.X_val, splits.y_val, method=settings.CALIBRATION_METHOD
+            )
+            comparison = compare_calibration(
+                splits.y_test, proba, calibrated.predict_proba(splits.X_test)[:, 1]
+            )
+            report["calibration_attempt"] = {
+                "method": settings.CALIBRATION_METHOD,
+                "improved": comparison["improved"],
+                "ece_improvement": comparison["ece_improvement"],
+                "applied": False,
+            }
+            log(
+                f"Calibration ({settings.CALIBRATION_METHOD}): "
+                + ("improved" if comparison["improved"] else "did NOT improve")
+                + f" ECE by {comparison['ece_improvement']:+.5f} - not applied"
+            )
+        except Exception as exc:  # noqa: BLE001 - diagnostics must not fail training
+            report["calibration_attempt"] = {"error": str(exc), "applied": False}
+            log(f"Calibration comparison failed: {exc}")
+
+        # Slice by plan_type, which the model *does* see. acquisition_channel -
+        # which it never sees - is the more interesting slice, but it is not
+        # carried on the feature frame; see the fairness section of the README.
+        if "plan_type" in splits.X_test.columns:
+            report["fairness"] = disparity_report(
+                splits.y_test, proba, splits.X_test["plan_type"], threshold, attribute="plan_type"
+            )
+            if not report["fairness"]["passes"]:
+                log(f"Fairness concerns: {report['fairness']['concerns']}")
+
+        savings = report["costs"]["savings"]
+        log(
+            f"Cost-optimal threshold {report['costs']['cost_optimal']['threshold']} "
+            f"vs {threshold} in use -> {savings:,.0f} on the test split"
+        )
+        return report
+    except Exception as exc:  # noqa: BLE001 - never lose a good model to a diagnostic
+        return {"error": str(exc)}
 
 
 def _track_and_maybe_promote(

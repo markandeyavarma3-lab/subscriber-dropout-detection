@@ -122,6 +122,21 @@ never been applied. The Kafka adapter is the one module in the project with no t
 coverage — deliberately kept to pure translation so that gap is small and visible rather
 than hidden. Everything above the transport protocol *is* tested.
 
+### 7. Decision quality — calibration, cost, fairness — ✅ done
+Beyond the six stages above, three things accuracy metrics structurally cannot tell you:
+whether the probabilities mean anything, whether the threshold makes money, and whether the
+model works equally well for everyone.
+
+Reported on every training run under `decision_quality`. Two findings worth recording
+because both contradict what the obvious implementation would have claimed:
+
+- **Calibration did not help.** Isotonic and sigmoid both overfit the validation split and
+  made ECE worse than the raw model. It is measured and *not applied*, which is only
+  possible because the comparison was built before the conclusion.
+- **The first cost model was wrong.** It implicitly assumed a retention offer always works,
+  which made blanket outreach optimal. Adding `offer_efficacy` moved the analytic threshold
+  from 0.083 to 0.278.
+
 ---
 
 ## Deliberately excluded

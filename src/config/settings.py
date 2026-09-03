@@ -163,6 +163,46 @@ SHADOW_WINDOW: int = _env_int("SDD_SHADOW_WINDOW", 5_000)
 SHADOW_MIN_COMPARISONS: int = _env_int("SDD_SHADOW_MIN_COMPARISONS", 200)
 
 # --------------------------------------------------------------------------- #
+# Decision costs & calibration
+# --------------------------------------------------------------------------- #
+
+# What each mistake costs. F1 - the current tuning objective - implicitly
+# assumes these are equal, which for retention they are emphatically not.
+#
+# Defaults model a ~£20/month subscriber worth roughly a year of remaining
+# revenue against a £20 offer: missing one churner costs as much as twelve
+# wasted offers. Replace with real figures before quoting any of the money
+# numbers this produces.
+COST_FALSE_NEGATIVE: float = _env_float("SDD_COST_FALSE_NEGATIVE", 240.0)
+COST_FALSE_POSITIVE: float = _env_float("SDD_COST_FALSE_POSITIVE", 20.0)
+# An offer aimed correctly still costs money. Zero would mean "the offer is
+# free", which is a claim worth making explicitly rather than by omission.
+COST_TRUE_POSITIVE: float = _env_float("SDD_COST_TRUE_POSITIVE", 20.0)
+
+# How often a retention offer actually saves a subscriber who would otherwise
+# have left. Setting this to 1.0 - "every correctly-aimed offer works" - makes
+# blanket outreach look optimal, because it is, under that assumption. Real
+# campaigns convert perhaps a fifth to a third.
+OFFER_EFFICACY: float = _env_float("SDD_OFFER_EFFICACY", 0.30)
+
+# Isotonic is non-parametric and fixes boosting's S-shaped distortion without
+# assuming its shape; it needs a few hundred rows, which validation has.
+CALIBRATION_METHOD: str = os.getenv("SDD_CALIBRATION_METHOD", "isotonic")
+
+# --------------------------------------------------------------------------- #
+# Fairness
+# --------------------------------------------------------------------------- #
+
+# A group whose metrics differ from the best group by more than this is
+# reported as a disparity. 0.8 is the long-standing "four-fifths rule" from US
+# employment law - not a law of nature, and not a legal standard here, but a
+# widely understood starting point that beats inventing a number.
+FAIRNESS_DISPARITY_THRESHOLD: float = _env_float("SDD_FAIRNESS_DISPARITY", 0.8)
+
+# Below this many rows a group's metrics are noise; reported, but flagged.
+FAIRNESS_MIN_GROUP_SIZE: int = _env_int("SDD_FAIRNESS_MIN_GROUP", 30)
+
+# --------------------------------------------------------------------------- #
 # Streaming inference
 # --------------------------------------------------------------------------- #
 

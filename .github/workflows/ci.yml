@@ -38,6 +38,42 @@ jobs:
       - name: Evaluate the saved artifact
         run: python -m src.models.evaluate
 
+      - name: Check the decision-quality report is produced and honest
+        run: |
+          python - <<'PY'
+          import json, pathlib
+
+          metrics = json.loads(
+              pathlib.Path("src/models/artifacts/metrics.json").read_text()
+          )
+          quality = metrics["decision_quality"]
+          assert "error" not in quality, quality["error"]
+
+          # Probabilities must be scored as probabilities, not just ranked.
+          assert 0.0 <= quality["calibration"]["expected_calibration_error"] <= 1.0
+
+          # Calibration must never be applied without evidence it helped.
+          attempt = quality["calibration_attempt"]
+          assert attempt["applied"] is False, "calibration applied without a gate"
+
+          # The cost model must not assume retention offers always work: that
+          # assumption makes blanket outreach optimal and is how this produced
+          # a threshold flagging 506 of 508 subscribers.
+          efficacy = quality["costs"]["costs"]["offer_efficacy"]
+          assert 0.0 < efficacy < 1.0, f"implausible offer efficacy {efficacy}"
+
+          # Fairness has to be reported whether or not it passes.
+          assert "passes" in quality["fairness"]
+
+          # Undefined group metrics must be None, never JSON-invalid NaN.
+          assert "NaN" not in json.dumps(quality)
+
+          print("decision quality:",
+                "ECE", quality["calibration"]["expected_calibration_error"],
+                "| savings", quality["costs"]["savings"],
+                "| fairness passes", quality["fairness"]["passes"])
+          PY
+
       - name: Upload model artifacts
         uses: actions/upload-artifact@v4
         with:

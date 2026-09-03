@@ -1,5 +1,5 @@
 # Shortcuts for the common workflows. Run `make help` for the list.
-.PHONY: help install data simulate warehouse-up train train-warehouse train-promote pipeline pipeline-drift backfill schedule stream stream-up observability-up metrics mlflow-ui evaluate serve test lint format docker-build docker-run docker-up clean
+.PHONY: help install data simulate warehouse-up train train-warehouse train-promote pipeline pipeline-drift backfill schedule stream stream-up audit observability-up metrics mlflow-ui evaluate serve test lint format docker-build docker-run docker-up clean
 
 PYTHON ?= python
 IMAGE  ?= subscriber-dropout-api
@@ -54,6 +54,9 @@ observability-up:  ## Start Prometheus + Grafana (needs the API running)
 metrics:  ## Show the raw Prometheus exposition from a running API
 	@curl -s http://127.0.0.1:8000/metrics/prometheus | grep -E '^subscriber_' || \
 		echo "API not running - start it with 'make serve'"
+
+audit:  ## Print the decision-quality report from the last training run
+	@$(PYTHON) -c "import json;d=json.load(open('src/models/artifacts/metrics.json'))['decision_quality'];print(json.dumps(d,indent=2))"
 
 mlflow-ui:  ## Browse runs and the registry at http://127.0.0.1:5000
 	$(PYTHON) -m mlflow ui --backend-store-uri $${MLFLOW_TRACKING_URI:-sqlite:///mlflow.db}

@@ -27,6 +27,7 @@ Built to be understood and extended by a single developer in one to two weeks.
 | Orchestration | Prefect (scheduled retraining, backfills, retries) |
 | Observability | Prometheus + Grafana (provisioned dashboard, 10 alert rules) |
 | Safe deployment | Champion/challenger shadow scoring on live traffic |
+| Decision quality | Calibration, cost-based thresholds, group fairness audit |
 | Streaming | Redpanda (Kafka protocol), at-least-once with dead-lettering |
 | Deployment | Kubernetes manifests (probes, HPA, PDB) |
 | CI | GitHub Actions |
@@ -878,9 +879,82 @@ discovered.
 > **Never applied.** No cluster and no Docker on the development machine, so these are
 > structurally validated by tests and nothing more. See [ROADMAP.md](ROADMAP.md).
 
+### Is the model fit for the decision it drives?
+
+Accuracy metrics say how well the model *ranks*. They cannot say whether the probabilities
+mean anything, whether the threshold makes money, or whether it works for everyone. Every
+training run now reports all three under `decision_quality` in `metrics.json`.
+
+#### Calibration — and a negative result
+
+Gradient boosting ranks well and is badly *scaled*: it will assign 0.9 to a cohort that
+churns 60% of the time. Harmless for ordering, fatal the moment a probability is multiplied
+by money.
+
+So calibration is measured, and **applied only if it helps**:
+
+```
+raw          ECE=0.03822  Brier=0.22463
+isotonic     ECE=0.06158  Brier=0.22781  -> worse
+sigmoid      ECE=0.05217  Brier=0.22520  -> worse
+```
+
+On the temporal split, **neither method helped** — both overfit a ~500-row validation
+split, and the raw model was already the best calibrated of the three. `compare_calibration`
+exists precisely to catch this; applying isotonic blindly would have shipped worse
+probabilities alongside a README claiming an improvement.
+
+#### Cost-based thresholds, and the parameter that makes it honest
+
+F1 assumes a false positive and a false negative cost the same. For retention they do not:
+missing a churner costs their remaining value; a wasted offer costs the offer.
+
+The first version of this cost model produced a "cost-optimal" threshold that flagged
+**506 of 508 subscribers**. Arithmetically correct, operationally absurd — and the cause was
+an assumption hidden in the model: that a correctly-aimed offer *always works*. Real
+campaigns convert perhaps a fifth to a third. Adding `offer_efficacy` fixed it:
+
+| Offer efficacy | Analytic threshold | Flagged | Missed |
+| --- | --- | --- | --- |
+| 100% (the naive assumption) | 0.083 | 500 / 506 | 0 |
+| 30% (realistic) | 0.278 | 418 / 506 | 22 |
+
+One parameter moves the threshold **3.3×**. The report shows the analytic and empirical
+optima side by side on purpose: their gap is calibration error expressed in currency, which
+is a far more legible argument than an ECE of 0.04.
+
+#### Fairness
+
+An aggregate AUC is a weighted average, and averages hide their worst cases. The audit
+slices performance by group — including **`acquisition_channel`, which the model never
+sees**, so it measures whether the model works equally well for people it cannot even
+identify:
+
+```
+group          n    base  select  recall    AUC
+organic      134   0.358   0.836   0.833  0.592   <- weakest
+paid_search  127   0.370   0.858   0.957  0.646
+social       124   0.427   0.847   0.943  0.689
+referral     121   0.413   0.760   0.820  0.613
+ratios: selection=0.886  recall=0.857  auc=0.859   -> passes
+```
+
+Two disparities are reported **separately**, because they mean different things. *Selection*
+disparity (some groups flagged more) is often correct — if a cohort genuinely churns more,
+flagging it more is the model working. *Performance* disparity (the model is measurably
+worse for a group) is much harder to defend.
+
+And note this case **passes** the 0.8 four-fifths ratio while `organic` sits 0.10 AUC below
+`social`. That is the honest reading: a ratio threshold is a prompt to go and look, never a
+verdict — in either direction.
+
+> The data is simulated, so any disparity here is a property of the generator, not evidence
+> about real subscribers. The machinery is real; the specific numbers are not findings about
+> the world.
+
 ### Tests
 
-292 tests across eleven files, all runnable with `pytest`:
+316 tests across twelve files, all runnable with `pytest`:
 
 - `test_features.py` — derived-column presence, row-count preservation, input immutability,
   finiteness, zero-denominator edge cases, hand-computed formula checks, output shape,
@@ -912,6 +986,10 @@ discovered.
   HTTP: poison messages, partial batch failures, a produce failure that must not commit,
   and a missing model that must leave good data uncommitted rather than dead-letter it.
   Plus structural checks on the Kubernetes manifests and compose wiring
+- `test_evaluation.py` — calibration arithmetic against hand-computed cases, the guard that
+  reports calibration *failing* to help, cost-model behaviour as offer efficacy varies, and
+  fairness checks that distinguish selection from performance disparity, never silently drop
+  a small group, and keep undefined metrics as `None` rather than JSON-invalid `NaN`
 
 The suite trains one small model per session into a temporary directory, so it runs in
 under a second and never writes into the repository or depends on your working tree.
@@ -941,27 +1019,27 @@ compiles; the smoke test proves it *serves*. Any failing step fails the workflow
 
 ## Future work
 
-- **Real production data.** Replace the synthetic generator with a warehouse extract; the
-  loader and feature pipeline are already isolated behind `src/data/loader.py`, so only
-  that boundary changes.
-- **Durable, cross-replica metrics.** `/metrics` is a bounded in-process window that resets
-  with the process. Export to Prometheus (or write scores to a warehouse) so drift can be
-  tracked across replicas and over weeks rather than since the last deploy.
-- **Scheduled drift checks.** `/monitoring/drift` is pull-based today. Run it nightly over
-  the previous day's traffic and alert on a `significant` verdict, instead of relying on
-  someone remembering to ask.
-- **Experiment tracking.** MLflow or Weights & Biases in place of the hand-rolled
-  `metrics.json`, once more than a handful of runs need comparing.
-- **Event-driven scoring.** Consume subscriber activity events from Kafka or SQS and write
-  risk scores back to the CRM, instead of synchronous request/response only.
-- **True explainability.** Swap the rule-based explanation for SHAP values to attribute
-  each prediction to the model's actual decision surface.
-- **Threshold by business cost.** Tune the cut-off against the real cost ratio of a missed
-  churner versus a wasted retention offer, rather than F1.
-- **Calibration.** Add `CalibratedClassifierCV` so the probabilities can be used directly
-  in expected-value calculations.
+Genuinely open, as distinct from the six roadmap stages in [ROADMAP.md](ROADMAP.md), which
+are all built:
 
----
+- **Real production data.** Everything here runs on a simulator. The machinery is real and
+  the metrics are honest about themselves, but no number in this repository is evidence
+  about actual subscribers. The KKBox WSDM Cup churn dataset is the obvious first target;
+  the loader and feature pipeline are already isolated behind `src/features/point_in_time.py`,
+  so only that boundary changes.
+- **SHAP explanations.** The `explanation` field is rule-based: it reads inputs against
+  configured thresholds and reports which fired. Honest about what it is, but it explains
+  the *inputs*, not the model's decision surface. Swapping in SHAP is a contained change to
+  `build_explanation`.
+- **Alertmanager.** Ten alert rules are defined and evaluate, but nothing routes them
+  anywhere. Configuration, not code.
+- **A capacity constraint on the cost model.** The optimum currently assumes you can make
+  unlimited offers. Real retention teams have a fixed weekly budget, which turns threshold
+  selection into a top-k problem rather than a cut-off.
+- **Data versioning.** The event warehouse plus point-in-time cutoffs already make training
+  sets reproducible — a cutoff date reconstructs the exact rows. DVC would add explicit
+  content-addressed snapshots on top; worth it once the data stops being generated on
+  demand.
 
 ## License
 
