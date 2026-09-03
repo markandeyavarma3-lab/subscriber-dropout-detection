@@ -77,12 +77,22 @@ touches one thin module rather than the pipeline itself.
 email. Wiring it to a real notifier belongs with Stage 4, where there is somewhere to send
 it.
 
-### 4. Observability — Prometheus + Grafana
-Replaces the in-process `/metrics` window, which resets when the process does. Scheduled
-drift jobs write PSI as time series; dashboards show score distributions and drift over
-weeks; alerts fire on a `significant` verdict.
+### 4. Observability — Prometheus + Grafana — ✅ done
+`/metrics/prometheus` exposes serving counters *and* the last pipeline run's drift and
+promotion state, from one scrape target. A provisioned Grafana dashboard and seven alert
+rules ship in `deploy/`.
+
+Two design notes. The exposition lives at `/metrics/prometheus`, not the conventional
+`/metrics`, because that path already served a documented JSON contract — Prometheus's
+`metrics_path` setting makes the deviation a one-line config rather than a broken API.
+And batch-job metrics are read from the run report on disk instead of via a Pushgateway,
+which is one fewer service to run and avoids the Pushgateway's habit of serving stale
+values after a job stops existing.
 
 *Proves:* durable, cross-replica monitoring.
+
+*Still open:* alerts are defined but no Alertmanager is wired up, so they evaluate without
+routing anywhere. Adding one is configuration, not code.
 
 ### 5. Champion / challenger with shadow scoring
 Both models score every request. The challenger's scores are **logged, never served**.

@@ -83,6 +83,11 @@ jobs:
           curl -sf http://127.0.0.1:8010/model-info | tee /tmp/model-info.json
           grep -q '"served_from":"registry"' /tmp/model-info.json
 
+          echo "--- /metrics/prometheus (must expose the scrape target) ---"
+          curl -sf http://127.0.0.1:8010/metrics/prometheus | tee /tmp/prom.txt | grep -E "^subscriber_" | head
+          grep -q "subscriber_model_loaded 1.0" /tmp/prom.txt
+          grep -q "subscriber_model_served_from{source=\"registry\"} 1.0" /tmp/prom.txt
+
           echo "--- /predict ---"
           curl -sf -X POST http://127.0.0.1:8010/predict \
             -H 'Content-Type: application/json' \

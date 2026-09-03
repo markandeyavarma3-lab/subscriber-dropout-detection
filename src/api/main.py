@@ -14,7 +14,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, status
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from src.api import service
@@ -159,6 +159,19 @@ def metrics() -> MetricsResponse:
     when the thing it monitors is unhealthy is worse than useless.
     """
     return MetricsResponse(**service.live_metrics())
+
+
+@app.get("/metrics/prometheus", tags=["monitoring"], include_in_schema=False)
+def prometheus_metrics() -> Response:
+    """Prometheus exposition for serving and last-pipeline-run metrics.
+
+    Deliberately not at ``/metrics``: that path already serves a documented
+    JSON contract. Point Prometheus here with ``metrics_path``.
+    """
+    from src.monitoring import prometheus
+
+    body, content_type = prometheus.render()
+    return Response(content=body, media_type=content_type)
 
 
 @app.post("/monitoring/drift", response_model=DriftResponse, tags=["monitoring"])

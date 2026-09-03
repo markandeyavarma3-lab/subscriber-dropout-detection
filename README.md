@@ -25,6 +25,7 @@ Built to be understood and extended by a single developer in one to two weeks.
 | Data | SQLAlchemy, Postgres (SQLite locally) |
 | MLOps | MLflow tracking + model registry with gated promotion |
 | Orchestration | Prefect (scheduled retraining, backfills, retries) |
+| Observability | Prometheus + Grafana (provisioned dashboard, 7 alert rules) |
 | CI | GitHub Actions |
 
 ---
@@ -676,9 +677,60 @@ three times just produces the same answer more slowly.
 No Prefect server is required: Prefect 3 starts a temporary API automatically. Point
 `PREFECT_API_URL` at a real one for the hosted UI.
 
+### Durable observability
+
+`GET /metrics` is a bounded in-process window that forgets everything on restart. That is
+fine for a health check and useless for the question that matters after a deploy: *has this
+model's behaviour changed over the last three weeks?*
+
+`GET /metrics/prometheus` answers it, exposing two families from one scrape target:
+
+| Metric | What it tells you |
+| --- | --- |
+| `subscriber_predictions_total{risk_level,predicted_label}` | Traffic by risk band |
+| `subscriber_prediction_probability` (histogram) | Score distribution — p50/p90/p99 |
+| `subscriber_flagged_rate` | Share above the threshold (training base rate ≈ 20%) |
+| `subscriber_probability_mean_shift` | Live mean minus training mean — the single most alertable number |
+| `subscriber_model_served_from{source}` | Whether the registry or a local file is serving |
+| `subscriber_drift_verdict` | 0 stable · 1 moderate · 2 significant |
+| `subscriber_drift_psi{feature}` | Which inputs actually moved |
+| `subscriber_pipeline_last_run_timestamp_seconds` | Catches a silently-dead scheduler |
+
+**Batch metrics without a Pushgateway.** The scheduled pipeline has no HTTP endpoint to
+scrape. The usual answer is a Pushgateway — a whole extra service, and one that keeps
+serving stale values after a job stops existing. Instead the API reads
+`last_pipeline_run.json` at scrape time, so the numbers are exactly as fresh as the last
+run and there is one fewer moving part.
+
+**Why not `/metrics`?** Prometheus conventionally owns that path, but it already served a
+documented JSON contract here with a published schema. Silently changing its content type
+would break existing consumers to satisfy a default that Prometheus lets you override in
+one line (`metrics_path: /metrics/prometheus`).
+
+Seven alert rules live in [`deploy/prometheus/alerts.yml`](deploy/prometheus/alerts.yml).
+The severities encode a judgement: `ModelNotLoaded` is **critical**, significant drift is
+**warning**, and a rejected challenger is only **info** — the gate refusing a worse model
+is the system working correctly, and paging on it teaches whoever is on call to ignore the
+pager.
+
+```bash
+docker compose up -d prometheus grafana   # or: make observability-up
+```
+
+Grafana comes up already wired — datasource and dashboard are provisioned from
+`deploy/grafana`, so there is nothing to click before anything is visible:
+
+- **Grafana** http://localhost:3000 (anonymous viewer enabled, local demo only)
+- **Prometheus** http://localhost:9090
+
+Two test classes guard the config, not just the code: every alert expression and every
+dashboard panel query is cross-checked against the metrics the code actually exposes. An
+alert on a renamed metric never fires and never complains, which is the worst failure mode
+monitoring has.
+
 ### Tests
 
-227 tests across eight files, all runnable with `pytest`:
+248 tests across nine files, all runnable with `pytest`:
 
 - `test_features.py` — derived-column presence, row-count preservation, input immutability,
   finiteness, zero-denominator edge cases, hand-computed formula checks, output shape,
@@ -699,6 +751,9 @@ No Prefect server is required: Prefect 3 starts a temporary API automatically. P
 - `test_orchestration.py` — ingest idempotency (the property a scheduled job lives or dies
   on), the empty-early-cutoff regression guard, run-report escalation rules, and one real
   Prefect flow run marked `slow` so `pytest -m "not slow"` stays fast
+- `test_prometheus.py` — exposition format, counter/histogram wiring through the real
+  endpoint, pipeline gauges loaded from a run report, and the dead-alert guards that
+  cross-check every alert rule and dashboard panel against the exposed metric names
 
 The suite trains one small model per session into a temporary directory, so it runs in
 under a second and never writes into the repository or depends on your working tree.

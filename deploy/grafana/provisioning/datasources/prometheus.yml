@@ -1,0 +1,11 @@
+# Provisioned automatically on container start, so the stack comes up already
+# wired: no clicking through the UI to add a datasource before anything works.
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    editable: false

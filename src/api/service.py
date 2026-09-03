@@ -19,6 +19,7 @@ from sklearn.pipeline import Pipeline
 
 from src.config import settings
 from src.features.build_features import frame_from_records
+from src.monitoring import prometheus
 from src.monitoring.drift import detect_drift
 from src.monitoring.profile import load_reference_profile
 from src.monitoring.tracker import get_tracker
@@ -396,6 +397,7 @@ def predict_batch(
     # Recorded here rather than in the routes so that every path to a
     # prediction - single, batch, or a future one - is counted exactly once.
     get_tracker().record_many(responses)
+    prometheus.record_predictions(responses)
     return responses
 
 

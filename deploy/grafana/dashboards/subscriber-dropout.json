@@ -1,0 +1,244 @@
+{
+  "uid": "subscriber-dropout",
+  "title": "Subscriber Dropout — Model Health",
+  "tags": ["mlops", "subscriber-dropout"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "time": { "from": "now-24h", "to": "now" },
+  "panels": [
+    {
+      "type": "row",
+      "title": "Is it up, and what is it serving?",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 }
+    },
+    {
+      "type": "stat",
+      "title": "Model loaded",
+      "description": "0 means the API is live but cannot score anyone — /predict returns 503.",
+      "gridPos": { "h": 4, "w": 4, "x": 0, "y": 1 },
+      "targets": [{ "expr": "subscriber_model_loaded", "refId": "A" }],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            { "type": "value", "options": { "0": { "text": "NO MODEL", "color": "red", "index": 0 } } },
+            { "type": "value", "options": { "1": { "text": "LOADED", "color": "green", "index": 1 } } }
+          ],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "green", "value": 1 }] }
+        }
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Served from",
+      "description": "'registry' means the promotion gate controls what is live. 'local' means it is reading a file on disk.",
+      "gridPos": { "h": 4, "w": 4, "x": 4, "y": 1 },
+      "targets": [
+        { "expr": "subscriber_model_served_from == 1", "legendFormat": "{{source}}", "refId": "A" }
+      ],
+      "options": { "textMode": "name", "colorMode": "background" }
+    },
+    {
+      "type": "stat",
+      "title": "Decision threshold",
+      "description": "Tuned during training, not fixed at 0.5. Predictions at or above this are flagged.",
+      "gridPos": { "h": 4, "w": 4, "x": 8, "y": 1 },
+      "targets": [{ "expr": "subscriber_decision_threshold", "refId": "A" }],
+      "fieldConfig": { "defaults": { "decimals": 2 } }
+    },
+    {
+      "type": "stat",
+      "title": "Flagged rate",
+      "description": "Share of scored subscribers above the threshold. Training base rate is ~20%.",
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 1 },
+      "targets": [{ "expr": "subscriber_flagged_rate", "refId": "A" }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 0.35 },
+              { "color": "red", "value": 0.5 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Score shift vs training",
+      "description": "Live mean probability minus the training-time mean. Moves when behaviour changes, deploy or no deploy.",
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 1 },
+      "targets": [{ "expr": "subscriber_probability_mean_shift", "refId": "A" }],
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 3,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 0.1 },
+              { "color": "red", "value": 0.15 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "type": "row",
+      "title": "Prediction traffic",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 5 }
+    },
+    {
+      "type": "timeseries",
+      "title": "Predictions per second, by risk band",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 6 },
+      "targets": [
+        {
+          "expr": "sum by (risk_level) (rate(subscriber_predictions_total[5m]))",
+          "legendFormat": "{{risk_level}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": { "defaults": { "custom": { "fillOpacity": 20, "stacking": { "mode": "normal" } } } }
+    },
+    {
+      "type": "timeseries",
+      "title": "Score distribution (median / p90 / p99)",
+      "description": "Quantiles over the probability histogram. A rising p90 with a flat median means the tail is moving, not the whole population.",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 6 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.5, sum(rate(subscriber_prediction_probability_bucket[5m])) by (le))",
+          "legendFormat": "p50",
+          "refId": "A"
+        },
+        {
+          "expr": "histogram_quantile(0.9, sum(rate(subscriber_prediction_probability_bucket[5m])) by (le))",
+          "legendFormat": "p90",
+          "refId": "B"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(subscriber_prediction_probability_bucket[5m])) by (le))",
+          "legendFormat": "p99",
+          "refId": "C"
+        }
+      ],
+      "fieldConfig": { "defaults": { "max": 1, "min": 0 } }
+    },
+    {
+      "type": "row",
+      "title": "Drift and the retraining pipeline",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 14 }
+    },
+    {
+      "type": "stat",
+      "title": "Drift verdict",
+      "description": "From the last pipeline run. 0 stable · 1 moderate · 2 significant.",
+      "gridPos": { "h": 5, "w": 5, "x": 0, "y": 15 },
+      "targets": [{ "expr": "subscriber_drift_verdict", "refId": "A" }],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            { "type": "value", "options": {
+              "0": { "text": "STABLE", "color": "green", "index": 0 },
+              "1": { "text": "MODERATE", "color": "yellow", "index": 1 },
+              "2": { "text": "SIGNIFICANT", "color": "red", "index": 2 }
+            } }
+          ],
+          "thresholds": { "mode": "absolute", "steps": [
+            { "color": "green", "value": null },
+            { "color": "yellow", "value": 1 },
+            { "color": "red", "value": 2 }
+          ] }
+        }
+      },
+      "options": { "colorMode": "background" }
+    },
+    {
+      "type": "bargauge",
+      "title": "PSI by feature",
+      "description": "Which inputs actually moved. Bands: <0.10 stable, 0.10–0.25 moderate, >0.25 significant.",
+      "gridPos": { "h": 10, "w": 11, "x": 5, "y": 15 },
+      "targets": [
+        { "expr": "subscriber_drift_psi", "legendFormat": "{{feature}}", "refId": "A" }
+      ],
+      "options": { "orientation": "horizontal", "displayMode": "gradient" },
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 3,
+          "thresholds": { "mode": "absolute", "steps": [
+            { "color": "green", "value": null },
+            { "color": "yellow", "value": 0.1 },
+            { "color": "red", "value": 0.25 }
+          ] }
+        }
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Last pipeline run",
+      "description": "A silent scheduler is worse than a failing one: the model ages while everything looks green.",
+      "gridPos": { "h": 5, "w": 4, "x": 16, "y": 15 },
+      "targets": [
+        { "expr": "time() - subscriber_pipeline_last_run_timestamp_seconds", "refId": "A" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "thresholds": { "mode": "absolute", "steps": [
+            { "color": "green", "value": null },
+            { "color": "yellow", "value": 93600 },
+            { "color": "red", "value": 129600 }
+          ] }
+        }
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Last promotion",
+      "description": "A rejected challenger is the gate working, not a failure.",
+      "gridPos": { "h": 5, "w": 4, "x": 20, "y": 15 },
+      "targets": [{ "expr": "subscriber_pipeline_promoted", "refId": "A" }],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            { "type": "value", "options": {
+              "0": { "text": "REJECTED", "color": "yellow", "index": 0 },
+              "1": { "text": "PROMOTED", "color": "green", "index": 1 }
+            } }
+          ]
+        }
+      },
+      "options": { "colorMode": "background" }
+    },
+    {
+      "type": "timeseries",
+      "title": "Drift verdict over time",
+      "description": "The reason Prometheus exists here: the in-process /metrics window forgets everything on restart.",
+      "gridPos": { "h": 5, "w": 19, "x": 5, "y": 25 },
+      "targets": [{ "expr": "subscriber_drift_verdict", "legendFormat": "verdict", "refId": "A" }],
+      "fieldConfig": { "defaults": { "max": 2, "min": 0, "custom": { "fillOpacity": 15, "lineInterpolation": "stepAfter" } } }
+    },
+    {
+      "type": "stat",
+      "title": "Needs attention",
+      "gridPos": { "h": 5, "w": 5, "x": 0, "y": 25 },
+      "targets": [{ "expr": "subscriber_pipeline_needs_attention", "refId": "A" }],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            { "type": "value", "options": {
+              "0": { "text": "CLEAR", "color": "green", "index": 0 },
+              "1": { "text": "REVIEW", "color": "orange", "index": 1 }
+            } }
+          ]
+        }
+      },
+      "options": { "colorMode": "background" }
+    }
+  ]
+}

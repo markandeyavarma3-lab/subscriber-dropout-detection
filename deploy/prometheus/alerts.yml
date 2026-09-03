@@ -1,0 +1,107 @@
+# Alert rules for the subscriber dropout service.
+#
+# Two principles behind the choices here:
+#
+# 1. Alert on what a human would actually do something about. "Drift is
+#    significant" is actionable - someone decides whether to retrain or accept
+#    the shift. "PSI moved from 0.04 to 0.06" is not, and paging on it teaches
+#    people to ignore the pager.
+#
+# 2. A rejected challenger is *not* a failure. The gate doing its job is the
+#    system working correctly, so it is `info`, never a page. What deserves
+#    attention is the pipeline going silent, or the model disappearing.
+
+groups:
+  - name: serving
+    rules:
+      - alert: ModelNotLoaded
+        expr: subscriber_model_loaded == 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "The API is running without a model"
+          description: >-
+            /ready reports degraded and /predict is returning 503. The service
+            is live but cannot score anyone. Check that an artifact exists, or
+            that the MLflow registry is reachable if SDD_MODEL_SOURCE=registry.
+
+      - alert: ApiDown
+        expr: up{job="subscriber-api"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "The subscriber API is not responding to scrapes"
+
+      - alert: FlaggedRateSpike
+        # At a ~20% base rate, flagging more than half of all traffic means
+        # either the population changed sharply or the threshold is wrong.
+        # Either way, retention outreach is about to be sent to far too many
+        # people, which is expensive and annoys customers.
+        expr: subscriber_flagged_rate > 0.5
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Over half of scored subscribers are being flagged"
+          description: >-
+            Flagged rate is {{ $value | humanizePercentage }}, against a
+            training base rate near 20%. Check for input drift before trusting
+            the outreach list this produces.
+
+      - alert: ScoreDistributionShift
+        # The single most alertable number in the system: it moves when the
+        # model's behaviour changes, whether or not anyone deployed anything.
+        expr: abs(subscriber_probability_mean_shift) > 0.15
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Live mean score has drifted from the training mean"
+          description: >-
+            Mean predicted probability differs from training by {{ $value }}.
+            The inputs, the population, or the model have changed.
+
+  - name: pipeline
+    rules:
+      - alert: SignificantDrift
+        # 2 == significant. See VERDICT_CODES in src/monitoring/prometheus.py:
+        # Prometheus has no string values, so the verdict is encoded numerically
+        # to make "worse than moderate" expressible as a threshold.
+        expr: subscriber_drift_verdict >= 2
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Live data has drifted significantly from training"
+          description: >-
+            The last pipeline run reported significant PSI drift. Inspect
+            subscriber_drift_psi by feature to see which inputs moved, then
+            decide whether to retrain or accept the new distribution.
+
+      - alert: PipelineStale
+        # The nightly schedule is 03:00, so 36h means at least one run was
+        # missed entirely rather than merely running late.
+        expr: time() - subscriber_pipeline_last_run_timestamp_seconds > 129600
+        labels:
+          severity: warning
+        annotations:
+          summary: "No retraining pipeline run in over 36 hours"
+          description: >-
+            The scheduled pipeline has not completed since
+            {{ $value | humanizeDuration }} ago. A silent scheduler is worse
+            than a failing one: the model quietly ages while everything looks
+            green.
+
+      - alert: PipelineNeedsAttention
+        expr: subscriber_pipeline_needs_attention == 1
+        for: 1h
+        labels:
+          severity: info
+        annotations:
+          summary: "Last pipeline run flagged something for review"
+          description: >-
+            Either a challenger was rejected by the promotion gate or drift was
+            significant. Neither is a failure - the gate rejecting a worse
+            model is the system working - but it is worth a look.
