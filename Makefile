@@ -1,5 +1,5 @@
 # Shortcuts for the common workflows. Run `make help` for the list.
-.PHONY: help install data simulate warehouse-up train train-warehouse train-promote pipeline pipeline-drift backfill schedule stream stream-up audit observability-up metrics mlflow-ui evaluate repro params metrics-diff dag serve test lint format docker-build docker-run docker-up clean
+.PHONY: help install data simulate ingest ingest-check warehouse-up train train-warehouse train-promote pipeline pipeline-drift backfill schedule stream stream-up audit observability-up metrics mlflow-ui evaluate repro params metrics-diff dag serve test lint format docker-build docker-run docker-up clean
 
 PYTHON ?= python
 IMAGE  ?= subscriber-dropout-api
@@ -17,6 +17,12 @@ data:  ## Generate the synthetic dataset
 
 simulate:  ## Populate the event warehouse with simulated subscriber events
 	$(PYTHON) -m src.warehouse.simulate
+
+ingest-check:  ## Validate an external dataset without writing (SRC=path/to/kkbox)
+	python -m src.data.external.ingest --dataset kkbox --source-dir $(SRC) --dry-run
+
+ingest:  ## Load an external dataset into the warehouse (SRC=path/to/kkbox)
+	python -m src.data.external.ingest --dataset kkbox --source-dir $(SRC)
 
 warehouse-up:  ## Start the Postgres warehouse only
 	docker compose up -d postgres
