@@ -73,14 +73,14 @@ touches one thin module rather than the pipeline itself.
 
 *Proves:* automation, idempotency, recovery.
 
-*Still open:* alerting is a `needs_attention` flag in the run report, not a page or an
-email. Wiring it to a real notifier belongs with Stage 4, where there is somewhere to send
-it.
+*Resolved in Stage 4:* the `needs_attention` flag is now a Prometheus gauge with a
+`PipelineNeedsAttention` alert behind it, routed through Alertmanager at `info` severity —
+a rejected challenger is the gate working, not a page.
 
 ### 4. Observability — Prometheus + Grafana — ✅ done
 `/metrics/prometheus` exposes serving counters *and* the last pipeline run's drift and
-promotion state, from one scrape target. A provisioned Grafana dashboard and seven alert
-rules ship in `deploy/`.
+promotion state, from one scrape target. A provisioned Grafana dashboard, fifteen alert
+rules and an Alertmanager routing tree ship in `deploy/`.
 
 Two design notes. The exposition lives at `/metrics/prometheus`, not the conventional
 `/metrics`, because that path already served a documented JSON contract — Prometheus's
@@ -91,8 +91,12 @@ values after a job stops existing.
 
 *Proves:* durable, cross-replica monitoring.
 
-*Still open:* alerts are defined but no Alertmanager is wired up, so they evaluate without
-routing anywhere. Adding one is configuration, not code.
+*Closed:* Alertmanager now sits behind Prometheus (`deploy/alertmanager/alertmanager.yml`),
+with severity-based routes, repeat intervals that make the severity label mean something,
+and inhibit rules so one outage produces one page rather than five. Receivers are defined
+but carry no integration — routing is real and inspectable at `:9093`, delivery is left to
+whoever deploys it, because a Slack webhook is a credential. The router is itself scraped
+and alerted on.
 
 ### 5. Champion / challenger with shadow scoring — ✅ done
 Both models score every request. The challenger's scores are **logged, never served**.

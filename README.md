@@ -162,15 +162,21 @@ Response:
 
 ```json
 {
-  "dropout_probability": 0.9888,
+  "dropout_probability": 0.9973,
   "predicted_label": 1,
   "risk_level": "high",
   "threshold": 0.26,
-  "explanation": "High dropout risk (99%): inactive for 34 days, low recent activity (2.0 sessions/30d), 2 payment failures in the last 6 months.",
+  "explanation": "High dropout risk (100%): a 45-day gap is long for a 95-day-old account, poor value per session (9.99 per session), auto-renew disabled.",
   "top_risk_factors": [
-    "inactive for 34 days",
-    "low recent activity (2.0 sessions/30d)",
-    "2 payment failures in the last 6 months"
+    "a 45-day gap is long for a 95-day-old account",
+    "poor value per session (9.99 per session)",
+    "auto-renew disabled"
+  ],
+  "explanation_method": "shap",
+  "attributions": [
+    { "feature": "recency",    "direction": "increases_risk", "contribution": 4.2211, "description": "a 45-day gap is long for a 95-day-old account" },
+    { "feature": "price",      "direction": "increases_risk", "contribution": 0.6896, "description": "poor value per session (9.99 per session)" },
+    { "feature": "auto_renew", "direction": "increases_risk", "contribution": 0.6233, "description": "auto-renew disabled" }
   ]
 }
 ```
@@ -183,8 +189,14 @@ A healthy subscriber (long tenure, active yesterday, auto-renew on) returns:
   "predicted_label": 0,
   "risk_level": "low",
   "threshold": 0.26,
-  "explanation": "Low dropout risk (1%): auto-renew enabled, strong recent engagement, active in the last few days, long-tenured subscriber.",
-  "top_risk_factors": []
+  "explanation": "Low dropout risk (1%): a 1-day gap is short against 1200 days of tenure, steady recent activity (26.0 sessions/30d), auto-renew enabled.",
+  "top_risk_factors": [],
+  "explanation_method": "shap",
+  "attributions": [
+    { "feature": "recency",    "direction": "decreases_risk", "contribution": -0.8131, "description": "a 1-day gap is short against 1200 days of tenure" },
+    { "feature": "engagement", "direction": "decreases_risk", "contribution": -0.7128, "description": "steady recent activity (26.0 sessions/30d)" },
+    { "feature": "auto_renew", "direction": "decreases_risk", "contribution": -0.3579, "description": "auto-renew enabled" }
+  ]
 }
 ```
 
@@ -347,13 +359,14 @@ faces in production:
 ```bash
 python -m src.models.train --source warehouse            # temporal split
 python -m src.models.train --source warehouse --promote  # + register and gate
+dvc repro                                                # the reproducible path
 ```
 
 ```
-Temporal split over 15 cutoffs -> train: 2024-01-01 … 2024-12-26 (13 cutoffs)
-                                  validation: 2025-01-25
-                                  test:       2025-02-24
-Split -> train=4,207 validation=481 test=499
+Temporal split over 18 cutoffs -> train: 2024-01-01 … 2025-03-26 (16 cutoffs)
+                                  validation: 2025-04-25
+                                  test:       2025-05-25
+Split -> train=18,599 validation=1,610 test=1,615
 ```
 
 Honest reporting of the result, because the headline number moved a long way:
@@ -361,13 +374,21 @@ Honest reporting of the result, because the headline number moved a long way:
 | | ROC-AUC | PR-AUC | Recall |
 | --- | --- | --- | --- |
 | Old flat CSV, random split | 0.907 | 0.766 | 0.724 |
-| Warehouse, temporal split | **0.709** | **0.442** | **0.653** |
+| Warehouse, temporal split | **0.674** | **0.345** | **0.755** |
 
 **That drop is not a regression — it is the removal of a fiction.** The old generator drew
 the `dropout` label from a logistic function of the very columns it then handed the model,
 so 0.907 was the model rediscovering a rule we wrote. The warehouse draws cancellations
-from a daily hazard over latent traits that are only partially visible in behaviour. ~0.71
+from a daily hazard over latent traits that are only partially visible in behaviour. ~0.67
 is ordinary territory for a real churn model; 0.907 never was.
+
+These figures come from `dvc repro`, and `dvc.lock` records the exact inputs that produced
+them. An earlier version of this table reported **0.709 / 0.442** from a warehouse of 4,000
+subscribers over a shorter window — the CLI defaulted to 4,000 while the configuration said
+8,000, which is the mismatch the parameter-coverage test now prevents. Worth knowing before
+reading either number too closely: validation and test are adjacent cutoffs of the *same*
+run and differ by 0.035 ROC-AUC, so cutoff-to-cutoff variation on this data is already
+larger than the gap between the two reported figures.
 
 One measurement worth recording, since it contradicts the usual claim: switching from a
 random to a temporal split changed ROC-AUC by only **−0.065** on this data. Random
@@ -532,11 +553,35 @@ module-level singleton, so the load cost is not paid per request. `service.py` o
 loading, prediction and the explanation logic; `schemas.py` owns the public contract;
 `main.py` is thin routing.
 
-The `explanation` field is intentionally **rule-based**, not SHAP — it reads the input
-values against thresholds in `settings.ExplanationRules` and reports which signals fired.
-It explains the inputs, not the model internals, which is honest about what it is and
-costs nothing at inference time. Swapping in SHAP later is a contained change to
-`build_explanation`.
+#### Explanations are SHAP, and say so
+
+`explanation` used to be rule-based: it read the input against thresholds and reported
+which fired. True statements about the input — but a rule fires whether or not the model
+paid any attention to that feature, and says nothing about anything nobody wrote a rule
+for. `src/evaluation/explain.py` replaces that with TreeSHAP, which is exact for this
+ensemble, and the test suite checks the property that makes it trustworthy: contributions
+plus the base value, through the logistic link, must reconstruct `predict_proba`. An
+attribution that does not reconstruct the prediction is decoration.
+
+Three decisions worth knowing about:
+
+- **Log-odds, not probability points.** Additivity holds in the space the trees score in.
+  Converting each contribution to "percentage points of risk" breaks the sum and produces
+  numbers that look more precise than they are.
+- **Grouped back to business concepts.** The model sees 21 columns, most of them derived.
+  `recency_ratio contributed +0.31` is not an explanation, so contributions are summed into
+  ten concepts — valid precisely because Shapley values are additive.
+- **Wording follows the dominant column, not the group.** The first draft phrased every
+  recency attribution as "inactive for N days" and produced `+1.02 inactive for 4 days` on
+  a real subscriber. The contribution had come from `recency_ratio` — four days is a long
+  gap for a 32-day-old account — and quoting the raw day count described the wrong thing.
+
+`top_risk_factors` still means only what its name says: contributions that push risk *up*.
+Widening it to "drivers, any direction" would have left every existing consumer rendering
+reasons-to-stay as reasons-to-worry. The signed picture lives in `attributions`, and
+`explanation_method` reports which engine wrote the sentence rather than leaving anyone to
+infer it. Attribution never fails a prediction — a missing dependency, a non-tree model or
+an explainer that raises all fall back to the rules.
 
 `risk_level` is derived from the **decision threshold**, not from fixed cut-offs: `low` is
 exactly the not-flagged region (`probability < threshold`), and `high` begins halfway
@@ -712,7 +757,7 @@ documented JSON contract here with a published schema. Silently changing its con
 would break existing consumers to satisfy a default that Prometheus lets you override in
 one line (`metrics_path: /metrics/prometheus`).
 
-Seven alert rules live in [`deploy/prometheus/alerts.yml`](deploy/prometheus/alerts.yml).
+Fifteen alert rules live in [`deploy/prometheus/alerts.yml`](deploy/prometheus/alerts.yml).
 The severities encode a judgement: `ModelNotLoaded` is **critical**, significant drift is
 **warning**, and a rejected challenger is only **info** — the gate refusing a worse model
 is the system working correctly, and paging on it teaches whoever is on call to ignore the
@@ -741,6 +786,126 @@ and `subscriber_shadow_comparisons_total`), which is precisely the point.
 The stream scorer serves its own metrics on `:8001` and is scraped as a **separate job**.
 It has no API of its own, so without that its counters would increment inside a process
 nothing could reach — and a dead consumer would be hidden behind a healthy API.
+
+#### Alertmanager — evaluation is not notification
+
+Rules that fire and route nowhere are a dashboard. For a long stretch every rule here was
+correct, referenced a live metric, and notified precisely nobody, because Prometheus had no
+`alerting` block: a firing rule reached its own `/alerts` page and stopped there.
+
+[`deploy/alertmanager/alertmanager.yml`](deploy/alertmanager/alertmanager.yml) adds the
+routing tree at http://localhost:9093:
+
+- **Severity-based routes with different repeat intervals** — `critical` nags hourly with
+  no grouping delay, `warning` waits twelve hours, `info` waits a day. If `info` repeated
+  as often as `critical`, the severity label would be decoration.
+- **Inhibit rules**, so one outage produces one page. `ApiDown` suppresses every warning and
+  info sharing its `component`, because a dead API's metrics all go stale together and that
+  is one finding, not five.
+- **Receivers with no integration attached.** Deliberate: a Slack webhook or PagerDuty key
+  is a credential, and credentials do not belong in a repository. The tree is still real —
+  alerts group, dedupe, inhibit, and are silenceable in the UI — they simply are not pushed
+  outbound. A test fails the build if anything credential-shaped appears in the active
+  config.
+
+Alertmanager is itself scraped and alerted on, with the limitation written into the rule:
+if the router is down, `AlertmanagerDown` cannot be delivered either. Catching that at the
+moment it happens needs an external dead-man's switch this stack has nowhere to send.
+
+Tests cover the join between files that are edited independently — every alert severity must
+reach a defined receiver, every inhibit rule must name alerts that exist, and `equal:` must
+join on a label the scrape config actually sets. A typo in any of those disables the
+suppression silently.
+
+### Reproducibility — DVC and params.yaml
+
+```bash
+make repro          # rerun only the stages whose inputs changed
+make dag            # simulate -> train
+make metrics-diff   # how the working tree's metrics compare against main
+```
+
+Two stages, matching how the project really runs: `simulate`, then `train`. An intermediate
+"build features" stage would look better on a DAG and would be fiction — point-in-time
+features are computed inside the training run, at the cutoffs it chooses.
+
+The part that matters is [`params.yaml`](params.yaml). **A parameter file that reaches
+nothing is worse than none at all**: `dvc exp run --set-param model.max_depth=8` completes,
+reports a new experiment, and trains exactly the model you already had. So `settings.py`
+reads it, layered under the environment — `SDD_*` > `params.yaml` > code default — and two
+tests parse both files and fail the build on either kind of orphan: a parameter nothing
+consumes, or a setting reading a key nobody defines.
+
+That guard found a real one immediately. The `simulate` stage declared `params: simulation`
+while its CLI hardcoded `--subscribers 4000`, so the population in `params.yaml` was
+ignored: the pipeline said 8,000 and trained on 4,000. It is also why the ROC-AUC figures
+in this README moved.
+
+Deployment facts stay out of the file on purpose — artifact directories, tracking URIs,
+database URLs. Versioning those would suggest that reproducing a run means reproducing
+where it wrote its output, and a test keeps them out. `metrics.json` is tracked in git
+rather than the DVC cache, which is what makes `dvc metrics diff main` able to say how a
+change moved ROC-AUC; the model stays in the cache, because it is megabytes and unreadable.
+
+`dvc.lock` is committed, so the pipeline has demonstrably been reproduced — a test treats
+its absence as an untested claim. There is no DVC remote: sharing the cache needs storage
+this project does not have.
+
+### Real data — the KKBox loader
+
+Everything above runs on a simulator whose churn hazard we wrote. `src/data/external/` is
+the seam where that changes:
+
+```bash
+make ingest-check SRC=data/kkbox    # map, validate, write nothing
+make ingest SRC=data/kkbox          # then load
+python -m src.models.train --source warehouse
+```
+
+A loader's whole job is to fill the same five warehouse tables. Nothing downstream of
+`src/warehouse/schema.py` knows which one ran, and a test asserts the loader and the
+simulator fill exactly the same set — that is what makes swapping data sources a change of
+command rather than a change of pipeline.
+
+**Scope, stated plainly: this has never run against the real files.** They are ~30GB behind
+a Kaggle account. The mapping is written against KKBox's published schema and tested against
+fixtures matching it, which is a real test of the mapping and no test at all of whether the
+published schema matches the actual files. `--dry-run` exists for that first contact.
+
+The most useful output is a negative result. KKBox has no customer-service data and records
+a transaction only when money moved, so five of the model's twenty-one features go constant:
+
+```
+support_tickets_last_90d         KKBox publishes no customer-service data
+support_tickets_per_month        KKBox publishes no customer-service data
+payment_failures_last_6m         a KKBox transaction row exists only when money moved
+payment_failures_per_month       a KKBox transaction row exists only when money moved
+friction_score                   sums the two above, so it collapses to zero
+```
+
+The CLI prints that at load time rather than leaving it to be found later in an all-zero
+importance chart. Synthesising plausible tickets to fill the gap was the easy and dishonest
+option.
+
+Mapping decisions are documented where they are made — plan prices normalised to a monthly
+rate (KKBox sells 7-to-410-day plans, and `fee_per_session` is nonsense otherwise),
+`registered_via` carried through as `via_<n>` rather than decoded into channel names nobody
+can justify, negative `total_secs` clipped rather than dropped because understated activity
+is exactly what the model reads as churn risk.
+
+`src/data/external/contract.py` checks the invariants the schema cannot state. Two matter
+most, and neither fails loudly on its own:
+
+- **Orphan events** — rows for a subscriber missing from `subscribers` are invisible to
+  every point-in-time query, which joins outward from there. They do not error; they never
+  appear.
+- **Activity before signup** — such a subscriber shows zero observed activity at every
+  cutoff and is indistinguishable from a dormant one, which is the single most predictive
+  feature in the model. A warning rather than an error: some exports legitimately record
+  trial activity, and dropping those rows is a decision for whoever knows the data.
+
+User logs stream in chunks. Reading 400 million rows into memory would die two hours in,
+having written nothing.
 
 ### Shadow scoring — the challenger on live traffic
 
@@ -932,6 +1097,43 @@ One parameter moves the threshold **3.3×**. The report shows the analytic and e
 optima side by side on purpose: their gap is calibration error expressed in currency, which
 is a far more legible argument than an ECE of 0.04.
 
+#### The capacity constraint — what the budget costs
+
+Both methods above still assumed you can act on everyone the threshold flags. No retention
+team can. Under a hard cap of `k` offers the optimal policy is **top-k by score**, which is
+still a threshold — just one the score distribution picks rather than the arithmetic:
+
+```
+constrained_threshold = max(unconstrained_optimum, kth_highest_score)
+```
+
+The cap only ever *raises* the bar. Below the unconstrained optimum an offer loses money
+whether or not the slot was free, so a spare slot is not a reason to use it.
+
+**No default capacity is set**, deliberately — inventing a budget would repeat the mistake
+`offer_efficacy` exists to fix. Set `SDD_RETENTION_CAPACITY_RATE` (or `capacity.max_offer_rate`
+in `params.yaml`) when you have a real number. The report computes either way, because its
+most useful output needs no budget to exist:
+
+```
+max_offers  threshold  offers_used  total_cost   value per extra slot
+       112     0.5546          112      58,544                     —
+       224     0.4582          224      56,176                 21.14
+       335     0.3896          335      55,012                 10.49
+       447     0.3404          447      54,228                  7.00
+       559     0.3400          447      54,228                  0.00
+```
+
+That last row is the point: budget past the break-even score buys exactly nothing, because
+the threshold floor leaves the extra slots unused rather than spending them on people it
+does not pay to contact. The curve trends down but is **not monotone step by step** on a
+finite holdout — an imperfect ranking will sometimes put a churn-heavier block below a
+lighter one — and the tests assert that weaker, true property rather than pretending the
+ranking is perfect.
+
+Surfaced as four Prometheus gauges with a Grafana row, and an `info` alert when the budget
+rather than the economics is what limits the campaign.
+
 #### Fairness
 
 An aggregate AUC is a weighted average, and averages hide their worst cases. The audit
@@ -963,7 +1165,7 @@ verdict — in either direction.
 
 ### Tests
 
-316 tests across twelve files, all runnable with `pytest`:
+407 tests across fourteen files, all runnable with `pytest`:
 
 - `test_features.py` — derived-column presence, row-count preservation, input immutability,
   finiteness, zero-denominator edge cases, hand-computed formula checks, output shape,
@@ -998,7 +1200,21 @@ verdict — in either direction.
 - `test_evaluation.py` — calibration arithmetic against hand-computed cases, the guard that
   reports calibration *failing* to help, cost-model behaviour as offer efficacy varies, and
   fairness checks that distinguish selection from performance disparity, never silently drop
-  a small group, and keep undefined metrics as `None` rather than JSON-invalid `NaN`
+  a small group, and keep undefined metrics as `None` rather than JSON-invalid `NaN`. Also
+  the capacity constraint: that more budget can never cost more, that top-k selection
+  under-fills rather than overspending when scores tie at the cut-off, and that slots past
+  the break-even point are worth exactly zero
+- `test_explain.py` — the property that makes SHAP trustworthy: contributions plus the base
+  value must reconstruct `predict_proba`. Plus that grouping into concepts conserves the
+  total, that every model column has a concept, and that a missing dependency, a non-tree
+  model or an explainer that raises all fall back to the rules rather than failing a request
+- `test_external_data.py` — the KKBox mapping against fixtures matching its published
+  schema, and the warehouse contract's two quiet failures: orphan events that vanish from
+  every point-in-time query, and activity before signup that makes a subscriber look dormant
+- `test_dvc.py` — the anti-theatre guards. Every key in `params.yaml` must have a consumer
+  in `settings.py` and every key `settings.py` reads must exist in the file, both extracted
+  from the AST rather than by regex — the first version reported `model.joblib` as a missing
+  parameter
 
 The suite trains one small model per session into a temporary directory, so it runs in
 under a second and never writes into the repository or depends on your working tree.
@@ -1028,27 +1244,32 @@ compiles; the smoke test proves it *serves*. Any failing step fails the workflow
 
 ## Future work
 
-Genuinely open, as distinct from the six roadmap stages in [ROADMAP.md](ROADMAP.md), which
-are all built:
+Genuinely open. The six roadmap stages in [ROADMAP.md](ROADMAP.md) are built, and the five
+items that stood here previously — real data, SHAP, Alertmanager, a capacity constraint,
+data versioning — are now done. What is left is mostly *verification*, which is a more
+uncomfortable list than a feature backlog.
 
-- **Real production data.** Everything here runs on a simulator. The machinery is real and
-  the metrics are honest about themselves, but no number in this repository is evidence
-  about actual subscribers. The KKBox WSDM Cup churn dataset is the obvious first target;
-  the loader and feature pipeline are already isolated behind `src/features/point_in_time.py`,
-  so only that boundary changes.
-- **SHAP explanations.** The `explanation` field is rule-based: it reads inputs against
-  configured thresholds and reports which fired. Honest about what it is, but it explains
-  the *inputs*, not the model's decision surface. Swapping in SHAP is a contained change to
-  `build_explanation`.
-- **Alertmanager.** Ten alert rules are defined and evaluate, but nothing routes them
-  anywhere. Configuration, not code.
-- **A capacity constraint on the cost model.** The optimum currently assumes you can make
-  unlimited offers. Real retention teams have a fixed weekly budget, which turns threshold
-  selection into a top-k problem rather than a cut-off.
-- **Data versioning.** The event warehouse plus point-in-time cutoffs already make training
-  sets reproducible — a cutoff date reconstructs the exact rows. DVC would add explicit
-  content-addressed snapshots on top; worth it once the data stops being generated on
-  demand.
+- **Nothing containerised has ever been run.** Docker is not installed on the machine this
+  was built on. The seven-service compose stack, the Redpanda broker and the Kubernetes
+  manifests are all written and none has ever started. The Kafka adapter is the one module
+  with no test coverage, for the same reason. Everything that runs on SQLite and in-process
+  is verified; that boundary is exactly where verification stops, and it is stated here
+  rather than left for someone to discover.
+- **The KKBox loader has never met KKBox.** It is written against the published schema and
+  tested against fixtures matching it, but the real files are ~30GB behind a Kaggle account.
+  Run `make ingest-check SRC=...` first; the contract validation exists precisely because
+  first contact with a real export usually surfaces something the documentation omits.
+- **Alertmanager routes to nowhere on purpose.** The tree is real — grouping, inhibition,
+  severity-based repeat intervals — but no receiver has an integration attached, because a
+  Slack webhook or a PagerDuty key is a credential and credentials do not belong in a
+  repository. Attaching one is a five-line change in
+  `deploy/alertmanager/alertmanager.yml`.
+- **No DVC remote.** `dvc repro` and `dvc.lock` work locally, so the pipeline is
+  reproducible on one machine. Sharing the cache needs `dvc remote add`, which needs storage
+  this project does not have.
+- **Fairness is audited on `plan_type` only.** That is the attribute carried on the feature
+  frame. `acquisition_channel` — which the model never sees, and is therefore the more
+  interesting slice — would need plumbing through the point-in-time query.
 
 ## License
 

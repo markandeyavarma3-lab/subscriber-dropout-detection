@@ -152,7 +152,7 @@ subscriber-dropout-detection/
         ├── schemas.py               (182 lines) Pydantic request/response contract
         ├── service.py               (271 lines) model loading, prediction, explanations
         └── static/index.html              browser dashboard, no build step
-└── tests/                      6 files, 203 tests total (see §3.6)
+└── tests/                     14 files, 407 tests total (see §3.6)
 ```
 
 **The model pipeline** (`src/models/train.py` + `src/features/build_features.py`):
@@ -213,11 +213,13 @@ crash-looping the container. In that state `/predict` returns `503`, not `500`.
 The artifact loads **once** at startup via a FastAPI lifespan handler, cached in a
 module-level singleton — load cost is not paid per request.
 
-**The `explanation` field is rule-based, not SHAP** — it reads input values against
-configurable thresholds (`settings.ExplanationRules`) and reports which signals fired
-(e.g. "inactive for 34 days", "2 payment failures in the last 6 months"). This is
-deliberate: it explains the *inputs*, not the model's internal decision surface, which is
-honest about what it is and costs nothing at inference time.
+**The `explanation` field is SHAP-attributed**, with the rule engine kept as a fallback.
+TreeSHAP is exact for this ensemble; contributions are grouped from the 21 model columns
+back into ten business concepts, and the test suite checks that they reconstruct
+`predict_proba` — an attribution that does not is decoration. `explanation_method` reports
+which engine wrote the sentence, and `attributions` carries the signed per-concept
+contributions in log-odds. A missing `shap`, a non-tree model, or an explainer that raises
+all degrade to the rules rather than failing the request.
 
 **Dockerization:** multi-stage Dockerfile. The builder stage installs dependencies and
 **trains the model during the image build**, so the resulting image ships ready to serve
@@ -376,7 +378,9 @@ The daily cancellation hazard combines those latent traits with one **observable
 discovering the hazard originally depended *only* on hidden state, meaning no feature set
 could possibly beat random guessing (ROC-AUC was stuck at 0.656). Dormancy is the
 strongest real-world churn signal and it's directly visible in the session log — adding it
-raised temporal-split ROC-AUC from 0.656 to 0.709.
+raised temporal-split ROC-AUC from 0.656 to 0.709 on the 4,000-subscriber warehouse of
+the time. The current 8,000-subscriber pipeline reports 0.674; the dormancy finding stands,
+the absolute number moved with the population and window.
 
 **Injectable drift** — `DriftScenario` changes subscriber behavior from a chosen date
 onward: engagement collapse, payment-failure spikes, ticket surges, or an entirely new plan
@@ -424,10 +428,10 @@ before it to validation, and everything earlier to training — mirroring exactl
 model faces in production (fit on the past, score the future). Example real output:
 
 ```
-Temporal split over 15 cutoffs
-  train      2024-01-01 … 2024-12-26   (13 cutoffs)   4,207 rows
-  validation 2025-01-25                                 481 rows
-  test       2025-02-24                                 499 rows
+Temporal split over 18 cutoffs
+  train      2024-01-01 … 2025-03-26   (16 cutoffs)  18,599 rows
+  validation 2025-04-25                               1,610 rows
+  test       2025-05-25                               1,615 rows
 ```
 
 **23 tests** in `tests/test_point_in_time.py`: the leakage guard itself, window boundary
@@ -508,7 +512,7 @@ python -m src.models.train --source warehouse --promote    # + register in MLflo
 python -m src.models.train --cutoffs 2024-06-01 2024-07-01 2024-08-01   # explicit cutoffs
 ```
 
-### 3.6 Full test suite — 203 tests, all passing
+### 3.6 Full test suite — 407 tests, all passing
 
 ```
 tests/test_api.py            83 tests   — every endpoint, 422 validation, 503 degraded
@@ -522,10 +526,26 @@ tests/test_train.py          21 tests   — dataset schema, reproducibility, art
                                           creation, better-than-chance performance
 tests/test_features.py       19 tests   — derived columns, immutability, zero-denominator
                                           edge cases, unseen-category handling
-tests/test_registry.py       14 tests   — registration, alias handling, cloudpickle
+tests/test_registry.py       20 tests   — registration, alias handling, cloudpickle
                                           round-trip, all 4 promotion-gate outcomes
+tests/test_evaluation.py     38 tests   — calibration arithmetic, cost model, offer
+                                          efficacy, capacity constraint, fairness
+tests/test_prometheus.py     35 tests   — exposition format, both coverage guards,
+                                          Alertmanager routing and inhibition
+tests/test_streaming.py      30 tests   — poison messages, partial batch failures, a
+                                          produce failure that must not commit
+tests/test_external_data.py  26 tests   — KKBox mapping, warehouse contract, orphan
+                                          events, pre-signup activity
+tests/test_orchestration.py  22 tests   — ingest idempotency, run-report escalation,
+                                          one real Prefect flow run
+tests/test_dvc.py            17 tests   — params.yaml coverage in both directions,
+                                          pipeline structure, dvc.lock exists
+tests/test_shadow.py         16 tests   — the safety contract: a raising challenger
+                                          must never change a served response
+tests/test_explain.py        14 tests   — SHAP additivity, concept grouping, and the
+                                          three ways attribution degrades safely
 ─────────────────────────────────────────
-Total                       203 tests   — runs in ~15-30 seconds
+Total                       407 tests   — runs in ~15-30 seconds
 ```
 
 The suite trains one small model per session into a temporary directory — it never writes
@@ -633,14 +653,14 @@ Stage 1 makes that addition natural once everything else is proven.
 
 Listed plainly so they're discovered here, not by surprise.
 
-### 6.1 The 0.907 ROC-AUC is not a real-world number — and neither, fully, is 0.709
+### 6.1 The 0.907 ROC-AUC is not a real-world number — and neither, fully, is 0.674
 
 Two data paths currently coexist in this codebase:
 
 | Path | ROC-AUC | PR-AUC | Recall | How it's validated |
 |---|---|---|---|---|
 | Flat CSV (`make train`, **the CI/current default**) | 0.907 | 0.766 | 0.724 | Random stratified split |
-| Warehouse (`--source warehouse`) | 0.709 | 0.442 | 0.653 | **Temporal split** (train on past, test on future) |
+| Warehouse (`--source warehouse`, `dvc repro`) | 0.674 | 0.345 | 0.755 | **Temporal split** (train on past, test on future) |
 
 **The 0.907 number is inflated by circularity, not by leakage.** The original flat-CSV
 generator drew the `dropout` label directly from a logistic function of the very columns
@@ -694,7 +714,12 @@ Docker Desktop is a hard prerequisite for continuing the roadmap.**
 
 ### 6.5 Model quality is modest, and stated honestly rather than oversold
 
-On the temporal/warehouse path: ROC-AUC 0.709, recall 0.653 at the tuned threshold. No
+On the temporal/warehouse path: ROC-AUC 0.674, recall 0.755 at the tuned threshold. These
+come from `dvc repro`, with `dvc.lock` recording the exact inputs. Earlier revisions of
+this document reported 0.709 from a 4,000-subscriber warehouse over a shorter window — the
+simulate CLI defaulted to 4,000 while the configuration said 8,000. Validation and test are
+adjacent cutoffs of the same run and differ by 0.035 ROC-AUC, so the spread between those
+two reported figures is inside the run's own cutoff-to-cutoff variation. No
 probability calibration has been attempted (e.g. `CalibratedClassifierCV`), so raw
 predicted probabilities should not be plugged directly into expected-value/cost
 calculations without that step. Threshold tuning currently optimizes F1, not a real
@@ -738,7 +763,7 @@ make docker-build            build the image (trains model during build) — unt
 make docker-up               full compose stack — untested locally
 
 # --- quality ---
-make test                    run all 203 tests
+make test                    run all 407 tests
 make lint                    ruff check
 make clean                   remove generated data, artifacts, caches
 ```
