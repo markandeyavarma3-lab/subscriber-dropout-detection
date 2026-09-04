@@ -422,6 +422,28 @@ def test_only_the_api_is_autoscaled() -> None:
     assert "HorizontalPodAutoscaler" not in scorer_kinds
 
 
+def test_makefile_uses_an_interpreter_that_exists_on_a_stock_mac() -> None:
+    """`python` has not existed on macOS by default since Catalina.
+
+    Found live: `make stream-events` failed with "python: No such file or
+    directory" on a real Sonoma machine that had neither Homebrew nor an
+    activated virtualenv - which describes most fresh clones, since a venv is
+    the first thing this README's Quick Start tells you to create but is easy
+    to reach a Makefile target from a fresh shell without. `python3` has
+    shipped via Xcode's Command Line Tools for years and is the one binary
+    reliably on PATH regardless.
+    """
+    import pathlib
+
+    makefile = (pathlib.Path(__file__).resolve().parents[1] / "Makefile").read_text()
+
+    default = next(line for line in makefile.splitlines() if line.startswith("PYTHON"))
+    assert default == "PYTHON ?= python3", (
+        f"Makefile's PYTHON default is {default!r}; bare 'python' does not exist "
+        "on a stock Mac and every target using $(PYTHON) fails on one"
+    )
+
+
 def test_compose_wires_the_scorer_to_redpanda() -> None:
     """The streaming service must actually point at the broker."""
     import pathlib

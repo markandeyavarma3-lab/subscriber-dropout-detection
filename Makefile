@@ -1,7 +1,14 @@
 # Shortcuts for the common workflows. Run `make help` for the list.
 .PHONY: help install data simulate ingest ingest-check warehouse-up train train-warehouse train-promote pipeline pipeline-drift backfill schedule stream stream-up stream-events stream-poison audit observability-up metrics mlflow-ui evaluate repro params metrics-diff dag serve test lint format docker-build docker-run docker-up clean
 
-PYTHON ?= python
+# python3, not python: macOS has shipped python3 via Xcode's Command Line
+# Tools for years and dropped the bare `python` symlink long ago, so on any
+# machine without Homebrew's own python formula - confirmed live, on a stock
+# Sonoma install with neither Homebrew nor a virtualenv active - `python`
+# resolves to nothing and every target below fails with "No such file or
+# directory". `?=` still lets an activated venv or an explicit `PYTHON=...`
+# override this, so nothing is lost for anyone who does have `python` on PATH.
+PYTHON ?= python3
 IMAGE  ?= subscriber-dropout-api
 
 help:  ## Show the available targets
