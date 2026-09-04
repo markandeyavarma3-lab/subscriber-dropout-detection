@@ -8,7 +8,7 @@ saved pipeline performs its own feature engineering.
 from __future__ import annotations
 
 from enum import Enum
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -94,6 +94,33 @@ class SubscriberFeaturesRequest(BaseModel):
         return payload
 
 
+class AttributionResponse(BaseModel):
+    """One concept's contribution to one subscriber's score.
+
+    Contributions are SHAP values in **log-odds**, which is the space where
+    they are additive: they sum to the model's output minus its base rate.
+    Converting each to "percentage points of risk" would break that sum and
+    produce numbers that look more precise than they are, so the conversion is
+    deliberately not done here.
+    """
+
+    feature: str = Field(
+        ...,
+        description=(
+            "The business concept, not the raw column. The model sees 21 "
+            "columns, most of them derived; contributions are summed back into "
+            "the handful of concepts a person can act on."
+        ),
+    )
+    direction: Literal["increases_risk", "decreases_risk"] = Field(
+        ..., description="Which way this concept pushed the score."
+    )
+    contribution: float = Field(..., description="SHAP value in log-odds.")
+    description: str = Field(
+        ..., description="The concept phrased in the subscriber's own numbers."
+    )
+
+
 class PredictionResponse(BaseModel):
     """Model output for one subscriber."""
 
@@ -114,6 +141,27 @@ class PredictionResponse(BaseModel):
                     "low recent activity (2.0 sessions/30d)",
                     "2 payment failures in the last 6 months",
                 ],
+                "explanation_method": "shap",
+                "attributions": [
+                    {
+                        "feature": "recency",
+                        "direction": "increases_risk",
+                        "contribution": 1.0182,
+                        "description": "inactive for 34 days",
+                    },
+                    {
+                        "feature": "engagement",
+                        "direction": "increases_risk",
+                        "contribution": 0.6113,
+                        "description": "low recent activity (2.0 sessions/30d)",
+                    },
+                    {
+                        "feature": "payments",
+                        "direction": "increases_risk",
+                        "contribution": 0.4407,
+                        "description": "2 payment failures in the last 6 months",
+                    },
+                ],
             }
         }
     )
@@ -126,9 +174,32 @@ class PredictionResponse(BaseModel):
     )
     risk_level: RiskLevel = Field(..., description="Coarse risk band.")
     threshold: float = Field(..., ge=0.0, le=1.0, description="Decision threshold applied.")
-    explanation: str = Field(..., description="Human-readable, rule-based rationale.")
+    explanation: str = Field(..., description="Human-readable rationale.")
     top_risk_factors: list[str] = Field(
-        default_factory=list, description="Individual risk signals that fired."
+        default_factory=list,
+        description=(
+            "The strongest signals behind this score, most important first. "
+            "Ranked by SHAP contribution when attribution is available, and by "
+            "rule order otherwise - `explanation_method` says which."
+        ),
+    )
+    explanation_method: Literal["shap", "rules"] = Field(
+        default="rules",
+        description=(
+            "How the explanation was produced. `shap` attributes the model's "
+            "actual decision; `rules` describes the input against fixed "
+            "thresholds and fires whether or not the model weighed that "
+            "feature. Reported rather than inferred, because the two read "
+            "almost identically and mean quite different things."
+        ),
+    )
+    attributions: list[AttributionResponse] | None = Field(
+        default=None,
+        description=(
+            "Signed per-concept contributions. Null when the optional `shap` "
+            "dependency is not installed or the model is not a tree ensemble, "
+            "in which case the explanation falls back to rules."
+        ),
     )
 
 

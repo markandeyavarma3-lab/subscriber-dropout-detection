@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -60,10 +60,30 @@ class LoadedModel:
     challenger_threshold: float | None = None
     challenger_version: str | None = None
 
+    # Built on first use rather than at load time, and cached here so it dies
+    # with the model it explains. Constructing a TreeExplainer walks the whole
+    # ensemble; doing it per request would dominate prediction latency.
+    _attributor: Any | None = field(default=None, repr=False)
+    _attributor_built: bool = field(default=False, repr=False)
+
     @property
     def shadow_active(self) -> bool:
         """Whether a distinct challenger is available to shadow-score with."""
         return self.challenger is not None
+
+    def attributor(self) -> Any | None:
+        """The SHAP attributor for this model, or ``None`` if unavailable.
+
+        ``None`` is an ordinary outcome, not an error: ``shap`` is an optional
+        dependency and not every model is a tree ensemble. Callers fall back to
+        the rule-based explanation.
+        """
+        if not self._attributor_built:
+            from src.evaluation.explain import build_attributor
+
+            self._attributor = build_attributor(self.pipeline)
+            self._attributor_built = True
+        return self._attributor
 
 
 _loaded_model: LoadedModel | None = None
@@ -407,17 +427,26 @@ def collect_retention_signals(features: dict[str, Any]) -> list[str]:
 
 
 def build_explanation(
-    features: dict[str, Any], probability: float, risk_level: str
-) -> tuple[str, list[str]]:
+    features: dict[str, Any],
+    probability: float,
+    risk_level: str,
+    attributions: list[Any] | None = None,
+) -> tuple[str, list[str], str]:
     """Compose the human-readable explanation and its supporting factors.
 
-    Returns:
-        ``(explanation, top_risk_factors)`` where the factor list holds at most
-        the three strongest signals.
-    """
-    risk_factors = collect_risk_factors(features)
-    top_factors = risk_factors[:3]
+    Args:
+        features: The raw record, used to quote the subscriber's own numbers.
+        probability: The predicted dropout probability.
+        risk_level: The band the probability falls in.
+        attributions: SHAP attributions for this row, when available. These
+            explain the *decision*; the rules below only ever explained the
+            *input*, firing whether or not the model weighed that feature.
 
+    Returns:
+        ``(explanation, top_factors, method)``. ``method`` is ``"shap"`` or
+        ``"rules"`` - reported rather than inferred, so nobody has to guess
+        which produced the sentence they are reading.
+    """
     if risk_level == "high":
         opening = "High dropout risk"
     elif risk_level == "medium":
@@ -425,15 +454,53 @@ def build_explanation(
     else:
         opening = "Low dropout risk"
 
+    if attributions:
+        # The sentence uses both directions. SHAP ranks by magnitude either
+        # way, so a strong reason the subscriber is staying can outrank a weak
+        # reason they might leave - which is the improvement over the rules,
+        # since those could only ever list what was wrong and so made every
+        # explanation read like a warning.
+        body = ", ".join(item.description for item in attributions)
+        # `top_risk_factors` keeps its name's meaning, though: only the
+        # contributions that actually push risk *up*. Quietly widening a public
+        # field to mean "drivers, any direction" would leave every existing
+        # consumer reading reasons-to-stay as reasons-to-worry.
+        top_factors = [item.description for item in attributions if item.contribution > 0]
+        return f"{opening} ({probability:.0%}): {body}.", top_factors, "shap"
+
+    risk_factors = collect_risk_factors(features)
+    top_factors = risk_factors[:3]
+
     if top_factors:
         body = ", ".join(top_factors)
-        explanation = f"{opening} ({probability:.0%}): {body}."
     else:
         signals = collect_retention_signals(features)
         body = ", ".join(signals) if signals else "no notable risk signals detected"
-        explanation = f"{opening} ({probability:.0%}): {body}."
 
-    return explanation, top_factors
+    return f"{opening} ({probability:.0%}): {body}.", top_factors, "rules"
+
+
+def _attribute(
+    loaded: LoadedModel, frame: pd.DataFrame, records: list[dict[str, Any]]
+) -> list[list[Any]]:
+    """SHAP attributions for a whole batch, or empty lists if unavailable.
+
+    Computed once per batch rather than per row: TreeSHAP is vectorised, and
+    the per-call overhead is most of the cost on small batches.
+
+    Wrapped, like shadow scoring, so that explanation can never take down
+    prediction. A model that scores fine but cannot be explained should return
+    a probability with a rule-based sentence attached, not a 500.
+    """
+    attributor = loaded.attributor()
+    if attributor is None:
+        return [[] for _ in records]
+
+    try:
+        return attributor.top_attributions(frame, records)
+    except Exception:  # noqa: BLE001 - an explanation must not fail a prediction
+        logger.exception("SHAP attribution failed; falling back to rule-based explanations")
+        return [[] for _ in records]
 
 
 def predict_batch(
@@ -457,12 +524,15 @@ def predict_batch(
     loaded = model or get_model()
     frame: pd.DataFrame = frame_from_records(records)
     probabilities = loaded.pipeline.predict_proba(frame)[:, 1]
+    attributions = _attribute(loaded, frame, records)
 
     responses: list[dict[str, Any]] = []
-    for record, probability in zip(records, probabilities, strict=True):
+    for record, probability, row in zip(records, probabilities, attributions, strict=True):
         probability = float(probability)
         risk_level = classify_risk_level(probability, loaded.threshold)
-        explanation, top_factors = build_explanation(record, probability, risk_level)
+        explanation, top_factors, method = build_explanation(
+            record, probability, risk_level, row
+        )
         responses.append(
             {
                 "dropout_probability": round(probability, 4),
@@ -471,6 +541,8 @@ def predict_batch(
                 "threshold": round(loaded.threshold, 4),
                 "explanation": explanation,
                 "top_risk_factors": top_factors,
+                "explanation_method": method,
+                "attributions": [item.as_dict() for item in row] if row else None,
             }
         )
 

@@ -91,12 +91,21 @@ def test_high_risk_scores_above_low_risk(client: TestClient) -> None:
 
 
 def test_explanation_mentions_risk_drivers(client: TestClient) -> None:
-    """The rule-based explanation names the signals that fired."""
+    """The explanation names the drivers in the subscriber's own numbers.
+
+    Deliberately not pinned to any particular wording. This used to assert the
+    literal word "inactive", which was really asserting that the rule engine
+    produced the sentence - the SHAP path says "a 45-day gap is long for a
+    95-day-old account", which is the same finding stated better. What has to
+    hold either way is that the dormancy is named and quantified.
+    """
     payload = client.post("/predict", json=HIGH_RISK_SUBSCRIBER).json()
     explanation = payload["explanation"].lower()
-    assert "inactive" in explanation
+
+    assert str(HIGH_RISK_SUBSCRIBER["last_activity_days_ago"]) in explanation
     assert payload["top_risk_factors"]
     assert len(payload["top_risk_factors"]) <= 3
+    assert payload["explanation_method"] in {"shap", "rules"}
 
 
 def test_explanation_for_healthy_subscriber(client: TestClient) -> None:

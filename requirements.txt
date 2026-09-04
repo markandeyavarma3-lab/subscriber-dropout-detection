@@ -21,3 +21,13 @@ prefect>=3.0,<4.0
 
 # Prometheus exposition for the /metrics/prometheus scrape target.
 prometheus-client>=0.20,<1.0
+
+# SHAP attributions behind /predict's `explanation` and `attributions` fields.
+#
+# Not free: it pulls in numba and llvmlite, which is over a hundred megabytes
+# in the runtime image. Included anyway, because the response advertises
+# `explanation_method: "shap"` and an image where the documented explanation
+# silently degrades to rules is a worse trade than a larger pull. The code
+# keeps its fallback regardless - the likelier reason to lose attribution is a
+# model that is not a tree ensemble, not a missing package.
+shap>=0.44,<1.0
