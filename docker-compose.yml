@@ -31,14 +31,36 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    # Not `mlflow server --host 0.0.0.0`: verified against this exact image
+    # (3.1.1) that gunicorn ends up bound to 127.0.0.1 regardless - reliably,
+    # on every fresh container boot - even though `mlflow server --host
+    # 0.0.0.0` binds correctly when typed at an interactive shell inside the
+    # same running container. `--gunicorn-opts '-b 0.0.0.0:...'` does not
+    # override it either; the flag never reaches the spawned gunicorn
+    # process. With the host stuck on loopback, nothing outside the
+    # container's own network namespace - not the host, not Prometheus, not
+    # another container - can ever reach it, and `docker compose up` gives no
+    # error: the server logs "Listening" and looks healthy while being
+    # unreachable.
+    #
+    # This runs gunicorn directly against MLflow's own WSGI app instead,
+    # which is MLflow's documented pattern for production deployment behind a
+    # real WSGI server. The two underscore-prefixed variables are what
+    # `mlflow server` itself sets internally before it (fails to) launch
+    # gunicorn - reusing them here reproduces its configuration exactly and
+    # only replaces the one step that was going wrong.
     command: >
       sh -c "pip install --no-cache-dir psycopg2-binary &&
-             mlflow server
-             --host 0.0.0.0 --port 5000
-             --backend-store-uri postgresql://subscriber:subscriber@postgres:5432/warehouse
-             --default-artifact-root /mlflow/artifacts"
+             export _MLFLOW_SERVER_FILE_STORE=postgresql://subscriber:subscriber@postgres:5432/warehouse &&
+             export _MLFLOW_SERVER_ARTIFACT_ROOT=/mlflow/artifacts &&
+             python -m gunicorn -b 0.0.0.0:5000 -w 4 mlflow.server:app"
     ports:
-      - "5000:5000"
+      # Host side moved off 5000: macOS's Control Center (AirPlay Receiver)
+      # binds *:5000 by default on Sonoma and later, and there is no reason to
+      # make everyone turn off a system feature to run this stack. The
+      # container's own port is untouched, so nothing inside the compose
+      # network - or MLFLOW_TRACKING_URI pointed at the container - changes.
+      - "5001:5000"
     volumes:
       - mlflow-artifacts:/mlflow/artifacts
     restart: unless-stopped
@@ -184,6 +206,17 @@ services:
       - "8001:8001"
     environment:
       SDD_STREAM_BROKERS: redpanda:9092
+    # The Dockerfile bakes a HEALTHCHECK that curls :8000/health into the
+    # shared image - correct for subscriber-api, meaningless here, since this
+    # container runs the Kafka consumer and never binds 8000. Left inherited,
+    # `docker ps` reports this service permanently unhealthy regardless of
+    # whether it is actually consuming, which is exactly backwards for a
+    # health signal. Disabled rather than pointed at :8001/metrics: that
+    # endpoint exists to be scraped, not polled every 30s, and a stalled
+    # consumer already surfaces correctly via the StreamScorerDown alert on
+    # `up{job="stream-scorer"}`.
+    healthcheck:
+      disable: true
     restart: unless-stopped
 
 volumes:

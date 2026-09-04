@@ -438,6 +438,88 @@ def test_compose_wires_the_scorer_to_redpanda() -> None:
     assert scorer["depends_on"]["redpanda"]["condition"] == "service_healthy"
 
 
+def test_the_scorer_does_not_inherit_the_apis_http_healthcheck() -> None:
+    """A regression guard for a bug only a running stack could surface.
+
+    stream-scorer shares subscriber-dropout-api's image, and that image bakes
+    in a HEALTHCHECK that curls :8000/health - correct for the API, wrong
+    here, since this service runs the Kafka consumer and never binds 8000.
+    Left inherited, `docker ps` reported this container permanently
+    unhealthy regardless of whether it was actually consuming - discovered
+    only once the stack was actually brought up, because no test reading the
+    YAML in isolation can see an image-level HEALTHCHECK it does not declare.
+    """
+    import pathlib
+
+    import yaml
+
+    compose = yaml.safe_load(
+        (pathlib.Path(__file__).resolve().parents[1] / "docker-compose.yml").read_text()
+    )
+
+    scorer = compose["services"]["stream-scorer"]
+    assert scorer.get("healthcheck", {}).get("disable") is True
+
+
+def test_mlflow_does_not_bind_to_loopback_inside_its_container() -> None:
+    """A second regression guard, for a bug that cost real debugging time.
+
+    Verified empirically against MLflow 3.1.1: `mlflow server --host 0.0.0.0`
+    reliably binds gunicorn to 127.0.0.1 when it is the container's own PID-1
+    command at boot - even though the identical command typed at an
+    interactive shell inside the same running container binds 0.0.0.0
+    correctly, and even though `--gunicorn-opts '-b 0.0.0.0:...'` does not
+    override it either. `docker compose up` gives no error for this: the
+    server logs "Listening" and reports healthy while being unreachable from
+    the host, from Prometheus, and from every other container - a failure
+    mode invisible to a healthcheck that only checks the process is up.
+
+    The fix runs gunicorn directly against MLflow's own WSGI app - MLflow's
+    documented pattern for production deployment - configured through the
+    same private environment variables `mlflow server` sets internally before
+    it takes the step that goes wrong. This asserts the command does that
+    rather than calling `mlflow server --host` again by accident, e.g. during
+    a future edit that "simplifies" it back.
+    """
+    import pathlib
+
+    import yaml
+
+    compose = yaml.safe_load(
+        (pathlib.Path(__file__).resolve().parents[1] / "docker-compose.yml").read_text()
+    )
+
+    command = compose["services"]["mlflow"]["command"]
+    assert "gunicorn" in command
+    assert "-b 0.0.0.0:5000" in command
+    assert "mlflow server --host" not in command
+    assert "_MLFLOW_SERVER_FILE_STORE" in command
+    assert "_MLFLOW_SERVER_ARTIFACT_ROOT" in command
+
+
+def test_mlflows_host_port_avoids_macos_airplay_receiver() -> None:
+    """5000 is Control Center's AirPlay Receiver port on macOS Sonoma+.
+
+    Also found only by actually starting the stack: `docker compose up`
+    failed outright with "address already in use" on a clean macOS machine
+    that had never touched this project. The container's own port is
+    untouched - MLFLOW_TRACKING_URI inside the compose network is unaffected
+    - only the host-side mapping moved, so nobody has to give up a system
+    feature to run this stack.
+    """
+    import pathlib
+
+    import yaml
+
+    compose = yaml.safe_load(
+        (pathlib.Path(__file__).resolve().parents[1] / "docker-compose.yml").read_text()
+    )
+
+    ports = compose["services"]["mlflow"]["ports"]
+    host_ports = {str(mapping).split(":")[0] for mapping in ports}
+    assert "5000" not in host_ports
+
+
 def test_kafka_adapter_fails_with_an_actionable_message(monkeypatch) -> None:
     """Streaming is an optional extra, so the error must say what to install."""
     import builtins

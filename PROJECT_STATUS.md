@@ -152,7 +152,7 @@ subscriber-dropout-detection/
         ├── schemas.py               (182 lines) Pydantic request/response contract
         ├── service.py               (271 lines) model loading, prediction, explanations
         └── static/index.html              browser dashboard, no build step
-└── tests/                     14 files, 410 tests total (see §3.6)
+└── tests/                     14 files, 413 tests total (see §3.6)
 ```
 
 **The model pipeline** (`src/models/train.py` + `src/features/build_features.py`):
@@ -232,10 +232,11 @@ a non-root user, with a `HEALTHCHECK` wired to `/health`.
 2. **Docker** (runs only if job 1 passes) — builds the image, starts a container, polls
    `/health`, asserts the dashboard serves, posts a real request to `/predict`.
 
-Both jobs have passed on the last verified run, including the Docker job — **which is the
-one part of this project that has never been executed on the local development machine**,
-because Docker Desktop is not installed there. CI is the only place it's actually been
-proven to build and run.
+Both jobs have passed on the last verified run. For a long stretch the Docker job was the
+one part of this project only CI had ever executed — Docker Desktop was not installed on
+the local development machine. It has since been installed and the full eight-service
+compose stack brought up locally (see §6.4), which is what surfaced the two bugs recorded
+there: neither would have been found by CI's narrower three-service smoke test.
 
 ### 3.2 Browser dashboard (commits `cbab7d2`, `96ef8ce`, `381ac92`) — ✅ complete, pushed
 
@@ -512,7 +513,7 @@ python -m src.models.train --source warehouse --promote    # + register in MLflo
 python -m src.models.train --cutoffs 2024-06-01 2024-07-01 2024-08-01   # explicit cutoffs
 ```
 
-### 3.6 Full test suite — 410 tests, all passing
+### 3.6 Full test suite — 413 tests, all passing
 
 ```
 tests/test_api.py            83 tests   — every endpoint, 422 validation, 503 degraded
@@ -532,7 +533,7 @@ tests/test_evaluation.py     38 tests   — calibration arithmetic, cost model, 
                                           efficacy, capacity constraint, fairness
 tests/test_prometheus.py     35 tests   — exposition format, both coverage guards,
                                           Alertmanager routing and inhibition
-tests/test_streaming.py      33 tests   — poison messages, partial batch failures, a
+tests/test_streaming.py      36 tests   — poison messages, partial batch failures, a
                                           produce failure that must not commit
 tests/test_external_data.py  26 tests   — KKBox mapping, warehouse contract, orphan
                                           events, pre-signup activity
@@ -545,7 +546,7 @@ tests/test_shadow.py         16 tests   — the safety contract: a raising chall
 tests/test_explain.py        14 tests   — SHAP additivity, concept grouping, and the
                                           three ways attribution degrades safely
 ─────────────────────────────────────────
-Total                       410 tests   — runs in ~15-30 seconds
+Total                       413 tests   — runs in ~15-30 seconds
 ```
 
 The suite trains one small model per session into a temporary directory — it never writes
@@ -703,14 +704,43 @@ intentionally deferred to Stage 5, where the serving layer has to learn how to r
 models (champion + challenger) simultaneously anyway, so wiring registry-loading in twice
 would be wasted work.
 
-### 6.4 Docker has never been run on the local development machine
+### 6.4 Docker — installed, and the full eight-service stack has now been run
 
-The Dockerfile and `docker-compose.yml` (now three services: `postgres`, `mlflow`,
-`subscriber-api`) have been reviewed line-by-line and **have passed in CI** — but Docker
-Desktop is not installed on the machine this project is developed on, so nothing in
-`docker-compose.yml` has ever actually been started locally. Stages 3 through 6 all
-require Docker (Prefect, Prometheus, and Grafana all run as containers), so **installing
-Docker Desktop is a hard prerequisite for continuing the roadmap.**
+Docker Desktop was not installed on the machine this project is developed on for most of
+its life. It has since been installed, and `docker compose up --build` has been run against
+the full stack — `postgres`, `mlflow`, `subscriber-api`, `prometheus`, `alertmanager`,
+`grafana`, `redpanda`, `stream-scorer` — with all eight containers reaching a running state
+and Prometheus's four scrape targets confirmed **up**, including `stream-scorer` on `:8001`,
+which no test running outside a container could ever exercise.
+
+Bringing it up for real, rather than only reading the YAML, found two bugs that a
+structural test cannot see and CI's narrower three-service job never touched:
+
+- **`stream-scorer` was permanently reported unhealthy.** It shares an image with
+  `subscriber-api`, and that image bakes in a `HEALTHCHECK` that curls `:8000/health`.
+  Correct for the API; meaningless for the streaming consumer, which never binds 8000.
+  `docker ps` showed the container unhealthy regardless of whether it was actually
+  consuming — fixed by disabling the inherited healthcheck for this service, since a
+  stalled consumer already surfaces correctly through the `StreamScorerDown` alert on
+  `up{job="stream-scorer"}`.
+- **MLflow was unreachable from outside its own container.** `mlflow server --host 0.0.0.0`
+  reliably bound gunicorn to `127.0.0.1` when run as the container's own boot command —
+  reproduced and confirmed by running the identical command manually inside the already-running
+  container, where it bound `0.0.0.0` correctly. `--gunicorn-opts` did not override it either.
+  `docker compose up` gave no error: the server logged "Listening" and looked healthy while
+  being unreachable from the host, from Prometheus, or from any other container. Fixed by
+  running gunicorn directly against MLflow's own WSGI app — MLflow's documented pattern for
+  production deployment — configured through the same private environment variables
+  `mlflow server` sets internally before the step that was going wrong.
+
+A third issue was a plain port collision: macOS's Control Center (AirPlay Receiver) binds
+`*:5000` by default on Sonoma and later, which is also MLflow's default port, and
+`docker compose up` failed outright with "address already in use" until the host-side
+mapping moved to `5001:5000`. All three fixes are covered by regression tests in
+`tests/test_streaming.py` that parse `docker-compose.yml` and assert the fix stays in place.
+
+Kubernetes remains unverified — the manifests need a real cluster (`kind` or Docker
+Desktop's built-in one), which is a separate exercise from bringing up compose.
 
 ### 6.5 Model quality is modest, and stated honestly rather than oversold
 
@@ -763,7 +793,7 @@ make docker-build            build the image (trains model during build) — unt
 make docker-up               full compose stack — untested locally
 
 # --- quality ---
-make test                    run all 410 tests
+make test                    run all 413 tests
 make lint                    ruff check
 make clean                   remove generated data, artifacts, caches
 ```

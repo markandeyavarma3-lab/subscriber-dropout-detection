@@ -260,6 +260,34 @@ The runtime stage is a slim Python 3.11 base running as a non-root user, with a
 `HEALTHCHECK` wired to `/health`. To serve a model trained on your host instead of the
 one baked into the image, uncomment the `volumes:` block in `docker-compose.yml`.
 
+#### Two bugs only a running stack could find
+
+`docker compose up --build` brings up all eight services — `postgres`, `mlflow`,
+`subscriber-api`, `prometheus`, `alertmanager`, `grafana`, `redpanda`, `stream-scorer`.
+Doing that for the first time surfaced two failures invisible to a test that only reads the
+YAML, because neither is a structural problem — both are things that go wrong only once a
+real container actually boots:
+
+- **`stream-scorer` reported permanently unhealthy.** It shares an image with the API, and
+  that image bakes in a `HEALTHCHECK` that curls `:8000/health`. Right for the API, wrong
+  here — this service runs the Kafka consumer and never binds 8000. Fixed by disabling the
+  inherited healthcheck for this one service; a stalled consumer already surfaces correctly
+  through the `StreamScorerDown` alert.
+- **MLflow was unreachable from outside its own container**, despite `mlflow server --host
+  0.0.0.0` and logging "Listening" with no error. Verified against MLflow 3.1.1: that
+  command reliably binds gunicorn to `127.0.0.1` when it is the container's own boot
+  command, though the identical command typed at an interactive shell inside the same
+  running container binds correctly. Fixed by running gunicorn directly against MLflow's
+  own WSGI app — its documented pattern for production deployment — bypassing whatever step
+  in the CLI was going wrong.
+
+A third was a plain port collision: macOS's Control Center (AirPlay Receiver) claims
+`*:5000` by default on Sonoma and later, which is also MLflow's default port. The host-side
+mapping moved to `5001:5000` rather than asking anyone to give up a system feature. All
+three are covered by regression tests in `test_streaming.py` that parse
+`docker-compose.yml`, so a future edit that "simplifies" the command back can't reintroduce
+them silently.
+
 ---
 
 ## Project architecture
@@ -1165,7 +1193,7 @@ verdict — in either direction.
 
 ### Tests
 
-410 tests across fourteen files, all runnable with `pytest`:
+413 tests across fourteen files, all runnable with `pytest`:
 
 - `test_features.py` — derived-column presence, row-count preservation, input immutability,
   finiteness, zero-denominator edge cases, hand-computed formula checks, output shape,
@@ -1249,12 +1277,10 @@ items that stood here previously — real data, SHAP, Alertmanager, a capacity c
 data versioning — are now done. What is left is mostly *verification*, which is a more
 uncomfortable list than a feature backlog.
 
-- **Nothing containerised has ever been run.** Docker is not installed on the machine this
-  was built on. The seven-service compose stack, the Redpanda broker and the Kubernetes
-  manifests are all written and none has ever started. The Kafka adapter is the one module
-  with no test coverage, for the same reason. Everything that runs on SQLite and in-process
-  is verified; that boundary is exactly where verification stops, and it is stated here
-  rather than left for someone to discover.
+- **Kubernetes remains unverified.** The manifests need a real cluster (`kind`, or Docker
+  Desktop's built-in one) to apply against, which is a separate exercise from bringing up
+  compose. The eight-service compose stack itself has now been run end to end — see
+  "Running with Docker" below, including the two bugs that only surfaced once it was.
 - **The KKBox loader has never met KKBox.** It is written against the published schema and
   tested against fixtures matching it, but the real files are ~30GB behind a Kaggle account.
   Run `make ingest-check SRC=...` first; the contract validation exists precisely because
