@@ -19,7 +19,16 @@ from src.models.calibration import (
     expected_calibration_error,
     reliability_table,
 )
-from src.models.costs import CostModel, cost_optimal_threshold, expected_cost, threshold_report
+from src.models.costs import (
+    CapacityConstraint,
+    CostModel,
+    capacity_report,
+    capacity_threshold,
+    constrained_threshold,
+    cost_optimal_threshold,
+    expected_cost,
+    threshold_report,
+)
 
 # --------------------------------------------------------------------------- #
 # Calibration
@@ -364,3 +373,184 @@ def test_audit_covers_several_attributes_at_once(biased_predictions) -> None:
     assert set(report["reports"]) == {"cohort", "balanced"}
     assert report["passes"] is False
     assert "cohort" in report["attributes_with_concerns"]
+
+
+# --------------------------------------------------------------------------- #
+# Outreach capacity
+# --------------------------------------------------------------------------- #
+
+
+def _scored_population(n: int = 400, seed: int = 7) -> tuple[np.ndarray, np.ndarray]:
+    """A holdout where score and outcome are related but not identical."""
+    rng = np.random.default_rng(seed)
+    truth = rng.binomial(1, 0.2, n)
+    proba = np.clip(rng.beta(2, 6, n) + 0.3 * truth, 0.0, 1.0)
+    return truth, proba
+
+
+def test_capacity_cannot_be_stated_two_ways_at_once() -> None:
+    """An absolute cap and a rate disagree on every population but one.
+
+    Accepting both would make which one wins an implementation detail, and the
+    loser would be silently ignored.
+    """
+    with pytest.raises(ValueError, match="not both"):
+        CapacityConstraint(max_offers=100, max_offer_rate=0.05)
+
+
+def test_no_capacity_is_different_from_zero_capacity() -> None:
+    """"We can contact nobody this cycle" is a real state, not an absent one."""
+    assert CapacityConstraint().configured is False
+    assert CapacityConstraint(max_offers=0).configured is True
+    assert CapacityConstraint(max_offers=0).offers_for(500) == 0
+
+
+def test_a_rate_resolves_against_the_population_and_rounds_down() -> None:
+    """Rounding a budget up is how a campaign goes over."""
+    assert CapacityConstraint(max_offer_rate=0.05).offers_for(1_199) == 59
+    # An absolute cap larger than the population is capped by the population.
+    assert CapacityConstraint(max_offers=10_000).offers_for(300) == 300
+
+
+def test_capacity_threshold_selects_exactly_the_top_k() -> None:
+    """Top-k by score, expressed as the threshold the serving path applies."""
+    proba = np.array([0.9, 0.8, 0.7, 0.6, 0.5, 0.4])
+
+    for k in range(1, 7):
+        threshold = capacity_threshold(proba, k)
+        assert int((proba >= threshold).sum()) == k
+
+
+def test_ties_at_the_cut_off_under_fill_rather_than_overspend() -> None:
+    """Handing operations 530 names against a cap of 500 is not a rounding detail.
+
+    Four subscribers share the boundary score, so no threshold flags exactly
+    three. The conservative choice is two.
+    """
+    proba = np.array([0.9, 0.5, 0.5, 0.5, 0.5, 0.1])
+
+    flagged = int((proba >= capacity_threshold(proba, 3)).sum())
+    assert flagged <= 3
+
+
+def test_a_capacity_of_zero_flags_nobody() -> None:
+    proba = np.array([0.99, 0.5, 0.1])
+    assert int((proba >= capacity_threshold(proba, 0)).sum()) == 0
+
+
+def test_capacity_larger_than_the_population_does_not_constrain() -> None:
+    proba = np.array([0.9, 0.5, 0.1])
+    assert capacity_threshold(proba, 99) == 0.0
+
+
+def test_a_spare_slot_is_not_a_reason_to_use_it() -> None:
+    """The constraint only ever raises the threshold, never lowers it.
+
+    Below the unconstrained optimum an offer loses money whether or not the
+    slot was free - a budget is permission to spend, not an obligation.
+    """
+    truth, proba = _scored_population()
+    unconstrained, _ = cost_optimal_threshold(truth, proba, CostModel())
+
+    generous = constrained_threshold(truth, proba, len(proba), CostModel())
+    assert generous == pytest.approx(unconstrained)
+
+    tight = constrained_threshold(truth, proba, 20, CostModel())
+    assert tight > unconstrained
+
+
+def test_the_capacity_curve_is_computed_without_a_budget_being_set() -> None:
+    """The useful output needs no budget number to exist.
+
+    Pricing each extra offer slot is the argument you take to whoever owns the
+    budget - it cannot require the budget to already be decided.
+    """
+    truth, proba = _scored_population()
+    report = capacity_report(truth, proba, CostModel(), CapacityConstraint())
+
+    assert report["configured"] is False
+    assert report["max_offers"] is None
+    assert report["constrained"] is None
+    assert report["binding"] is False
+    assert len(report["marginal_value"]) > 1
+
+
+def test_more_budget_never_costs_more() -> None:
+    """The one hard invariant of the ladder.
+
+    Whatever a budget of k can do, a budget of k+1 can also do by leaving the
+    extra slot unused - so total cost must be non-increasing in budget. A
+    violation would mean the constrained threshold is spending slots it should
+    not.
+    """
+    truth, proba = _scored_population()
+    report = capacity_report(truth, proba, CostModel(), CapacityConstraint())
+
+    costs = [step["total_cost"] for step in report["marginal_value"]]
+    assert costs == sorted(costs, reverse=True)
+
+
+def test_early_offer_slots_are_worth_more_than_late_ones() -> None:
+    """Diminishing returns, priced - on average, not step by step.
+
+    The model ranks, so the first slots go to the most likely churners. What it
+    does *not* guarantee is that every consecutive block is worth less than the
+    one before: on a finite holdout an imperfect ranking will sometimes put an
+    unusually churn-heavy block below a lighter one. Asserting strict
+    monotonicity here would be asserting that the ranking is perfect.
+    """
+    truth, proba = _scored_population()
+    report = capacity_report(truth, proba, CostModel(), CapacityConstraint())
+
+    priced = [
+        step["value_per_extra_slot"]
+        for step in report["marginal_value"]
+        if step["value_per_extra_slot"] is not None
+    ]
+    half = len(priced) // 2
+    assert sum(priced[:half]) / half > sum(priced[half:]) / len(priced[half:])
+
+
+def test_slots_beyond_the_optimum_are_worth_nothing() -> None:
+    """Budget past the break-even point buys exactly zero, not a small loss.
+
+    That is the threshold floor doing its job: the extra slots go unused rather
+    than being spent on people it does not pay to contact.
+    """
+    truth, proba = _scored_population()
+    report = capacity_report(truth, proba, CostModel(), CapacityConstraint())
+
+    wanted = report["unconstrained"]["offers_required"]
+    beyond = [step for step in report["marginal_value"] if step["max_offers"] > wanted]
+    assert beyond, "the ladder should price budgets above the optimum"
+    for step in beyond:
+        assert step["value_per_extra_slot"] == pytest.approx(0.0)
+        assert step["offers_used"] <= wanted
+
+
+def test_a_binding_budget_is_reported_with_what_it_costs() -> None:
+    """The gap between what the model wants and what anyone can send."""
+    truth, proba = _scored_population()
+    report = capacity_report(
+        truth, proba, CostModel(), CapacityConstraint(max_offer_rate=0.02)
+    )
+
+    assert report["binding"] is True
+    assert report["shortfall"] > 0
+    assert report["constrained"]["flagged"] <= report["max_offers"]
+    # A tighter budget cannot be cheaper than the unconstrained optimum, which
+    # is the cheapest point by construction.
+    assert report["cost_of_constraint"] > 0
+
+
+def test_threshold_report_carries_the_capacity_reality_check() -> None:
+    """Savings from contacting 40% of the base are not available to a team
+    that can contact 5%, and the report must say so in the same place."""
+    truth, proba = _scored_population()
+    report = threshold_report(truth, proba, 0.5, CostModel())
+
+    assert "capacity" in report
+    assert (
+        report["capacity"]["unconstrained"]["offers_required"]
+        == report["cost_optimal"]["flagged"]
+    )

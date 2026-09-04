@@ -398,3 +398,163 @@ def test_every_exposed_metric_is_graphed_or_alerted_on() -> None:
 
     unused = {family for family in families if family not in surfaced}
     assert not unused, f"exposed but never graphed or alerted on: {sorted(unused)}"
+
+
+# --------------------------------------------------------------------------- #
+# Alertmanager routing
+# --------------------------------------------------------------------------- #
+
+
+def _alertmanager_config() -> dict:
+    return yaml.safe_load((DEPLOY / "alertmanager" / "alertmanager.yml").read_text())
+
+
+def _alert_rules() -> list[dict]:
+    rules = yaml.safe_load((DEPLOY / "prometheus" / "alerts.yml").read_text())
+    return [rule for group in rules["groups"] for rule in group["rules"]]
+
+
+def test_prometheus_hands_firing_alerts_to_alertmanager() -> None:
+    """Rules that evaluate but route nowhere are a dashboard, not on-call.
+
+    This is the wire that was missing: for months every rule in alerts.yml was
+    correct, referenced a live metric, and notified precisely nobody.
+    """
+    config = yaml.safe_load((DEPLOY / "prometheus" / "prometheus.yml").read_text())
+
+    targets = [
+        target
+        for entry in config["alerting"]["alertmanagers"]
+        for static in entry["static_configs"]
+        for target in static["targets"]
+    ]
+    assert any("alertmanager" in target for target in targets)
+
+
+def test_every_alert_severity_reaches_a_defined_receiver() -> None:
+    """The dead-route guard, mirroring the dead-alert one.
+
+    An alert labelled with a severity no route matches falls through to the
+    catch-all. That is survivable; a route pointing at a receiver that does not
+    exist is not - Alertmanager refuses to start, taking the whole alerting
+    path down with it.
+    """
+    config = _alertmanager_config()
+    receivers = {receiver["name"] for receiver in config["receivers"]}
+    root = config["route"]
+
+    routed = {}
+    for child in root["routes"]:
+        assert child["receiver"] in receivers, f"route points at unknown {child['receiver']}"
+        for matcher in child["matchers"]:
+            severity = re.fullmatch(r'severity\s*=\s*"([a-z]+)"', matcher)
+            if severity:
+                routed[severity.group(1)] = child
+
+    assert root["receiver"] in receivers
+    used = {rule["labels"]["severity"] for rule in _alert_rules()}
+    assert used <= set(routed), f"severities with no route: {sorted(used - set(routed))}"
+
+
+def test_critical_alerts_nag_and_informational_ones_do_not() -> None:
+    """Repeat intervals encode the whole point of severity levels.
+
+    If `info` repeated as often as `critical`, the severity label would be
+    decoration. A rejected challenger repeating hourly is how people learn to
+    ignore the channel.
+    """
+    config = _alertmanager_config()
+    by_severity = {
+        matcher.split('"')[1]: route
+        for route in config["route"]["routes"]
+        for matcher in route["matchers"]
+        if matcher.startswith("severity")
+    }
+
+    def seconds(value: str) -> int:
+        unit = {"s": 1, "m": 60, "h": 3600, "d": 86400}[value[-1]]
+        return int(value[:-1]) * unit
+
+    critical = seconds(by_severity["critical"]["repeat_interval"])
+    warning = seconds(by_severity["warning"]["repeat_interval"])
+    info = seconds(by_severity["info"]["repeat_interval"])
+
+    assert critical < warning < info
+    # A critical alert should not sit in a grouping window before anyone hears.
+    assert seconds(by_severity["critical"]["group_wait"]) == 0
+
+
+def test_inhibit_rules_name_alerts_that_actually_exist() -> None:
+    """A typo in a source matcher silently disables the suppression.
+
+    Nothing errors: the rule simply never matches, and one outage goes back to
+    producing five notifications.
+    """
+    defined = {rule["alert"] for rule in _alert_rules()}
+
+    for inhibit in _alertmanager_config()["inhibit_rules"]:
+        for matchers in (inhibit["source_matchers"], inhibit["target_matchers"]):
+            for matcher in matchers:
+                exact = re.fullmatch(r'alertname\s*=\s*"([A-Za-z]+)"', matcher)
+                if exact:
+                    assert exact.group(1) in defined, f"unknown alert {exact.group(1)}"
+                    continue
+                regex = re.fullmatch(r'alertname\s*=~\s*"([A-Za-z|]+)"', matcher)
+                if regex:
+                    for name in regex.group(1).split("|"):
+                        assert name in defined, f"unknown alert {name}"
+
+
+def test_outage_inhibition_groups_on_a_label_the_targets_carry() -> None:
+    """`equal` on a label nothing exports suppresses nothing.
+
+    `component` is attached by the scrape config, not by the rules, so this
+    guards the join between two files that are edited independently.
+    """
+    scrape = yaml.safe_load((DEPLOY / "prometheus" / "prometheus.yml").read_text())
+    labelled = {
+        label
+        for job in scrape["scrape_configs"]
+        for static in job.get("static_configs", [])
+        for label in static.get("labels", {})
+    }
+
+    for inhibit in _alertmanager_config()["inhibit_rules"]:
+        for label in inhibit.get("equal", []):
+            assert label in labelled, f"inhibit joins on '{label}', which no target sets"
+
+
+def test_compose_runs_alertmanager_with_its_config_mounted() -> None:
+    """An Alertmanager with no config file starts up and routes nothing."""
+    compose = yaml.safe_load(
+        (Path(__file__).resolve().parents[1] / "docker-compose.yml").read_text()
+    )
+
+    assert "alertmanager" in compose["services"]
+    mounts = " ".join(compose["services"]["alertmanager"]["volumes"])
+    assert "alertmanager.yml" in mounts
+    assert "alertmanager" in compose["services"]["prometheus"]["depends_on"]
+
+
+def test_the_router_is_itself_scraped_and_alerted_on() -> None:
+    """Nobody watching the watchman is how a stack goes quiet and looks fine."""
+    config = yaml.safe_load((DEPLOY / "prometheus" / "prometheus.yml").read_text())
+    assert "alertmanager" in {job["job_name"] for job in config["scrape_configs"]}
+
+    by_name = {rule["alert"]: rule for rule in _alert_rules()}
+    assert by_name["AlertmanagerDown"]["labels"]["severity"] == "critical"
+
+
+def test_receivers_ship_without_credentials() -> None:
+    """Deliberate: routing is real, delivery is left to whoever deploys it.
+
+    This is a guard against a well-meant commit that pastes a live Slack
+    webhook or PagerDuty key into the repository to "finish" the setup.
+    """
+    raw = (DEPLOY / "alertmanager" / "alertmanager.yml").read_text()
+    active = "\n".join(
+        line for line in raw.splitlines() if not line.lstrip().startswith("#")
+    )
+
+    for secret in ("hooks.slack.com", "routing_key:", "api_url:", "https://"):
+        assert secret not in active, f"a credential-shaped value leaked in: {secret}"

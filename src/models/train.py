@@ -431,6 +431,24 @@ def _decision_quality(
             f"Cost-optimal threshold {report['costs']['cost_optimal']['threshold']} "
             f"vs {threshold} in use -> {savings:,.0f} on the test split"
         )
+
+        # Those savings assume every flagged subscriber gets contacted. Say out
+        # loud how many that is, because it is the number an operations team
+        # will push back on first.
+        capacity = report["costs"]["capacity"]
+        wanted = capacity["unconstrained"]["offers_required"]
+        if capacity["binding"]:
+            log(
+                f"Capacity binds: {capacity['max_offers']} offers available against "
+                f"{wanted} the model would send. The shortfall costs "
+                f"{capacity['cost_of_constraint']:,.0f} on this split."
+            )
+        else:
+            log(
+                f"Cost-optimal outreach needs {wanted} offers "
+                f"({wanted / max(capacity['population'], 1):.1%} of the split); "
+                "no capacity cap configured."
+            )
         return report
     except Exception as exc:  # noqa: BLE001 - never lose a good model to a diagnostic
         return {"error": str(exc)}

@@ -15,6 +15,16 @@ global:
 rule_files:
   - /etc/prometheus/alerts.yml
 
+# Where firing alerts are sent. Without this, every rule in alerts.yml
+# evaluates correctly and then goes nowhere: Prometheus shows it as firing on
+# its own /alerts page and nobody who is not already looking ever finds out.
+# Alertmanager is what turns evaluation into notification - grouping,
+# deduplication, inhibition and silences all live there, not here.
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ["alertmanager:9093"]
+
 scrape_configs:
   - job_name: subscriber-api
     # Not the conventional /metrics: that path already serves a documented
@@ -37,3 +47,9 @@ scrape_configs:
   - job_name: prometheus
     static_configs:
       - targets: ["localhost:9090"]
+
+  # The router itself. If Alertmanager is down, every alert above is silently
+  # swallowed - so it needs to be watched by the thing that feeds it.
+  - job_name: alertmanager
+    static_configs:
+      - targets: ["alertmanager:9093"]

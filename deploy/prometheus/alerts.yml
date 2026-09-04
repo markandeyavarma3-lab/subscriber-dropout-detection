@@ -123,6 +123,24 @@ groups:
             offsets only after producing, so nothing is lost - but nothing is
             being scored either.
 
+      - alert: AlertmanagerDown
+        # The honest limitation: if the router is down, this alert cannot be
+        # delivered either. It still earns its place - it is visible on
+        # Prometheus's own /alerts page, it fires on recovery, and without it
+        # a dead Alertmanager looks exactly like a quiet week. Catching it at
+        # the moment it happens needs an external dead-man's-switch, which
+        # this stack does not have anywhere to send.
+        expr: up{job="alertmanager"} == 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Alertmanager is not responding; alerts are going nowhere"
+          description: >-
+            Every rule in this file still evaluates, but nothing is being
+            routed, grouped or delivered. Check the alertmanager container
+            before trusting the absence of alerts.
+
       - alert: PipelineNeedsAttention
         expr: subscriber_pipeline_needs_attention == 1
         for: 1h
@@ -134,6 +152,42 @@ groups:
             Either a challenger was rejected by the promotion gate or drift was
             significant. Neither is a failure - the gate rejecting a worse
             model is the system working - but it is worth a look.
+
+      - alert: RetentionCapacityBinding
+        # Not a failure - most retention programmes are budget-limited most of
+        # the time, and that is a normal state of the world. It is `info`
+        # because it changes what the cost numbers mean: while this is 1, the
+        # "cost-optimal threshold" on the dashboard is not the threshold
+        # anybody is operating at.
+        expr: subscriber_model_capacity_binding == 1
+        for: 6h
+        labels:
+          severity: info
+        annotations:
+          summary: "Outreach budget, not model economics, is limiting retention"
+          description: >-
+            subscriber_model_capacity_shortfall subscribers are flagged, worth
+            contacting, and going uncontacted; the ceiling costs
+            subscriber_model_capacity_cost on the test split. The marginal
+            value of each extra offer slot is in the capacity section of
+            metrics.json - use it to decide whether raising the budget pays
+            for itself.
+
+      - alert: OutreachVolumeUnaffordable
+        # A different finding from the one above: this fires when nobody has
+        # configured a capacity cap at all and the model is nonetheless asking
+        # for a campaign nobody could staff. The cost analysis is then a wish,
+        # not a plan.
+        expr: subscriber_model_offers_required > 5000
+        for: 6h
+        labels:
+          severity: info
+        annotations:
+          summary: "The cost-optimal threshold implies a very large campaign"
+          description: >-
+            {{ $value }} offers on the test split. Check that the retention
+            team can absorb this before quoting the savings figure; if not,
+            set SDD_RETENTION_CAPACITY_RATE so the threshold accounts for it.
 
   - name: shadow
     rules:

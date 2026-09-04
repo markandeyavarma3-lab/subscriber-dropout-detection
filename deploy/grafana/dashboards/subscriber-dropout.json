@@ -1,1142 +1,1261 @@
 {
-  "uid": "subscriber-dropout",
-  "title": "Subscriber Dropout \u2014 Model Health",
-  "tags": [
-    "mlops",
-    "subscriber-dropout"
-  ],
-  "timezone": "browser",
-  "schemaVersion": 39,
-  "version": 1,
-  "refresh": "30s",
-  "time": {
-    "from": "now-24h",
-    "to": "now"
+ "uid": "subscriber-dropout",
+ "title": "Subscriber Dropout \u2014 Model Health",
+ "tags": [
+  "mlops",
+  "subscriber-dropout"
+ ],
+ "timezone": "browser",
+ "schemaVersion": 39,
+ "version": 2,
+ "refresh": "30s",
+ "time": {
+  "from": "now-24h",
+  "to": "now"
+ },
+ "panels": [
+  {
+   "type": "row",
+   "title": "Is it up, and what is it serving?",
+   "gridPos": {
+    "h": 1,
+    "w": 24,
+    "x": 0,
+    "y": 0
+   }
   },
-  "panels": [
+  {
+   "type": "stat",
+   "title": "Model loaded",
+   "description": "0 means the API is live but cannot score anyone \u2014 /predict returns 503.",
+   "gridPos": {
+    "h": 4,
+    "w": 4,
+    "x": 0,
+    "y": 1
+   },
+   "targets": [
     {
-      "type": "row",
-      "title": "Is it up, and what is it serving?",
-      "gridPos": {
-        "h": 1,
-        "w": 24,
-        "x": 0,
-        "y": 0
-      }
-    },
-    {
-      "type": "stat",
-      "title": "Model loaded",
-      "description": "0 means the API is live but cannot score anyone \u2014 /predict returns 503.",
-      "gridPos": {
-        "h": 4,
-        "w": 4,
-        "x": 0,
-        "y": 1
-      },
-      "targets": [
-        {
-          "expr": "subscriber_model_loaded",
-          "refId": "A"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "mappings": [
-            {
-              "type": "value",
-              "options": {
-                "0": {
-                  "text": "NO MODEL",
-                  "color": "red",
-                  "index": 0
-                }
-              }
-            },
-            {
-              "type": "value",
-              "options": {
-                "1": {
-                  "text": "LOADED",
-                  "color": "green",
-                  "index": 1
-                }
-              }
-            }
-          ],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "red",
-                "value": null
-              },
-              {
-                "color": "green",
-                "value": 1
-              }
-            ]
-          }
-        }
-      }
-    },
-    {
-      "type": "stat",
-      "title": "Served from",
-      "description": "'registry' means the promotion gate controls what is live. 'local' means it is reading a file on disk.",
-      "gridPos": {
-        "h": 4,
-        "w": 4,
-        "x": 4,
-        "y": 1
-      },
-      "targets": [
-        {
-          "expr": "subscriber_model_served_from == 1",
-          "legendFormat": "{{source}}",
-          "refId": "A"
-        }
-      ],
-      "options": {
-        "textMode": "name",
-        "colorMode": "background"
-      }
-    },
-    {
-      "type": "stat",
-      "title": "Decision threshold",
-      "description": "Tuned during training, not fixed at 0.5. Predictions at or above this are flagged.",
-      "gridPos": {
-        "h": 4,
-        "w": 4,
-        "x": 8,
-        "y": 1
-      },
-      "targets": [
-        {
-          "expr": "subscriber_decision_threshold",
-          "refId": "A"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "decimals": 2
-        }
-      }
-    },
-    {
-      "type": "stat",
-      "title": "Flagged rate",
-      "description": "Share of scored subscribers above the threshold. Training base rate is ~20%.",
-      "gridPos": {
-        "h": 4,
-        "w": 6,
-        "x": 12,
-        "y": 1
-      },
-      "targets": [
-        {
-          "expr": "subscriber_flagged_rate",
-          "refId": "A"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "percentunit",
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "yellow",
-                "value": 0.35
-              },
-              {
-                "color": "red",
-                "value": 0.5
-              }
-            ]
-          }
-        }
-      }
-    },
-    {
-      "type": "stat",
-      "title": "Score shift vs training",
-      "description": "Live mean probability minus the training-time mean. Moves when behaviour changes, deploy or no deploy.",
-      "gridPos": {
-        "h": 4,
-        "w": 6,
-        "x": 18,
-        "y": 1
-      },
-      "targets": [
-        {
-          "expr": "subscriber_probability_mean_shift",
-          "refId": "A"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "decimals": 3,
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "yellow",
-                "value": 0.1
-              },
-              {
-                "color": "red",
-                "value": 0.15
-              }
-            ]
-          }
-        }
-      }
-    },
-    {
-      "type": "row",
-      "title": "Prediction traffic",
-      "gridPos": {
-        "h": 1,
-        "w": 24,
-        "x": 0,
-        "y": 5
-      }
-    },
-    {
-      "type": "timeseries",
-      "title": "Predictions per second, by risk band",
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 6
-      },
-      "targets": [
-        {
-          "expr": "sum by (risk_level) (rate(subscriber_predictions_total[5m]))",
-          "legendFormat": "{{risk_level}}",
-          "refId": "A"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "custom": {
-            "fillOpacity": 20,
-            "stacking": {
-              "mode": "normal"
-            }
-          }
-        }
-      }
-    },
-    {
-      "type": "timeseries",
-      "title": "Score distribution (median / p90 / p99)",
-      "description": "Quantiles over the probability histogram. A rising p90 with a flat median means the tail is moving, not the whole population.",
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 6
-      },
-      "targets": [
-        {
-          "expr": "histogram_quantile(0.5, sum(rate(subscriber_prediction_probability_bucket[5m])) by (le))",
-          "legendFormat": "p50",
-          "refId": "A"
-        },
-        {
-          "expr": "histogram_quantile(0.9, sum(rate(subscriber_prediction_probability_bucket[5m])) by (le))",
-          "legendFormat": "p90",
-          "refId": "B"
-        },
-        {
-          "expr": "histogram_quantile(0.99, sum(rate(subscriber_prediction_probability_bucket[5m])) by (le))",
-          "legendFormat": "p99",
-          "refId": "C"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "max": 1,
-          "min": 0
-        }
-      }
-    },
-    {
-      "type": "row",
-      "title": "Drift and the retraining pipeline",
-      "gridPos": {
-        "h": 1,
-        "w": 24,
-        "x": 0,
-        "y": 14
-      }
-    },
-    {
-      "type": "stat",
-      "title": "Drift verdict",
-      "description": "From the last pipeline run. 0 stable \u00b7 1 moderate \u00b7 2 significant.",
-      "gridPos": {
-        "h": 5,
-        "w": 5,
-        "x": 0,
-        "y": 15
-      },
-      "targets": [
-        {
-          "expr": "subscriber_drift_verdict",
-          "refId": "A"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "mappings": [
-            {
-              "type": "value",
-              "options": {
-                "0": {
-                  "text": "STABLE",
-                  "color": "green",
-                  "index": 0
-                },
-                "1": {
-                  "text": "MODERATE",
-                  "color": "yellow",
-                  "index": 1
-                },
-                "2": {
-                  "text": "SIGNIFICANT",
-                  "color": "red",
-                  "index": 2
-                }
-              }
-            }
-          ],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "yellow",
-                "value": 1
-              },
-              {
-                "color": "red",
-                "value": 2
-              }
-            ]
-          }
-        }
-      },
-      "options": {
-        "colorMode": "background"
-      }
-    },
-    {
-      "type": "bargauge",
-      "title": "PSI by feature",
-      "description": "Which inputs actually moved. Bands: <0.10 stable, 0.10\u20130.25 moderate, >0.25 significant.",
-      "gridPos": {
-        "h": 10,
-        "w": 11,
-        "x": 5,
-        "y": 15
-      },
-      "targets": [
-        {
-          "expr": "subscriber_drift_psi",
-          "legendFormat": "{{feature}}",
-          "refId": "A"
-        }
-      ],
-      "options": {
-        "orientation": "horizontal",
-        "displayMode": "gradient"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "decimals": 3,
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "yellow",
-                "value": 0.1
-              },
-              {
-                "color": "red",
-                "value": 0.25
-              }
-            ]
-          }
-        }
-      }
-    },
-    {
-      "type": "stat",
-      "title": "Last pipeline run",
-      "description": "A silent scheduler is worse than a failing one: the model ages while everything looks green.",
-      "gridPos": {
-        "h": 5,
-        "w": 4,
-        "x": 16,
-        "y": 15
-      },
-      "targets": [
-        {
-          "expr": "time() - subscriber_pipeline_last_run_timestamp_seconds",
-          "refId": "A"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "s",
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "yellow",
-                "value": 93600
-              },
-              {
-                "color": "red",
-                "value": 129600
-              }
-            ]
-          }
-        }
-      }
-    },
-    {
-      "type": "stat",
-      "title": "Last promotion",
-      "description": "A rejected challenger is the gate working, not a failure.",
-      "gridPos": {
-        "h": 5,
-        "w": 4,
-        "x": 20,
-        "y": 15
-      },
-      "targets": [
-        {
-          "expr": "subscriber_pipeline_promoted",
-          "refId": "A"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "mappings": [
-            {
-              "type": "value",
-              "options": {
-                "0": {
-                  "text": "REJECTED",
-                  "color": "yellow",
-                  "index": 0
-                },
-                "1": {
-                  "text": "PROMOTED",
-                  "color": "green",
-                  "index": 1
-                }
-              }
-            }
-          ]
-        }
-      },
-      "options": {
-        "colorMode": "background"
-      }
-    },
-    {
-      "type": "timeseries",
-      "title": "Drift verdict over time",
-      "description": "The reason Prometheus exists here: the in-process /metrics window forgets everything on restart.",
-      "gridPos": {
-        "h": 5,
-        "w": 19,
-        "x": 5,
-        "y": 25
-      },
-      "targets": [
-        {
-          "expr": "subscriber_drift_verdict",
-          "legendFormat": "verdict",
-          "refId": "A"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "max": 2,
-          "min": 0,
-          "custom": {
-            "fillOpacity": 15,
-            "lineInterpolation": "stepAfter"
-          }
-        }
-      }
-    },
-    {
-      "type": "stat",
-      "title": "Needs attention",
-      "gridPos": {
-        "h": 5,
-        "w": 5,
-        "x": 0,
-        "y": 25
-      },
-      "targets": [
-        {
-          "expr": "subscriber_pipeline_needs_attention",
-          "refId": "A"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "mappings": [
-            {
-              "type": "value",
-              "options": {
-                "0": {
-                  "text": "CLEAR",
-                  "color": "green",
-                  "index": 0
-                },
-                "1": {
-                  "text": "REVIEW",
-                  "color": "orange",
-                  "index": 1
-                }
-              }
-            }
-          ]
-        }
-      },
-      "options": {
-        "colorMode": "background"
-      }
-    },
-    {
-      "type": "row",
-      "title": "Shadow scoring \u2014 the challenger on live traffic",
-      "gridPos": {
-        "h": 1,
-        "w": 24,
-        "x": 0,
-        "y": 30
-      }
-    },
-    {
-      "type": "stat",
-      "title": "Shadow active",
-      "description": "1 when a distinct challenger is scoring live traffic without serving it.",
-      "gridPos": {
-        "h": 5,
-        "w": 4,
-        "x": 0,
-        "y": 31
-      },
-      "targets": [
-        {
-          "expr": "subscriber_shadow_active",
-          "refId": "A"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "mappings": [
-            {
-              "type": "value",
-              "options": {
-                "0": {
-                  "text": "IDLE",
-                  "color": "text",
-                  "index": 0
-                },
-                "1": {
-                  "text": "SHADOWING",
-                  "color": "blue",
-                  "index": 1
-                }
-              }
-            }
-          ]
-        }
-      },
-      "options": {
-        "colorMode": "background"
-      }
-    },
-    {
-      "type": "stat",
-      "title": "Agreement rate",
-      "description": "Share of requests where both models take the same action. Low means a promotion has a large blast radius.",
-      "gridPos": {
-        "h": 5,
-        "w": 5,
-        "x": 4,
-        "y": 31
-      },
-      "targets": [
-        {
-          "expr": "subscriber_shadow_agreement_rate",
-          "refId": "A"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "percentunit",
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "red",
-                "value": null
-              },
-              {
-                "color": "yellow",
-                "value": 0.7
-              },
-              {
-                "color": "green",
-                "value": 0.9
-              }
-            ]
-          }
-        }
-      }
-    },
-    {
-      "type": "stat",
-      "title": "Outreach volume change",
-      "description": "Challenger flagged rate minus champion's. The operational cost the offline gate cannot see.",
-      "gridPos": {
-        "h": 5,
-        "w": 5,
-        "x": 9,
-        "y": 31
-      },
-      "targets": [
-        {
-          "expr": "subscriber_shadow_flagged_rate_delta",
-          "refId": "A"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "percentunit",
-          "decimals": 2,
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "yellow",
-                "value": 0.05
-              },
-              {
-                "color": "red",
-                "value": 0.1
-              }
-            ]
-          }
-        }
-      }
-    },
-    {
-      "type": "stat",
-      "title": "Shadow errors",
-      "description": "Batches the challenger failed on. Never affects a response \u2014 and must block a promotion.",
-      "gridPos": {
-        "h": 5,
-        "w": 4,
-        "x": 14,
-        "y": 31
-      },
-      "targets": [
-        {
-          "expr": "subscriber_shadow_errors_total",
-          "refId": "A"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "red",
-                "value": 1
-              }
-            ]
-          }
-        }
-      }
-    },
-    {
-      "type": "stat",
-      "title": "Shadow cost (p95)",
-      "description": "Latency the second model adds. Shadow scoring runs inline, so this is real.",
-      "gridPos": {
-        "h": 5,
-        "w": 6,
-        "x": 18,
-        "y": 31
-      },
-      "targets": [
-        {
-          "expr": "histogram_quantile(0.95, sum(rate(subscriber_shadow_latency_seconds_bucket[5m])) by (le))",
-          "refId": "A"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "s",
-          "decimals": 4
-        }
-      }
-    },
-    {
-      "type": "timeseries",
-      "title": "Champion/challenger divergence over time",
-      "description": "How far apart the two models' probabilities run. Widening means the challenger is drifting from the incumbent.",
-      "gridPos": {
-        "h": 7,
-        "w": 24,
-        "x": 0,
-        "y": 36
-      },
-      "targets": [
-        {
-          "expr": "histogram_quantile(0.5, sum(rate(subscriber_shadow_divergence_bucket[5m])) by (le))",
-          "legendFormat": "p50",
-          "refId": "A"
-        },
-        {
-          "expr": "histogram_quantile(0.95, sum(rate(subscriber_shadow_divergence_bucket[5m])) by (le))",
-          "legendFormat": "p95",
-          "refId": "B"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "min": 0
-        }
-      }
-    },
-    {
-      "type": "row",
-      "title": "Decision quality \u2014 is the model fit for the decision it drives?",
-      "gridPos": {
-        "h": 1,
-        "w": 24,
-        "x": 0,
-        "y": 30
-      }
-    },
-    {
-      "type": "stat",
-      "title": "Fairness audit",
-      "description": "Does the model work equally well across groups? A selection-rate gap may be correct; a recall or AUC gap is far harder to justify.",
-      "gridPos": {
-        "h": 5,
-        "w": 5,
-        "x": 0,
-        "y": 31
-      },
-      "targets": [
-        {
-          "expr": "subscriber_model_fairness_passes",
-          "refId": "A"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "mappings": [
-            {
-              "type": "value",
-              "options": {
-                "0": {
-                  "text": "DISPARITY",
-                  "color": "orange",
-                  "index": 0
-                },
-                "1": {
-                  "text": "PASSES",
-                  "color": "green",
-                  "index": 1
-                }
-              }
-            }
-          ]
-        }
-      },
-      "options": {
-        "colorMode": "background"
-      }
-    },
-    {
-      "type": "bargauge",
-      "title": "Group disparity ratios",
-      "description": "Worst-to-best group ratio per metric. Below 0.8 (the four-fifths convention) is a prompt to look, never a verdict.",
-      "gridPos": {
-        "h": 5,
-        "w": 11,
-        "x": 5,
-        "y": 31
-      },
-      "targets": [
-        {
-          "expr": "subscriber_model_fairness_ratio",
-          "legendFormat": "{{metric}}",
-          "refId": "A"
-        }
-      ],
-      "options": {
-        "orientation": "horizontal",
-        "displayMode": "gradient"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "max": 1,
-          "min": 0,
-          "decimals": 3,
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "red",
-                "value": null
-              },
-              {
-                "color": "green",
-                "value": 0.8
-              }
-            ]
-          }
-        }
-      }
-    },
-    {
-      "type": "stat",
-      "title": "Calibration error",
-      "description": "ECE: when the model says 0.7, does 70% of that group actually churn? Only matters because probabilities are multiplied by money.",
-      "gridPos": {
-        "h": 5,
-        "w": 4,
-        "x": 16,
-        "y": 31
-      },
-      "targets": [
-        {
-          "expr": "subscriber_model_calibration_ece",
-          "refId": "A"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "decimals": 4,
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "yellow",
-                "value": 0.05
-              },
-              {
-                "color": "red",
-                "value": 0.1
-              }
-            ]
-          }
-        }
-      }
-    },
-    {
-      "type": "stat",
-      "title": "Savings left on the table",
-      "description": "What the cost-optimal threshold would save versus the one in use, on the test split.",
-      "gridPos": {
-        "h": 5,
-        "w": 4,
-        "x": 20,
-        "y": 31
-      },
-      "targets": [
-        {
-          "expr": "subscriber_model_cost_savings_available",
-          "refId": "A"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "decimals": 0
-        }
-      }
-    },
-    {
-      "type": "timeseries",
-      "title": "Streaming throughput (scorer + API)",
-      "description": "The stream scorer serves its own metrics on :8001, scraped as a separate job so a dead consumer is not hidden by a healthy API.",
-      "gridPos": {
-        "h": 6,
-        "w": 24,
-        "x": 0,
-        "y": 36
-      },
-      "targets": [
-        {
-          "expr": "sum by (component) (rate(subscriber_predictions_total[5m]))",
-          "legendFormat": "{{component}}",
-          "refId": "A"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "custom": {
-            "fillOpacity": 15
-          }
-        }
-      }
-    },
-    {
-      "type": "row",
-      "title": "Shadow scoring \u2014 what happens if we promote the challenger?",
-      "gridPos": {
-        "h": 1,
-        "w": 24,
-        "x": 0,
-        "y": 42
-      }
-    },
-    {
-      "type": "stat",
-      "title": "Shadow scoring",
-      "description": "Idle is normal: @challenger and @champion point at the same version straight after a promotion.",
-      "gridPos": {
-        "h": 5,
-        "w": 4,
-        "x": 0,
-        "y": 43
-      },
-      "targets": [
-        {
-          "expr": "subscriber_shadow_active",
-          "refId": "A"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "mappings": [
-            {
-              "type": "value",
-              "options": {
-                "0": {
-                  "text": "IDLE",
-                  "color": "text",
-                  "index": 0
-                },
-                "1": {
-                  "text": "ACTIVE",
-                  "color": "blue",
-                  "index": 1
-                }
-              }
-            }
-          ]
-        }
-      },
-      "options": {
-        "colorMode": "background"
-      }
-    },
-    {
-      "type": "timeseries",
-      "title": "Comparisons per second, by agreement",
-      "description": "Evidence accumulating. Agreement rates below a few hundred comparisons are noise dressed as a result.",
-      "gridPos": {
-        "h": 6,
-        "w": 10,
-        "x": 4,
-        "y": 43
-      },
-      "targets": [
-        {
-          "expr": "sum by (agreed) (rate(subscriber_shadow_comparisons_total[5m]))",
-          "legendFormat": "agreed={{agreed}}",
-          "refId": "A"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "custom": {
-            "fillOpacity": 20,
-            "stacking": {
-              "mode": "normal"
-            }
-          }
-        }
-      }
-    },
-    {
-      "type": "stat",
-      "title": "Agreement rate",
-      "description": "97% means promoting changes almost nothing. 60% means the outreach list is about to be rewritten.",
-      "gridPos": {
-        "h": 5,
-        "w": 5,
-        "x": 14,
-        "y": 43
-      },
-      "targets": [
-        {
-          "expr": "subscriber_shadow_agreement_rate",
-          "refId": "A"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "percentunit",
-          "decimals": 3
-        }
-      }
-    },
-    {
-      "type": "stat",
-      "title": "Flagged-rate change on promotion",
-      "description": "How much the outreach list would grow or shrink the moment the challenger takes over.",
-      "gridPos": {
-        "h": 5,
-        "w": 5,
-        "x": 19,
-        "y": 43
-      },
-      "targets": [
-        {
-          "expr": "subscriber_shadow_flagged_rate_delta",
-          "refId": "A"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "percentunit",
-          "decimals": 3,
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "yellow",
-                "value": 0.05
-              },
-              {
-                "color": "red",
-                "value": 0.15
-              }
-            ]
-          }
-        }
-      }
-    },
-    {
-      "type": "stat",
-      "title": "Drift sample size",
-      "description": "PSI below a few hundred rows is sampling noise; the pipeline reports whether the batch was large enough to trust.",
-      "gridPos": {
-        "h": 4,
-        "w": 5,
-        "x": 0,
-        "y": 49
-      },
-      "targets": [
-        {
-          "expr": "subscriber_drift_sample_size",
-          "refId": "A"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "decimals": 0,
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "red",
-                "value": null
-              },
-              {
-                "color": "green",
-                "value": 100
-              }
-            ]
-          }
-        }
-      }
-    },
-    {
-      "type": "timeseries",
-      "title": "Shadow errors",
-      "description": "A challenger failing on live traffic never affects a response - and should block its promotion.",
-      "gridPos": {
-        "h": 4,
-        "w": 19,
-        "x": 5,
-        "y": 49
-      },
-      "targets": [
-        {
-          "expr": "rate(subscriber_shadow_errors_total[5m])",
-          "legendFormat": "errors/s",
-          "refId": "A"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "custom": {
-            "fillOpacity": 20
-          },
-          "color": {
-            "mode": "fixed",
-            "fixedColor": "red"
-          }
-        }
-      }
+     "expr": "subscriber_model_loaded",
+     "refId": "A"
     }
-  ]
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "mappings": [
+      {
+       "type": "value",
+       "options": {
+        "0": {
+         "text": "NO MODEL",
+         "color": "red",
+         "index": 0
+        }
+       }
+      },
+      {
+       "type": "value",
+       "options": {
+        "1": {
+         "text": "LOADED",
+         "color": "green",
+         "index": 1
+        }
+       }
+      }
+     ],
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "red",
+        "value": null
+       },
+       {
+        "color": "green",
+        "value": 1
+       }
+      ]
+     }
+    }
+   }
+  },
+  {
+   "type": "stat",
+   "title": "Served from",
+   "description": "'registry' means the promotion gate controls what is live. 'local' means it is reading a file on disk.",
+   "gridPos": {
+    "h": 4,
+    "w": 4,
+    "x": 4,
+    "y": 1
+   },
+   "targets": [
+    {
+     "expr": "subscriber_model_served_from == 1",
+     "legendFormat": "{{source}}",
+     "refId": "A"
+    }
+   ],
+   "options": {
+    "textMode": "name",
+    "colorMode": "background"
+   }
+  },
+  {
+   "type": "stat",
+   "title": "Decision threshold",
+   "description": "Tuned during training, not fixed at 0.5. Predictions at or above this are flagged.",
+   "gridPos": {
+    "h": 4,
+    "w": 4,
+    "x": 8,
+    "y": 1
+   },
+   "targets": [
+    {
+     "expr": "subscriber_decision_threshold",
+     "refId": "A"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "decimals": 2
+    }
+   }
+  },
+  {
+   "type": "stat",
+   "title": "Flagged rate",
+   "description": "Share of scored subscribers above the threshold. Training base rate is ~20%.",
+   "gridPos": {
+    "h": 4,
+    "w": 6,
+    "x": 12,
+    "y": 1
+   },
+   "targets": [
+    {
+     "expr": "subscriber_flagged_rate",
+     "refId": "A"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "percentunit",
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       },
+       {
+        "color": "yellow",
+        "value": 0.35
+       },
+       {
+        "color": "red",
+        "value": 0.5
+       }
+      ]
+     }
+    }
+   }
+  },
+  {
+   "type": "stat",
+   "title": "Score shift vs training",
+   "description": "Live mean probability minus the training-time mean. Moves when behaviour changes, deploy or no deploy.",
+   "gridPos": {
+    "h": 4,
+    "w": 6,
+    "x": 18,
+    "y": 1
+   },
+   "targets": [
+    {
+     "expr": "subscriber_probability_mean_shift",
+     "refId": "A"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "decimals": 3,
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       },
+       {
+        "color": "yellow",
+        "value": 0.1
+       },
+       {
+        "color": "red",
+        "value": 0.15
+       }
+      ]
+     }
+    }
+   }
+  },
+  {
+   "type": "row",
+   "title": "Prediction traffic",
+   "gridPos": {
+    "h": 1,
+    "w": 24,
+    "x": 0,
+    "y": 5
+   }
+  },
+  {
+   "type": "timeseries",
+   "title": "Predictions per second, by risk band",
+   "gridPos": {
+    "h": 8,
+    "w": 12,
+    "x": 0,
+    "y": 6
+   },
+   "targets": [
+    {
+     "expr": "sum by (risk_level) (rate(subscriber_predictions_total[5m]))",
+     "legendFormat": "{{risk_level}}",
+     "refId": "A"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "custom": {
+      "fillOpacity": 20,
+      "stacking": {
+       "mode": "normal"
+      }
+     }
+    }
+   }
+  },
+  {
+   "type": "timeseries",
+   "title": "Score distribution (median / p90 / p99)",
+   "description": "Quantiles over the probability histogram. A rising p90 with a flat median means the tail is moving, not the whole population.",
+   "gridPos": {
+    "h": 8,
+    "w": 12,
+    "x": 12,
+    "y": 6
+   },
+   "targets": [
+    {
+     "expr": "histogram_quantile(0.5, sum(rate(subscriber_prediction_probability_bucket[5m])) by (le))",
+     "legendFormat": "p50",
+     "refId": "A"
+    },
+    {
+     "expr": "histogram_quantile(0.9, sum(rate(subscriber_prediction_probability_bucket[5m])) by (le))",
+     "legendFormat": "p90",
+     "refId": "B"
+    },
+    {
+     "expr": "histogram_quantile(0.99, sum(rate(subscriber_prediction_probability_bucket[5m])) by (le))",
+     "legendFormat": "p99",
+     "refId": "C"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "max": 1,
+     "min": 0
+    }
+   }
+  },
+  {
+   "type": "row",
+   "title": "Drift and the retraining pipeline",
+   "gridPos": {
+    "h": 1,
+    "w": 24,
+    "x": 0,
+    "y": 14
+   }
+  },
+  {
+   "type": "stat",
+   "title": "Drift verdict",
+   "description": "From the last pipeline run. 0 stable \u00b7 1 moderate \u00b7 2 significant.",
+   "gridPos": {
+    "h": 5,
+    "w": 5,
+    "x": 0,
+    "y": 15
+   },
+   "targets": [
+    {
+     "expr": "subscriber_drift_verdict",
+     "refId": "A"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "mappings": [
+      {
+       "type": "value",
+       "options": {
+        "0": {
+         "text": "STABLE",
+         "color": "green",
+         "index": 0
+        },
+        "1": {
+         "text": "MODERATE",
+         "color": "yellow",
+         "index": 1
+        },
+        "2": {
+         "text": "SIGNIFICANT",
+         "color": "red",
+         "index": 2
+        }
+       }
+      }
+     ],
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       },
+       {
+        "color": "yellow",
+        "value": 1
+       },
+       {
+        "color": "red",
+        "value": 2
+       }
+      ]
+     }
+    }
+   },
+   "options": {
+    "colorMode": "background"
+   }
+  },
+  {
+   "type": "bargauge",
+   "title": "PSI by feature",
+   "description": "Which inputs actually moved. Bands: <0.10 stable, 0.10\u20130.25 moderate, >0.25 significant.",
+   "gridPos": {
+    "h": 10,
+    "w": 11,
+    "x": 5,
+    "y": 15
+   },
+   "targets": [
+    {
+     "expr": "subscriber_drift_psi",
+     "legendFormat": "{{feature}}",
+     "refId": "A"
+    }
+   ],
+   "options": {
+    "orientation": "horizontal",
+    "displayMode": "gradient"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "decimals": 3,
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       },
+       {
+        "color": "yellow",
+        "value": 0.1
+       },
+       {
+        "color": "red",
+        "value": 0.25
+       }
+      ]
+     }
+    }
+   }
+  },
+  {
+   "type": "stat",
+   "title": "Last pipeline run",
+   "description": "A silent scheduler is worse than a failing one: the model ages while everything looks green.",
+   "gridPos": {
+    "h": 5,
+    "w": 4,
+    "x": 16,
+    "y": 15
+   },
+   "targets": [
+    {
+     "expr": "time() - subscriber_pipeline_last_run_timestamp_seconds",
+     "refId": "A"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "s",
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       },
+       {
+        "color": "yellow",
+        "value": 93600
+       },
+       {
+        "color": "red",
+        "value": 129600
+       }
+      ]
+     }
+    }
+   }
+  },
+  {
+   "type": "stat",
+   "title": "Last promotion",
+   "description": "A rejected challenger is the gate working, not a failure.",
+   "gridPos": {
+    "h": 5,
+    "w": 4,
+    "x": 20,
+    "y": 15
+   },
+   "targets": [
+    {
+     "expr": "subscriber_pipeline_promoted",
+     "refId": "A"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "mappings": [
+      {
+       "type": "value",
+       "options": {
+        "0": {
+         "text": "REJECTED",
+         "color": "yellow",
+         "index": 0
+        },
+        "1": {
+         "text": "PROMOTED",
+         "color": "green",
+         "index": 1
+        }
+       }
+      }
+     ]
+    }
+   },
+   "options": {
+    "colorMode": "background"
+   }
+  },
+  {
+   "type": "timeseries",
+   "title": "Drift verdict over time",
+   "description": "The reason Prometheus exists here: the in-process /metrics window forgets everything on restart.",
+   "gridPos": {
+    "h": 5,
+    "w": 19,
+    "x": 5,
+    "y": 25
+   },
+   "targets": [
+    {
+     "expr": "subscriber_drift_verdict",
+     "legendFormat": "verdict",
+     "refId": "A"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "max": 2,
+     "min": 0,
+     "custom": {
+      "fillOpacity": 15,
+      "lineInterpolation": "stepAfter"
+     }
+    }
+   }
+  },
+  {
+   "type": "stat",
+   "title": "Needs attention",
+   "gridPos": {
+    "h": 5,
+    "w": 5,
+    "x": 0,
+    "y": 25
+   },
+   "targets": [
+    {
+     "expr": "subscriber_pipeline_needs_attention",
+     "refId": "A"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "mappings": [
+      {
+       "type": "value",
+       "options": {
+        "0": {
+         "text": "CLEAR",
+         "color": "green",
+         "index": 0
+        },
+        "1": {
+         "text": "REVIEW",
+         "color": "orange",
+         "index": 1
+        }
+       }
+      }
+     ]
+    }
+   },
+   "options": {
+    "colorMode": "background"
+   }
+  },
+  {
+   "type": "row",
+   "title": "Shadow scoring \u2014 the challenger on live traffic",
+   "gridPos": {
+    "h": 1,
+    "w": 24,
+    "x": 0,
+    "y": 30
+   }
+  },
+  {
+   "type": "stat",
+   "title": "Shadow active",
+   "description": "1 when a distinct challenger is scoring live traffic without serving it.",
+   "gridPos": {
+    "h": 5,
+    "w": 4,
+    "x": 0,
+    "y": 31
+   },
+   "targets": [
+    {
+     "expr": "subscriber_shadow_active",
+     "refId": "A"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "mappings": [
+      {
+       "type": "value",
+       "options": {
+        "0": {
+         "text": "IDLE",
+         "color": "text",
+         "index": 0
+        },
+        "1": {
+         "text": "SHADOWING",
+         "color": "blue",
+         "index": 1
+        }
+       }
+      }
+     ]
+    }
+   },
+   "options": {
+    "colorMode": "background"
+   }
+  },
+  {
+   "type": "stat",
+   "title": "Agreement rate",
+   "description": "Share of requests where both models take the same action. Low means a promotion has a large blast radius.",
+   "gridPos": {
+    "h": 5,
+    "w": 5,
+    "x": 4,
+    "y": 31
+   },
+   "targets": [
+    {
+     "expr": "subscriber_shadow_agreement_rate",
+     "refId": "A"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "percentunit",
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "red",
+        "value": null
+       },
+       {
+        "color": "yellow",
+        "value": 0.7
+       },
+       {
+        "color": "green",
+        "value": 0.9
+       }
+      ]
+     }
+    }
+   }
+  },
+  {
+   "type": "stat",
+   "title": "Outreach volume change",
+   "description": "Challenger flagged rate minus champion's. The operational cost the offline gate cannot see.",
+   "gridPos": {
+    "h": 5,
+    "w": 5,
+    "x": 9,
+    "y": 31
+   },
+   "targets": [
+    {
+     "expr": "subscriber_shadow_flagged_rate_delta",
+     "refId": "A"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "percentunit",
+     "decimals": 2,
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       },
+       {
+        "color": "yellow",
+        "value": 0.05
+       },
+       {
+        "color": "red",
+        "value": 0.1
+       }
+      ]
+     }
+    }
+   }
+  },
+  {
+   "type": "stat",
+   "title": "Shadow errors",
+   "description": "Batches the challenger failed on. Never affects a response \u2014 and must block a promotion.",
+   "gridPos": {
+    "h": 5,
+    "w": 4,
+    "x": 14,
+    "y": 31
+   },
+   "targets": [
+    {
+     "expr": "subscriber_shadow_errors_total",
+     "refId": "A"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       },
+       {
+        "color": "red",
+        "value": 1
+       }
+      ]
+     }
+    }
+   }
+  },
+  {
+   "type": "stat",
+   "title": "Shadow cost (p95)",
+   "description": "Latency the second model adds. Shadow scoring runs inline, so this is real.",
+   "gridPos": {
+    "h": 5,
+    "w": 6,
+    "x": 18,
+    "y": 31
+   },
+   "targets": [
+    {
+     "expr": "histogram_quantile(0.95, sum(rate(subscriber_shadow_latency_seconds_bucket[5m])) by (le))",
+     "refId": "A"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "s",
+     "decimals": 4
+    }
+   }
+  },
+  {
+   "type": "timeseries",
+   "title": "Champion/challenger divergence over time",
+   "description": "How far apart the two models' probabilities run. Widening means the challenger is drifting from the incumbent.",
+   "gridPos": {
+    "h": 7,
+    "w": 24,
+    "x": 0,
+    "y": 36
+   },
+   "targets": [
+    {
+     "expr": "histogram_quantile(0.5, sum(rate(subscriber_shadow_divergence_bucket[5m])) by (le))",
+     "legendFormat": "p50",
+     "refId": "A"
+    },
+    {
+     "expr": "histogram_quantile(0.95, sum(rate(subscriber_shadow_divergence_bucket[5m])) by (le))",
+     "legendFormat": "p95",
+     "refId": "B"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "min": 0
+    }
+   }
+  },
+  {
+   "type": "row",
+   "title": "Decision quality \u2014 is the model fit for the decision it drives?",
+   "gridPos": {
+    "h": 1,
+    "w": 24,
+    "x": 0,
+    "y": 30
+   }
+  },
+  {
+   "type": "stat",
+   "title": "Fairness audit",
+   "description": "Does the model work equally well across groups? A selection-rate gap may be correct; a recall or AUC gap is far harder to justify.",
+   "gridPos": {
+    "h": 5,
+    "w": 5,
+    "x": 0,
+    "y": 31
+   },
+   "targets": [
+    {
+     "expr": "subscriber_model_fairness_passes",
+     "refId": "A"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "mappings": [
+      {
+       "type": "value",
+       "options": {
+        "0": {
+         "text": "DISPARITY",
+         "color": "orange",
+         "index": 0
+        },
+        "1": {
+         "text": "PASSES",
+         "color": "green",
+         "index": 1
+        }
+       }
+      }
+     ]
+    }
+   },
+   "options": {
+    "colorMode": "background"
+   }
+  },
+  {
+   "type": "bargauge",
+   "title": "Group disparity ratios",
+   "description": "Worst-to-best group ratio per metric. Below 0.8 (the four-fifths convention) is a prompt to look, never a verdict.",
+   "gridPos": {
+    "h": 5,
+    "w": 11,
+    "x": 5,
+    "y": 31
+   },
+   "targets": [
+    {
+     "expr": "subscriber_model_fairness_ratio",
+     "legendFormat": "{{metric}}",
+     "refId": "A"
+    }
+   ],
+   "options": {
+    "orientation": "horizontal",
+    "displayMode": "gradient"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "max": 1,
+     "min": 0,
+     "decimals": 3,
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "red",
+        "value": null
+       },
+       {
+        "color": "green",
+        "value": 0.8
+       }
+      ]
+     }
+    }
+   }
+  },
+  {
+   "type": "stat",
+   "title": "Calibration error",
+   "description": "ECE: when the model says 0.7, does 70% of that group actually churn? Only matters because probabilities are multiplied by money.",
+   "gridPos": {
+    "h": 5,
+    "w": 4,
+    "x": 16,
+    "y": 31
+   },
+   "targets": [
+    {
+     "expr": "subscriber_model_calibration_ece",
+     "refId": "A"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "decimals": 4,
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       },
+       {
+        "color": "yellow",
+        "value": 0.05
+       },
+       {
+        "color": "red",
+        "value": 0.1
+       }
+      ]
+     }
+    }
+   }
+  },
+  {
+   "type": "stat",
+   "title": "Savings left on the table",
+   "description": "What the cost-optimal threshold would save versus the one in use, on the test split.",
+   "gridPos": {
+    "h": 5,
+    "w": 4,
+    "x": 20,
+    "y": 31
+   },
+   "targets": [
+    {
+     "expr": "subscriber_model_cost_savings_available",
+     "refId": "A"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "decimals": 0
+    }
+   }
+  },
+  {
+   "type": "timeseries",
+   "title": "Streaming throughput (scorer + API)",
+   "description": "The stream scorer serves its own metrics on :8001, scraped as a separate job so a dead consumer is not hidden by a healthy API.",
+   "gridPos": {
+    "h": 6,
+    "w": 24,
+    "x": 0,
+    "y": 36
+   },
+   "targets": [
+    {
+     "expr": "sum by (component) (rate(subscriber_predictions_total[5m]))",
+     "legendFormat": "{{component}}",
+     "refId": "A"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "custom": {
+      "fillOpacity": 15
+     }
+    }
+   }
+  },
+  {
+   "type": "row",
+   "title": "Shadow scoring \u2014 what happens if we promote the challenger?",
+   "gridPos": {
+    "h": 1,
+    "w": 24,
+    "x": 0,
+    "y": 42
+   }
+  },
+  {
+   "type": "stat",
+   "title": "Shadow scoring",
+   "description": "Idle is normal: @challenger and @champion point at the same version straight after a promotion.",
+   "gridPos": {
+    "h": 5,
+    "w": 4,
+    "x": 0,
+    "y": 43
+   },
+   "targets": [
+    {
+     "expr": "subscriber_shadow_active",
+     "refId": "A"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "mappings": [
+      {
+       "type": "value",
+       "options": {
+        "0": {
+         "text": "IDLE",
+         "color": "text",
+         "index": 0
+        },
+        "1": {
+         "text": "ACTIVE",
+         "color": "blue",
+         "index": 1
+        }
+       }
+      }
+     ]
+    }
+   },
+   "options": {
+    "colorMode": "background"
+   }
+  },
+  {
+   "type": "timeseries",
+   "title": "Comparisons per second, by agreement",
+   "description": "Evidence accumulating. Agreement rates below a few hundred comparisons are noise dressed as a result.",
+   "gridPos": {
+    "h": 6,
+    "w": 10,
+    "x": 4,
+    "y": 43
+   },
+   "targets": [
+    {
+     "expr": "sum by (agreed) (rate(subscriber_shadow_comparisons_total[5m]))",
+     "legendFormat": "agreed={{agreed}}",
+     "refId": "A"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "custom": {
+      "fillOpacity": 20,
+      "stacking": {
+       "mode": "normal"
+      }
+     }
+    }
+   }
+  },
+  {
+   "type": "stat",
+   "title": "Agreement rate",
+   "description": "97% means promoting changes almost nothing. 60% means the outreach list is about to be rewritten.",
+   "gridPos": {
+    "h": 5,
+    "w": 5,
+    "x": 14,
+    "y": 43
+   },
+   "targets": [
+    {
+     "expr": "subscriber_shadow_agreement_rate",
+     "refId": "A"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "percentunit",
+     "decimals": 3
+    }
+   }
+  },
+  {
+   "type": "stat",
+   "title": "Flagged-rate change on promotion",
+   "description": "How much the outreach list would grow or shrink the moment the challenger takes over.",
+   "gridPos": {
+    "h": 5,
+    "w": 5,
+    "x": 19,
+    "y": 43
+   },
+   "targets": [
+    {
+     "expr": "subscriber_shadow_flagged_rate_delta",
+     "refId": "A"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "percentunit",
+     "decimals": 3,
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       },
+       {
+        "color": "yellow",
+        "value": 0.05
+       },
+       {
+        "color": "red",
+        "value": 0.15
+       }
+      ]
+     }
+    }
+   }
+  },
+  {
+   "type": "stat",
+   "title": "Drift sample size",
+   "description": "PSI below a few hundred rows is sampling noise; the pipeline reports whether the batch was large enough to trust.",
+   "gridPos": {
+    "h": 4,
+    "w": 5,
+    "x": 0,
+    "y": 49
+   },
+   "targets": [
+    {
+     "expr": "subscriber_drift_sample_size",
+     "refId": "A"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "decimals": 0,
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "red",
+        "value": null
+       },
+       {
+        "color": "green",
+        "value": 100
+       }
+      ]
+     }
+    }
+   }
+  },
+  {
+   "type": "timeseries",
+   "title": "Shadow errors",
+   "description": "A challenger failing on live traffic never affects a response - and should block its promotion.",
+   "gridPos": {
+    "h": 4,
+    "w": 19,
+    "x": 5,
+    "y": 49
+   },
+   "targets": [
+    {
+     "expr": "rate(subscriber_shadow_errors_total[5m])",
+     "legendFormat": "errors/s",
+     "refId": "A"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "custom": {
+      "fillOpacity": 20
+     },
+     "color": {
+      "mode": "fixed",
+      "fixedColor": "red"
+     }
+    }
+   }
+  },
+  {
+   "type": "row",
+   "title": "Outreach capacity",
+   "gridPos": {
+    "h": 1,
+    "w": 24,
+    "x": 0,
+    "y": 53
+   },
+   "collapsed": false,
+   "panels": []
+  },
+  {
+   "type": "stat",
+   "title": "Offers the model wants to send",
+   "description": "How many subscribers the cost-optimal threshold flags on the test split. Every money figure on this dashboard assumes all of them are actually contacted.",
+   "gridPos": {
+    "h": 5,
+    "w": 6,
+    "x": 0,
+    "y": 54
+   },
+   "targets": [
+    {
+     "expr": "subscriber_model_offers_required",
+     "refId": "A"
+    }
+   ]
+  },
+  {
+   "type": "stat",
+   "title": "Budget is the binding constraint",
+   "description": "1 means the campaign is limited by how many offers can be made, not by which subscribers are worth contacting. When this is 1 the cost-optimal threshold is not the threshold in force.",
+   "gridPos": {
+    "h": 5,
+    "w": 6,
+    "x": 6,
+    "y": 54
+   },
+   "targets": [
+    {
+     "expr": "subscriber_model_capacity_binding",
+     "refId": "A"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "mappings": [
+      {
+       "type": "value",
+       "options": {
+        "0": {
+         "text": "NOT BINDING",
+         "color": "green",
+         "index": 0
+        }
+       }
+      },
+      {
+       "type": "value",
+       "options": {
+        "1": {
+         "text": "BINDING",
+         "color": "orange",
+         "index": 1
+        }
+       }
+      }
+     ],
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       },
+       {
+        "color": "orange",
+        "value": 1
+       }
+      ]
+     }
+    }
+   }
+  },
+  {
+   "type": "stat",
+   "title": "Subscribers the budget cannot cover",
+   "description": "Flagged, worth contacting, and going uncontacted. This is the number to take to whoever owns the retention budget.",
+   "gridPos": {
+    "h": 5,
+    "w": 6,
+    "x": 12,
+    "y": 54
+   },
+   "targets": [
+    {
+     "expr": "subscriber_model_capacity_shortfall",
+     "refId": "A"
+    }
+   ]
+  },
+  {
+   "type": "stat",
+   "title": "Cost of the capacity ceiling",
+   "description": "What the budget limit costs on the test split, against unconstrained cost-optimal outreach. Compare against the cost of raising the budget.",
+   "gridPos": {
+    "h": 5,
+    "w": 6,
+    "x": 18,
+    "y": 54
+   },
+   "targets": [
+    {
+     "expr": "subscriber_model_capacity_cost",
+     "refId": "A"
+    }
+   ]
+  }
+ ]
 }

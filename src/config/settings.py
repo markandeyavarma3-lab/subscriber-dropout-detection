@@ -36,6 +36,22 @@ def _env_float(name: str, default: float) -> float:
     return float(os.getenv(name, default))
 
 
+def _env_optional_int(name: str) -> int | None:
+    """Read an int that is meaningfully absent rather than zero.
+
+    A capacity of 0 ("we can contact nobody") is a different statement from no
+    capacity constraint at all, so the unset case cannot be folded into a
+    numeric default.
+    """
+    raw = os.getenv(name)
+    return int(raw) if raw not in (None, "") else None
+
+
+def _env_optional_float(name: str) -> float | None:
+    raw = os.getenv(name)
+    return float(raw) if raw not in (None, "") else None
+
+
 SRC_DIR: Path = PROJECT_ROOT / "src"
 DATA_DIR: Path = _env_path("SDD_DATA_DIR", SRC_DIR / "data")
 RAW_DATA_DIR: Path = DATA_DIR / "raw"
@@ -184,6 +200,29 @@ COST_TRUE_POSITIVE: float = _env_float("SDD_COST_TRUE_POSITIVE", 20.0)
 # blanket outreach look optimal, because it is, under that assumption. Real
 # campaigns convert perhaps a fifth to a third.
 OFFER_EFFICACY: float = _env_float("SDD_OFFER_EFFICACY", 0.30)
+
+# How many retention offers the team can actually make per scoring cycle.
+#
+# The cost-optimal threshold assumes you can act on everyone it flags. Real
+# retention teams cannot: there is a budget, a contact-frequency policy, and a
+# finite number of people to run the campaign. Under a hard cap the optimal
+# policy stops being "everyone above t" and becomes "the top k by score" -
+# which is still a threshold, just one set by the data rather than by the
+# arithmetic.
+#
+# Left unset by default, deliberately. Inventing a capacity number would repeat
+# the mistake OFFER_EFFICACY was added to fix: a default that quietly asserts
+# something about a business nobody asked. Unset means the report still
+# computes the full capacity curve - what each extra slot would be worth - it
+# just does not constrain the threshold.
+#
+#   SDD_RETENTION_CAPACITY       absolute offers per cycle (e.g. 500)
+#   SDD_RETENTION_CAPACITY_RATE  fraction of the scored population (e.g. 0.05)
+#
+# Set at most one. The rate is the portable one: an absolute count tuned
+# against a 200k subscriber base means nothing on a 1,200-row holdout.
+RETENTION_CAPACITY: int | None = _env_optional_int("SDD_RETENTION_CAPACITY")
+RETENTION_CAPACITY_RATE: float | None = _env_optional_float("SDD_RETENTION_CAPACITY_RATE")
 
 # Isotonic is non-parametric and fixes boosting's S-shaped distortion without
 # assuming its shape; it needs a few hundred rows, which validation has.

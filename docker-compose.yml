@@ -79,6 +79,7 @@ services:
     container_name: subscriber-prometheus
     depends_on:
       - subscriber-api
+      - alertmanager
     command:
       - --config.file=/etc/prometheus/prometheus.yml
       - --storage.tsdb.path=/prometheus
@@ -90,6 +91,27 @@ services:
       - ./deploy/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ./deploy/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
       - prometheus-data:/prometheus
+    restart: unless-stopped
+
+  # Turns firing rules into notifications. Prometheus evaluates; Alertmanager
+  # groups, dedupes, inhibits and routes. Its receivers ship with no
+  # integration attached - see the comment at the top of alertmanager.yml for
+  # why credentials stay out of the repo - so alerts are visible and
+  # silenceable at :9093 rather than pushed outbound.
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    container_name: subscriber-alertmanager
+    command:
+      - --config.file=/etc/alertmanager/alertmanager.yml
+      - --storage.path=/alertmanager
+      # Alertmanager needs to know its own address to build the links it puts
+      # in notifications; without this they point at the container hostname.
+      - --web.external-url=http://localhost:9093
+    ports:
+      - "9093:9093"
+    volumes:
+      - ./deploy/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - alertmanager-data:/alertmanager
     restart: unless-stopped
 
   # Comes up already wired: the datasource and dashboard are provisioned from
@@ -170,3 +192,4 @@ volumes:
   mlflow-artifacts:
   prometheus-data:
   grafana-data:
+  alertmanager-data:

@@ -26,6 +26,27 @@ purpose. When they agree, the probabilities are well calibrated and the
 analytic answer can be trusted going forward. When they diverge, that gap *is*
 the calibration error made visible in currency - which is a far more legible
 argument for calibrating than an ECE of 0.04.
+
+The capacity constraint
+-----------------------
+
+Both methods above share an assumption that no retention team has ever been
+able to make: that you can act on everyone the threshold flags. In practice
+there is a budget, a contact-frequency policy, and a finite number of people to
+run the campaign. Under a hard cap of ``k`` offers the optimal policy is no
+longer "everyone above t" - it is **the top k by score**, which is still a
+threshold, just one the score distribution picks rather than the arithmetic.
+
+The two combine cleanly: the constrained threshold is
+``max(unconstrained_optimum, kth_highest_score)``. The cap raises the bar when
+it binds; below the unconstrained optimum a slot is not worth using even when
+it is free, because contacting that person loses money whether or not you had
+the capacity.
+
+:func:`capacity_report` computes this whether or not a cap is configured,
+because the interesting output needs no budget number to exist: the marginal
+value of one more offer slot. That is the argument somebody takes to the
+person who owns the budget.
 """
 
 from __future__ import annotations
@@ -165,19 +186,228 @@ def cost_optimal_threshold(
     return threshold, detail
 
 
+@dataclass(frozen=True)
+class CapacityConstraint:
+    """How many retention offers can actually be made per scoring cycle.
+
+    Expressed either as an absolute count or as a fraction of the scored
+    population, never both - they are two ways of saying the same thing and
+    accepting both at once invites a silent contradiction.
+
+    The rate is the portable one. An absolute cap tuned against a 200,000
+    subscriber base is meaningless applied to a 1,200-row holdout, and the
+    holdout is where every number in this module is computed.
+    """
+
+    max_offers: int | None = None
+    max_offer_rate: float | None = None
+
+    def __post_init__(self) -> None:
+        if self.max_offers is not None and self.max_offer_rate is not None:
+            raise ValueError(
+                "Set max_offers or max_offer_rate, not both: they express the "
+                "same constraint and would disagree on any population size."
+            )
+        if self.max_offers is not None and self.max_offers < 0:
+            raise ValueError("max_offers cannot be negative.")
+        if self.max_offer_rate is not None and not 0.0 <= self.max_offer_rate <= 1.0:
+            raise ValueError("max_offer_rate is a fraction of the population.")
+
+    @classmethod
+    def from_settings(cls) -> CapacityConstraint:
+        """Build from configuration, which leaves both unset by default."""
+        return cls(
+            max_offers=settings.RETENTION_CAPACITY,
+            max_offer_rate=settings.RETENTION_CAPACITY_RATE,
+        )
+
+    @property
+    def configured(self) -> bool:
+        """Whether any cap is in force.
+
+        Note that ``max_offers=0`` is configured: "we can contact nobody this
+        cycle" is a real and occasionally true statement, which is why the
+        unset case is ``None`` rather than zero.
+        """
+        return self.max_offers is not None or self.max_offer_rate is not None
+
+    def offers_for(self, population: int) -> int | None:
+        """Resolve the cap against a population size, or ``None`` if unset.
+
+        Rounds down. Rounding a budget up is how a campaign goes over.
+        """
+        if self.max_offers is not None:
+            return min(int(self.max_offers), int(population))
+        if self.max_offer_rate is not None:
+            return int(np.floor(self.max_offer_rate * population))
+        return None
+
+
+def capacity_threshold(y_proba: np.ndarray, max_offers: int) -> float:
+    """The lowest score that still fits inside ``max_offers`` offers.
+
+    This is what "top k by score" looks like expressed as a threshold, which is
+    what the serving path actually applies.
+
+    Ties are broken *conservatively*: if several subscribers share the cut-off
+    score, the threshold rises to the next distinct value up, so the campaign
+    under-fills rather than overspending its budget. Handing an operations team
+    530 names against a cap of 500 is not a rounding detail to them.
+    """
+    scores = np.sort(np.asarray(y_proba, dtype=float))[::-1]
+    population = scores.size
+
+    if population == 0:
+        return 0.0
+    if max_offers <= 0:
+        # No threshold in [0, 1] flags nobody, so step just past the top score.
+        return float(np.nextafter(scores[0], np.inf))
+    if max_offers >= population:
+        return 0.0
+
+    cut = scores[max_offers - 1]
+    if scores[max_offers] == cut:
+        higher = scores[scores > cut]
+        cut = higher[-1] if higher.size else np.nextafter(cut, np.inf)
+    return float(cut)
+
+
+def constrained_threshold(
+    y_true: np.ndarray | pd.Series,
+    y_proba: np.ndarray,
+    max_offers: int,
+    costs: CostModel | None = None,
+) -> float:
+    """The cheapest threshold that also fits the budget.
+
+    ``max(unconstrained_optimum, kth_highest_score)``. The cap only ever raises
+    the bar: below the unconstrained optimum an offer loses money whether or
+    not a slot was free, so a spare slot is not a reason to use it.
+    """
+    unconstrained, _ = cost_optimal_threshold(y_true, y_proba, costs)
+    return max(unconstrained, capacity_threshold(y_proba, max_offers))
+
+
+def _budget_ladder(unconstrained_flagged: int, population: int) -> list[int]:
+    """Budget levels to price, spanning either side of the unconstrained answer.
+
+    Anchored on what the model *wants* to send rather than on round numbers:
+    the useful question is "what does 25% of the recommended list cost me", not
+    "what does 100 offers cost me".
+
+    The resulting curve trends downward but is not monotone step by step. That
+    is honest, not a defect: the ranking is imperfect, so on a finite holdout
+    one block of slots will occasionally contain more churners than the block
+    above it. Read the shape, not the individual steps.
+    """
+    steps = {
+        int(round(unconstrained_flagged * fraction))
+        for fraction in (0.25, 0.5, 0.75, 1.0, 1.25, 1.5)
+    }
+    return sorted({step for step in steps if 0 < step <= population})
+
+
+def capacity_report(
+    y_true: np.ndarray | pd.Series,
+    y_proba: np.ndarray,
+    costs: CostModel | None = None,
+    capacity: CapacityConstraint | None = None,
+) -> dict[str, Any]:
+    """What a finite outreach budget costs, and what one more slot would buy.
+
+    Computed whether or not a cap is configured. The headline output needs no
+    budget number to exist: ``marginal_value`` prices each extra offer slot, so
+    the case for more budget - or the case that the current budget is already
+    past the point of diminishing returns - can be made in currency rather than
+    in a shrug.
+    """
+    model = costs or CostModel()
+    limit = capacity or CapacityConstraint()
+    scores = np.asarray(y_proba, dtype=float)
+    population = int(scores.size)
+
+    unconstrained_threshold, unconstrained = cost_optimal_threshold(y_true, scores, model)
+    wanted = int(unconstrained["flagged"])
+
+    # Price a ladder of budgets. Each entry is the *total* cost of operating
+    # with that many slots, so the differences between them are the marginal
+    # value of the slots in between.
+    ladder: list[dict[str, Any]] = []
+    previous: dict[str, Any] | None = None
+    for offers in _budget_ladder(wanted, population):
+        threshold = constrained_threshold(y_true, scores, offers, model)
+        detail = expected_cost(y_true, scores, threshold, model)
+        entry = {
+            "max_offers": offers,
+            "threshold": detail["threshold"],
+            "offers_used": detail["flagged"],
+            "total_cost": detail["total_cost"],
+            "value_per_extra_slot": None,
+        }
+        if previous is not None:
+            gained = offers - previous["max_offers"]
+            saved = previous["total_cost"] - detail["total_cost"]
+            # Negative means the extra slots were spent below the break-even
+            # score and actively lost money - which the constrained threshold
+            # prevents, so in practice this floors at zero.
+            entry["value_per_extra_slot"] = round(float(saved / gained), 2) if gained else None
+        ladder.append(entry)
+        previous = entry
+
+    report: dict[str, Any] = {
+        "population": population,
+        "configured": limit.configured,
+        "max_offers": limit.offers_for(population),
+        "unconstrained": {
+            "threshold": unconstrained["threshold"],
+            "offers_required": wanted,
+            "total_cost": unconstrained["total_cost"],
+        },
+        "marginal_value": ladder,
+    }
+
+    allowed = report["max_offers"]
+    if allowed is None:
+        # No cap in force. Say so explicitly rather than reporting a
+        # constrained result that silently equals the unconstrained one.
+        report["binding"] = False
+        report["constrained"] = None
+        report["shortfall"] = 0
+        report["cost_of_constraint"] = 0.0
+        return report
+
+    threshold = constrained_threshold(y_true, scores, allowed, model)
+    detail = expected_cost(y_true, scores, threshold, model)
+    report["constrained"] = detail
+    # Binding means the budget, not the economics, is what stopped you.
+    report["binding"] = bool(detail["flagged"] < wanted)
+    report["shortfall"] = max(wanted - allowed, 0)
+    # What the constraint costs: the gap between the budget you have and the
+    # budget the model would spend if you let it.
+    report["cost_of_constraint"] = round(
+        float(detail["total_cost"] - unconstrained["total_cost"]), 2
+    )
+    return report
+
+
 def threshold_report(
     y_true: np.ndarray | pd.Series,
     y_proba: np.ndarray,
     current_threshold: float,
     costs: CostModel | None = None,
+    capacity: CapacityConstraint | None = None,
 ) -> dict[str, Any]:
     """Compare the threshold in use against the cost-optimal one.
 
     The headline is ``savings``: what switching would be worth on this holdout,
     stated in currency rather than in a metric nobody outside the team can
     interpret.
+
+    ``capacity`` carries the reality check on that number: savings computed by
+    flagging 40% of the base are not available to a team that can contact 5%.
     """
     model = costs or CostModel()
+    limit = capacity if capacity is not None else CapacityConstraint.from_settings()
     empirical, empirical_detail = cost_optimal_threshold(y_true, y_proba, model)
     current_detail = expected_cost(y_true, y_proba, current_threshold, model)
     analytic = model.analytic_threshold
@@ -207,4 +437,8 @@ def threshold_report(
         "extra_offers_required": (
             empirical_detail["flagged"] - current_detail["flagged"]
         ),
+        # The savings above assume every flagged subscriber is actually
+        # contacted. This says whether that is affordable, and prices each
+        # extra offer slot if it is not.
+        "capacity": capacity_report(y_true, y_proba, model, limit),
     }

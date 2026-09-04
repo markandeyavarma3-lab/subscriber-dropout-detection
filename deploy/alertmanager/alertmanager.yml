@@ -1,0 +1,99 @@
+# Alertmanager routing for the subscriber dropout service.
+#
+# Prometheus decides *whether* something is wrong. Alertmanager decides who
+# hears about it, how often, and what gets suppressed while a bigger problem is
+# already known. Ten alert rules that evaluate correctly and route nowhere are
+# a dashboard, not an on-call system.
+#
+# Delivery is deliberately unconfigured
+# -------------------------------------
+# Every receiver below is defined but has no integration attached. That is a
+# choice, not an omission: a Slack webhook or a PagerDuty routing key is a
+# credential, and credentials do not belong in a repository. With empty
+# receivers the routing tree is still real - alerts group, dedupe, inhibit, and
+# are visible and silenceable at http://localhost:9093 - they simply are not
+# pushed anywhere outbound. The commented blocks show exactly where a real
+# integration attaches, and `--config.file` reloads without a restart.
+
+global:
+  # How long a firing alert stays firing after Prometheus stops sending it.
+  # Must exceed the scrape+evaluation interval by a wide margin or alerts
+  # flap resolved/firing on a single missed scrape.
+  resolve_timeout: 5m
+
+route:
+  # Group by the alert *and* the component it came from. Grouping on alertname
+  # alone would fold an API outage and a stream-scorer outage into one
+  # notification, which is precisely the pair you most want told apart.
+  group_by: [alertname, component]
+
+  # Wait this long for other alerts in the same group before sending, so a
+  # cascade arrives as one notification rather than six.
+  group_wait: 30s
+  group_interval: 5m
+
+  # Fallback for anything that matches no severity below. Reaching this means
+  # a rule was written without a severity label, which the test suite forbids -
+  # it exists so such an alert is loud rather than silently dropped.
+  receiver: unrouted
+
+  routes:
+    # Something is broken right now and someone must act. Repeat aggressively:
+    # a critical alert that stops nagging gets forgotten.
+    - matchers: [severity = "critical"]
+      receiver: oncall
+      group_wait: 0s
+      repeat_interval: 1h
+      continue: false
+
+    # Worth looking at today, not at 3am. Drift, fairness and rate spikes are
+    # all judgement calls - they need a person, not an immediate one.
+    - matchers: [severity = "warning"]
+      receiver: review
+      repeat_interval: 12h
+
+    # A record that something happened. A rejected challenger belongs here:
+    # the gate doing its job is the system working correctly.
+    - matchers: [severity = "info"]
+      receiver: record
+      group_wait: 5m
+      repeat_interval: 24h
+
+inhibit_rules:
+  # If the API is not answering scrapes at all, every metric it exports goes
+  # stale. Do not also complain that the model is not loaded, that the flagged
+  # rate is odd, or that champion and challenger disagree - one outage should
+  # produce one page, not five.
+  - source_matchers: [alertname = "ApiDown"]
+    target_matchers: [severity =~ "warning|info"]
+    equal: [component]
+
+  # Same logic for the consumer: a dead scorer explains its own silence.
+  - source_matchers: [alertname = "StreamScorerDown"]
+    target_matchers: [severity =~ "warning|info"]
+    equal: [component]
+
+  # A model that is not loaded cannot have a meaningful score distribution, so
+  # suppress the distribution alerts rather than pretending they are separate
+  # findings.
+  - source_matchers: [alertname = "ModelNotLoaded"]
+    target_matchers: [alertname =~ "ScoreDistributionShift|FlaggedRateSpike"]
+
+receivers:
+  - name: oncall
+    # pagerduty_configs:
+    #   - routing_key_file: /etc/alertmanager/secrets/pagerduty_key
+    #     description: '{{ .CommonAnnotations.summary }}'
+
+  - name: review
+    # slack_configs:
+    #   - api_url_file: /etc/alertmanager/secrets/slack_webhook
+    #     channel: '#subscriber-model'
+    #     title: '{{ .CommonAnnotations.summary }}'
+    #     text: '{{ .CommonAnnotations.description }}'
+
+  - name: record
+    # webhook_configs:
+    #   - url: http://your-incident-log/hooks/subscriber-dropout
+
+  - name: unrouted

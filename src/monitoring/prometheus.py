@@ -244,6 +244,37 @@ MODEL_COST_SAVINGS = Gauge(
     registry=REGISTRY,
 )
 
+# The reality check on the number above. Savings computed by contacting 40% of
+# the base are not available to a team that can contact 5%, and the gap between
+# what the model wants to send and what anyone can actually send is the number
+# that decides whether the cost analysis is a plan or a wish.
+
+MODEL_OFFERS_REQUIRED = Gauge(
+    "subscriber_model_offers_required",
+    "Retention offers the cost-optimal threshold would send on the test split.",
+    registry=REGISTRY,
+)
+
+MODEL_CAPACITY_BINDING = Gauge(
+    "subscriber_model_capacity_binding",
+    "1 when the outreach budget, not the economics, is what limits the "
+    "retention campaign.",
+    registry=REGISTRY,
+)
+
+MODEL_CAPACITY_SHORTFALL = Gauge(
+    "subscriber_model_capacity_shortfall",
+    "Subscribers the model would contact but the budget cannot cover.",
+    registry=REGISTRY,
+)
+
+MODEL_CAPACITY_COST = Gauge(
+    "subscriber_model_capacity_cost",
+    "What the outreach budget ceiling costs on the test split, versus "
+    "unconstrained cost-optimal outreach.",
+    registry=REGISTRY,
+)
+
 
 # --------------------------------------------------------------------------- #
 # Recording
@@ -375,6 +406,13 @@ def refresh_decision_quality(metrics_path: Path | None = None) -> bool:
     costs = quality.get("costs") or {}
     if costs.get("savings") is not None:
         MODEL_COST_SAVINGS.set(float(costs["savings"]))
+
+    capacity = costs.get("capacity") or {}
+    if capacity:
+        MODEL_OFFERS_REQUIRED.set(float(capacity["unconstrained"]["offers_required"]))
+        MODEL_CAPACITY_BINDING.set(1 if capacity.get("binding") else 0)
+        MODEL_CAPACITY_SHORTFALL.set(float(capacity.get("shortfall") or 0))
+        MODEL_CAPACITY_COST.set(float(capacity.get("cost_of_constraint") or 0.0))
 
     fairness = quality.get("fairness") or {}
     if "passes" in fairness:
