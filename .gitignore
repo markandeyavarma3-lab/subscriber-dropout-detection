@@ -34,6 +34,12 @@ src/data/*.db
 src/models/artifacts/*.joblib
 src/models/artifacts/*.json
 
+# ...except metrics.json, which DVC tracks in git rather than in its cache.
+# A few kilobytes of JSON is worth committing when it makes `dvc metrics diff`
+# able to answer "how did this change move ROC-AUC" across the history. The
+# model itself stays out - that is what the DVC cache is for.
+!src/models/artifacts/metrics.json
+
 # Editors and OS
 .idea/
 .vscode/

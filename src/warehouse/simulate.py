@@ -393,7 +393,11 @@ def main() -> None:  # pragma: no cover - CLI convenience
     import argparse
 
     parser = argparse.ArgumentParser(description="Simulate subscriber events into the warehouse.")
-    parser.add_argument("--subscribers", type=int, default=4_000)
+    # Defaults to the configured population rather than a literal, so
+    # `simulation.n_subscribers` in params.yaml actually reaches the generator.
+    # It did not: the CLI hardcoded 4,000 while settings said 8,000, which made
+    # the DVC stage declare a parameter its own command ignored.
+    parser.add_argument("--subscribers", type=int, default=settings.N_SUBSCRIBERS)
     parser.add_argument("--start", default=settings.SIMULATION_START)
     parser.add_argument("--end", default=settings.SIMULATION_END)
     parser.add_argument("--seed", type=int, default=settings.RANDOM_SEED)

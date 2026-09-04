@@ -1,0 +1,291 @@
+{
+  "model_name": "gradient_boosting_classifier",
+  "trained_at": "2026-09-04T10:04:12+00:00",
+  "decision_threshold": 0.18,
+  "dataset": {
+    "source": "warehouse",
+    "cutoffs": {
+      "train": [
+        "2024-01-01",
+        "2024-01-31",
+        "2024-03-01",
+        "2024-03-31",
+        "2024-04-30",
+        "2024-05-30",
+        "2024-06-29",
+        "2024-07-29",
+        "2024-08-28",
+        "2024-09-27",
+        "2024-10-27",
+        "2024-11-26",
+        "2024-12-26",
+        "2025-01-25",
+        "2025-02-24",
+        "2025-03-26"
+      ],
+      "validation": [
+        "2025-04-25"
+      ],
+      "test": [
+        "2025-05-25"
+      ]
+    },
+    "train_rows": 18599,
+    "validation_rows": 1610,
+    "test_rows": 1615
+  },
+  "validation": {
+    "threshold": 0.18,
+    "n_samples": 1610,
+    "positive_rate_actual": 0.223,
+    "positive_rate_predicted": 0.5553,
+    "accuracy": 0.5348,
+    "precision": 0.2819,
+    "recall": 0.7019,
+    "f1": 0.4022,
+    "roc_auc": 0.6391,
+    "pr_auc": 0.3337,
+    "confusion_matrix": {
+      "true_negatives": 609,
+      "false_positives": 642,
+      "false_negatives": 107,
+      "true_positives": 252
+    }
+  },
+  "test": {
+    "threshold": 0.18,
+    "n_samples": 1615,
+    "positive_rate_actual": 0.2099,
+    "positive_rate_predicted": 0.5734,
+    "accuracy": 0.5337,
+    "precision": 0.2765,
+    "recall": 0.7552,
+    "f1": 0.4047,
+    "roc_auc": 0.6742,
+    "pr_auc": 0.3448,
+    "confusion_matrix": {
+      "true_negatives": 606,
+      "false_positives": 670,
+      "false_negatives": 83,
+      "true_positives": 256
+    }
+  },
+  "top_feature_importances": [
+    {
+      "feature": "is_auto_renew_enabled",
+      "importance": 0.3347
+    },
+    {
+      "feature": "avg_session_count_last_30d",
+      "importance": 0.1191
+    },
+    {
+      "feature": "tenure_months",
+      "importance": 0.0787
+    },
+    {
+      "feature": "sessions_per_day_last_30d",
+      "importance": 0.0768
+    },
+    {
+      "feature": "tenure_days",
+      "importance": 0.0726
+    },
+    {
+      "feature": "recency_ratio",
+      "importance": 0.0721
+    },
+    {
+      "feature": "engagement_recency_score",
+      "importance": 0.0688
+    },
+    {
+      "feature": "fee_per_session",
+      "importance": 0.0472
+    },
+    {
+      "feature": "last_activity_days_ago",
+      "importance": 0.0429
+    },
+    {
+      "feature": "payment_failures_last_6m",
+      "importance": 0.0201
+    }
+  ],
+  "decision_quality": {
+    "calibration": {
+      "brier_score": 0.15663,
+      "expected_calibration_error": 0.02961,
+      "mean_predicted": 0.2281,
+      "observed_rate": 0.2099,
+      "mean_bias": 0.0182,
+      "n_samples": 1615
+    },
+    "costs": {
+      "costs": {
+        "false_negative": 240.0,
+        "false_positive": 20.0,
+        "offer_cost": 20.0,
+        "offer_efficacy": 0.3,
+        "true_positive": 188.0,
+        "ratio": 12.0
+      },
+      "current": {
+        "threshold": 0.18,
+        "total_cost": 81448.0,
+        "cost_per_subscriber": 50.4322,
+        "true_positives": 256,
+        "false_positives": 670,
+        "false_negatives": 83,
+        "true_negatives": 606,
+        "flagged": 926,
+        "flagged_rate": 0.5734
+      },
+      "cost_optimal": {
+        "threshold": 0.3,
+        "total_cost": 78580.0,
+        "cost_per_subscriber": 48.6563,
+        "true_positives": 125,
+        "false_positives": 186,
+        "false_negatives": 214,
+        "true_negatives": 1090,
+        "flagged": 311,
+        "flagged_rate": 0.1926
+      },
+      "analytic": {
+        "threshold": 0.2778,
+        "total_cost": 78660.0,
+        "cost_per_subscriber": 48.7059,
+        "true_positives": 145,
+        "false_positives": 242,
+        "false_negatives": 194,
+        "true_negatives": 1034,
+        "flagged": 387,
+        "flagged_rate": 0.2396
+      },
+      "analytic_vs_empirical_gap": 0.0222,
+      "savings": 2868.0,
+      "savings_per_subscriber": 1.7759,
+      "extra_offers_required": -615,
+      "capacity": {
+        "population": 1615,
+        "configured": false,
+        "max_offers": null,
+        "unconstrained": {
+          "threshold": 0.3,
+          "offers_required": 311,
+          "total_cost": 78580.0
+        },
+        "marginal_value": [
+          {
+            "max_offers": 78,
+            "threshold": 0.4984,
+            "offers_used": 78,
+            "total_cost": 80544.0,
+            "value_per_extra_slot": null
+          },
+          {
+            "max_offers": 156,
+            "threshold": 0.4034,
+            "offers_used": 156,
+            "total_cost": 79584.0,
+            "value_per_extra_slot": 12.31
+          },
+          {
+            "max_offers": 233,
+            "threshold": 0.3357,
+            "offers_used": 233,
+            "total_cost": 78820.0,
+            "value_per_extra_slot": 9.92
+          },
+          {
+            "max_offers": 311,
+            "threshold": 0.301,
+            "offers_used": 311,
+            "total_cost": 78580.0,
+            "value_per_extra_slot": 3.08
+          },
+          {
+            "max_offers": 389,
+            "threshold": 0.3,
+            "offers_used": 311,
+            "total_cost": 78580.0,
+            "value_per_extra_slot": 0.0
+          },
+          {
+            "max_offers": 466,
+            "threshold": 0.3,
+            "offers_used": 311,
+            "total_cost": 78580.0,
+            "value_per_extra_slot": 0.0
+          }
+        ],
+        "binding": false,
+        "constrained": null,
+        "shortfall": 0,
+        "cost_of_constraint": 0.0
+      }
+    },
+    "calibration_attempt": {
+      "method": "isotonic",
+      "improved": true,
+      "ece_improvement": 0.00306,
+      "applied": false
+    },
+    "fairness": {
+      "attribute": "plan_type",
+      "threshold": 0.18,
+      "n_groups": 3,
+      "n_groups_evaluated": 3,
+      "disparity_threshold": 0.8,
+      "selection_rate_ratio": 0.577,
+      "recall_ratio": 0.6532,
+      "roc_auc_ratio": 0.944,
+      "weakest_group": {
+        "group": "premium",
+        "roc_auc": 0.6367,
+        "n": 424
+      },
+      "concerns": [
+        "selection rates differ by more than the 0.8 ratio (0.577) - check whether the underlying churn rates differ too, which would make this expected",
+        "recall differs by more than the 0.8 ratio (0.6532) - some groups' churners are being missed far more often"
+      ],
+      "passes": false,
+      "groups": [
+        {
+          "group": "standard",
+          "n": 634,
+          "base_rate": 0.2098,
+          "selection_rate": 0.582,
+          "recall": 0.7594,
+          "precision": 0.2737,
+          "false_negative_rate": 0.2406,
+          "roc_auc": 0.6745,
+          "sufficient_sample": true
+        },
+        {
+          "group": "basic",
+          "n": 557,
+          "base_rate": 0.2442,
+          "selection_rate": 0.6948,
+          "recall": 0.8529,
+          "precision": 0.2997,
+          "false_negative_rate": 0.1471,
+          "roc_auc": 0.6694,
+          "sufficient_sample": true
+        },
+        {
+          "group": "premium",
+          "n": 424,
+          "base_rate": 0.1651,
+          "selection_rate": 0.4009,
+          "recall": 0.5571,
+          "precision": 0.2294,
+          "false_negative_rate": 0.4429,
+          "roc_auc": 0.6367,
+          "sufficient_sample": true
+        }
+      ]
+    }
+  }
+}

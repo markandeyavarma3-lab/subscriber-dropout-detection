@@ -9,6 +9,7 @@ touching the code.
 
 from __future__ import annotations
 
+import logging
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -22,34 +23,115 @@ from typing import Any
 PROJECT_ROOT: Path = Path(__file__).resolve().parents[2]
 
 
+def _env_params_path() -> Path:
+    raw = os.getenv("SDD_PARAMS_PATH")
+    return Path(raw).expanduser().resolve() if raw else PROJECT_ROOT / "params.yaml"
+
+
+def _load_params(path: Path) -> dict[str, Any]:
+    """Read ``params.yaml``, or return an empty mapping if it is unusable.
+
+    Never raises. A missing or malformed parameter file must not stop the API
+    from starting: every setting below carries its own default, so the worst
+    case is a service running on those rather than a service that is down.
+    The warning is loud because a silently ignored params.yaml would mean an
+    experiment quietly training on something other than what it says.
+    """
+    if not path.exists():
+        return {}
+    try:
+        import yaml
+
+        loaded = yaml.safe_load(path.read_text())
+    except Exception as exc:  # noqa: BLE001 - see docstring
+        logging.getLogger(__name__).warning("Could not read %s (%s); using defaults", path, exc)
+        return {}
+    return loaded if isinstance(loaded, dict) else {}
+
+
+# --------------------------------------------------------------------------- #
+# Parameter file
+# --------------------------------------------------------------------------- #
+
+PARAMS_PATH: Path = _env_params_path()
+_PARAMS: dict[str, Any] = _load_params(PARAMS_PATH)
+
+
+def _param(key: str) -> Any:
+    """Look up a dotted key in ``params.yaml``, or ``None`` if absent.
+
+    Absent is an ordinary outcome: the file may not exist (a wheel installed
+    somewhere else entirely), and every caller carries its own default.
+    """
+    node: Any = _PARAMS
+    for part in key.split("."):
+        if not isinstance(node, dict) or part not in node:
+            return None
+        node = node[part]
+    return node
+
+
 def _env_path(name: str, default: Path) -> Path:
-    """Return a path from the environment, falling back to ``default``."""
+    """Return a path from the environment, falling back to ``default``.
+
+    Paths are deliberately not parameterised: where a run writes its files is a
+    deployment fact, not an experiment parameter.
+    """
     raw = os.getenv(name)
     return Path(raw).expanduser().resolve() if raw else default
 
 
-def _env_int(name: str, default: int) -> int:
-    return int(os.getenv(name, default))
+def _resolve(name: str, param: str | None, default: Any) -> Any:
+    """Environment variable, then ``params.yaml``, then the code default.
+
+    The environment wins because containers and CI need to shrink models and
+    redirect artifacts without editing a tracked file - and because a committed
+    params.yaml should describe the pipeline's intent rather than whatever the
+    last debugging session needed.
+    """
+    raw = os.getenv(name)
+    if raw not in (None, ""):
+        return raw
+    if param is not None:
+        value = _param(param)
+        if value is not None:
+            return value
+    return default
 
 
-def _env_float(name: str, default: float) -> float:
-    return float(os.getenv(name, default))
+def _env_int(name: str, default: int, param: str | None = None) -> int:
+    return int(_resolve(name, param, default))
 
 
-def _env_optional_int(name: str) -> int | None:
+def _env_float(name: str, default: float, param: str | None = None) -> float:
+    return float(_resolve(name, param, default))
+
+
+def _env_str(name: str, default: str, param: str | None = None) -> str:
+    return str(_resolve(name, param, default))
+
+
+def _env_bool(name: str, default: bool, param: str | None = None) -> bool:
+    value = _resolve(name, param, default)
+    if isinstance(value, bool):
+        return value
+    return str(value) not in {"0", "false", "False"}
+
+
+def _env_optional_int(name: str, param: str | None = None) -> int | None:
     """Read an int that is meaningfully absent rather than zero.
 
     A capacity of 0 ("we can contact nobody") is a different statement from no
     capacity constraint at all, so the unset case cannot be folded into a
-    numeric default.
+    numeric default - and ``null`` in params.yaml has to survive as ``None``.
     """
-    raw = os.getenv(name)
-    return int(raw) if raw not in (None, "") else None
+    value = _resolve(name, param, None)
+    return int(value) if value not in (None, "") else None
 
 
-def _env_optional_float(name: str) -> float | None:
-    raw = os.getenv(name)
-    return float(raw) if raw not in (None, "") else None
+def _env_optional_float(name: str, param: str | None = None) -> float | None:
+    value = _resolve(name, param, None)
+    return float(value) if value not in (None, "") else None
 
 
 SRC_DIR: Path = PROJECT_ROOT / "src"
@@ -78,14 +160,14 @@ REFERENCE_PROFILE_PATH: Path = ARTIFACTS_DIR / "reference_profile.json"
 # --------------------------------------------------------------------------- #
 
 # Number of quantile bins used to summarise each numeric feature.
-DRIFT_BIN_COUNT: int = _env_int("SDD_DRIFT_BIN_COUNT", 10)
+DRIFT_BIN_COUNT: int = _env_int("SDD_DRIFT_BIN_COUNT", 10, "drift.bin_count")
 
 # Population Stability Index cut-offs.  These are the long-standing convention
 # in credit-risk monitoring, where PSI originated: below 0.10 a shift is noise,
 # 0.10-0.25 is worth watching, and above 0.25 the population has moved enough
 # that the model's training data no longer describes it.
-PSI_MODERATE: float = _env_float("SDD_PSI_MODERATE", 0.10)
-PSI_SIGNIFICANT: float = _env_float("SDD_PSI_SIGNIFICANT", 0.25)
+PSI_MODERATE: float = _env_float("SDD_PSI_MODERATE", 0.10, "drift.psi_moderate")
+PSI_SIGNIFICANT: float = _env_float("SDD_PSI_SIGNIFICANT", 0.25, "drift.psi_significant")
 
 # A PSI computed on a handful of rows is dominated by sampling noise rather
 # than by any real shift, so report it but mark it untrustworthy.
@@ -103,34 +185,38 @@ METRICS_WINDOW: int = _env_int("SDD_METRICS_WINDOW", 5_000)
 DATABASE_URL: str = os.getenv("SDD_DATABASE_URL", f"sqlite:///{DATA_DIR / 'warehouse.db'}")
 
 # The window the simulator generates events across.
-SIMULATION_START: str = os.getenv("SDD_SIMULATION_START", "2024-01-01")
-SIMULATION_END: str = os.getenv("SDD_SIMULATION_END", "2025-06-30")
+SIMULATION_START: str = _env_str("SDD_SIMULATION_START", "2024-01-01", "simulation.start")
+SIMULATION_END: str = _env_str("SDD_SIMULATION_END", "2025-06-30", "simulation.end")
 
 # --------------------------------------------------------------------------- #
 # Point-in-time feature computation
 # --------------------------------------------------------------------------- #
 
 # How far back from a cutoff behavioural features look.
-OBSERVATION_WINDOW_DAYS: int = _env_int("SDD_OBSERVATION_WINDOW_DAYS", 30)
+OBSERVATION_WINDOW_DAYS: int = _env_int(
+    "SDD_OBSERVATION_WINDOW_DAYS", 30, "features.observation_window_days"
+)
 
 # How far forward the label looks.  A subscriber is a dropout if their
 # subscription lapses within this many days *after* the cutoff, so the feature
 # window and the label window never overlap.
-PREDICTION_HORIZON_DAYS: int = _env_int("SDD_PREDICTION_HORIZON_DAYS", 30)
+PREDICTION_HORIZON_DAYS: int = _env_int(
+    "SDD_PREDICTION_HORIZON_DAYS", 30, "features.prediction_horizon_days"
+)
 
 # --------------------------------------------------------------------------- #
 # Data & splitting
 # --------------------------------------------------------------------------- #
 
-RANDOM_SEED: int = _env_int("SDD_RANDOM_SEED", 42)
-N_SUBSCRIBERS: int = _env_int("SDD_N_SUBSCRIBERS", 8000)
+RANDOM_SEED: int = _env_int("SDD_RANDOM_SEED", 42, "split.random_seed")
+N_SUBSCRIBERS: int = _env_int("SDD_N_SUBSCRIBERS", 8000, "simulation.n_subscribers")
 
 TARGET_COLUMN: str = "dropout"
 ID_COLUMN: str = "subscriber_id"
 
 # Fractions of the *full* dataset. Train gets the remainder (0.70 by default).
-TEST_SIZE: float = _env_float("SDD_TEST_SIZE", 0.15)
-VALIDATION_SIZE: float = _env_float("SDD_VALIDATION_SIZE", 0.15)
+TEST_SIZE: float = _env_float("SDD_TEST_SIZE", 0.15, "split.test_size")
+VALIDATION_SIZE: float = _env_float("SDD_VALIDATION_SIZE", 0.15, "split.validation_size")
 
 # --------------------------------------------------------------------------- #
 # Experiment tracking & model registry (MLflow)
@@ -189,17 +275,21 @@ SHADOW_MIN_COMPARISONS: int = _env_int("SDD_SHADOW_MIN_COMPARISONS", 200)
 # revenue against a £20 offer: missing one churner costs as much as twelve
 # wasted offers. Replace with real figures before quoting any of the money
 # numbers this produces.
-COST_FALSE_NEGATIVE: float = _env_float("SDD_COST_FALSE_NEGATIVE", 240.0)
-COST_FALSE_POSITIVE: float = _env_float("SDD_COST_FALSE_POSITIVE", 20.0)
+COST_FALSE_NEGATIVE: float = _env_float(
+    "SDD_COST_FALSE_NEGATIVE", 240.0, "costs.false_negative"
+)
+COST_FALSE_POSITIVE: float = _env_float(
+    "SDD_COST_FALSE_POSITIVE", 20.0, "costs.false_positive"
+)
 # An offer aimed correctly still costs money. Zero would mean "the offer is
 # free", which is a claim worth making explicitly rather than by omission.
-COST_TRUE_POSITIVE: float = _env_float("SDD_COST_TRUE_POSITIVE", 20.0)
+COST_TRUE_POSITIVE: float = _env_float("SDD_COST_TRUE_POSITIVE", 20.0, "costs.offer")
 
 # How often a retention offer actually saves a subscriber who would otherwise
 # have left. Setting this to 1.0 - "every correctly-aimed offer works" - makes
 # blanket outreach look optimal, because it is, under that assumption. Real
 # campaigns convert perhaps a fifth to a third.
-OFFER_EFFICACY: float = _env_float("SDD_OFFER_EFFICACY", 0.30)
+OFFER_EFFICACY: float = _env_float("SDD_OFFER_EFFICACY", 0.30, "costs.offer_efficacy")
 
 # How many retention offers the team can actually make per scoring cycle.
 #
@@ -222,11 +312,15 @@ OFFER_EFFICACY: float = _env_float("SDD_OFFER_EFFICACY", 0.30)
 # Set at most one. The rate is the portable one: an absolute count tuned
 # against a 200k subscriber base means nothing on a 1,200-row holdout.
 RETENTION_CAPACITY: int | None = _env_optional_int("SDD_RETENTION_CAPACITY")
-RETENTION_CAPACITY_RATE: float | None = _env_optional_float("SDD_RETENTION_CAPACITY_RATE")
+RETENTION_CAPACITY_RATE: float | None = _env_optional_float(
+    "SDD_RETENTION_CAPACITY_RATE", "capacity.max_offer_rate"
+)
 
 # Isotonic is non-parametric and fixes boosting's S-shaped distortion without
 # assuming its shape; it needs a few hundred rows, which validation has.
-CALIBRATION_METHOD: str = os.getenv("SDD_CALIBRATION_METHOD", "isotonic")
+CALIBRATION_METHOD: str = _env_str(
+    "SDD_CALIBRATION_METHOD", "isotonic", "costs.calibration_method"
+)
 
 # --------------------------------------------------------------------------- #
 # Fairness
@@ -236,10 +330,14 @@ CALIBRATION_METHOD: str = os.getenv("SDD_CALIBRATION_METHOD", "isotonic")
 # reported as a disparity. 0.8 is the long-standing "four-fifths rule" from US
 # employment law - not a law of nature, and not a legal standard here, but a
 # widely understood starting point that beats inventing a number.
-FAIRNESS_DISPARITY_THRESHOLD: float = _env_float("SDD_FAIRNESS_DISPARITY", 0.8)
+FAIRNESS_DISPARITY_THRESHOLD: float = _env_float(
+    "SDD_FAIRNESS_DISPARITY", 0.8, "fairness.disparity_threshold"
+)
 
 # Below this many rows a group's metrics are noise; reported, but flagged.
-FAIRNESS_MIN_GROUP_SIZE: int = _env_int("SDD_FAIRNESS_MIN_GROUP", 30)
+FAIRNESS_MIN_GROUP_SIZE: int = _env_int(
+    "SDD_FAIRNESS_MIN_GROUP", 30, "fairness.min_group_size"
+)
 
 # --------------------------------------------------------------------------- #
 # Streaming inference
@@ -269,12 +367,14 @@ STREAM_METRICS_PORT: int = _env_int("SDD_STREAM_METRICS_PORT", 8001)
 # The gate a challenger must clear to take over.  PR-AUC rather than ROC-AUC:
 # with a ~20% positive rate, average precision reflects retention-outreach
 # performance far more honestly than ROC-AUC, which flatters imbalanced data.
-PROMOTION_METRIC: str = os.getenv("SDD_PROMOTION_METRIC", "pr_auc")
+PROMOTION_METRIC: str = _env_str("SDD_PROMOTION_METRIC", "pr_auc", "promotion.metric")
 
 # A challenger must beat the champion by this margin, not merely tie it.
 # Without a margin, noise alone would promote a new model roughly half the time
 # and the registry would churn forever.
-PROMOTION_MIN_IMPROVEMENT: float = _env_float("SDD_PROMOTION_MIN_IMPROVEMENT", 0.005)
+PROMOTION_MIN_IMPROVEMENT: float = _env_float(
+    "SDD_PROMOTION_MIN_IMPROVEMENT", 0.005, "promotion.min_improvement"
+)
 
 # --------------------------------------------------------------------------- #
 # Model
@@ -283,21 +383,23 @@ PROMOTION_MIN_IMPROVEMENT: float = _env_float("SDD_PROMOTION_MIN_IMPROVEMENT", 0
 MODEL_NAME: str = "gradient_boosting_classifier"
 
 MODEL_PARAMS: dict[str, Any] = {
-    "n_estimators": _env_int("SDD_N_ESTIMATORS", 300),
-    "learning_rate": _env_float("SDD_LEARNING_RATE", 0.05),
-    "max_depth": _env_int("SDD_MAX_DEPTH", 3),
-    "subsample": _env_float("SDD_SUBSAMPLE", 0.9),
-    "min_samples_leaf": _env_int("SDD_MIN_SAMPLES_LEAF", 20),
+    "n_estimators": _env_int("SDD_N_ESTIMATORS", 300, "model.n_estimators"),
+    "learning_rate": _env_float("SDD_LEARNING_RATE", 0.05, "model.learning_rate"),
+    "max_depth": _env_int("SDD_MAX_DEPTH", 3, "model.max_depth"),
+    "subsample": _env_float("SDD_SUBSAMPLE", 0.9, "model.subsample"),
+    "min_samples_leaf": _env_int("SDD_MIN_SAMPLES_LEAF", 20, "model.min_samples_leaf"),
     "random_state": RANDOM_SEED,
 }
 
 # Probability at or above which a subscriber is labelled a dropout risk.
 # ``train.py`` can tune this on the validation set and persist the result to
 # ``metadata.json``; this value is the fallback.
-DECISION_THRESHOLD: float = _env_float("SDD_DECISION_THRESHOLD", 0.5)
+DECISION_THRESHOLD: float = _env_float(
+    "SDD_DECISION_THRESHOLD", 0.5, "threshold.decision_threshold"
+)
 
 # When true, training searches for the threshold maximising validation F1.
-TUNE_THRESHOLD: bool = os.getenv("SDD_TUNE_THRESHOLD", "1") not in {"0", "false", "False"}
+TUNE_THRESHOLD: bool = _env_bool("SDD_TUNE_THRESHOLD", True, "threshold.tune")
 
 # --------------------------------------------------------------------------- #
 # Rule-based explanation thresholds (used by the API, not by the model)

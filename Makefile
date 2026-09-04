@@ -1,5 +1,5 @@
 # Shortcuts for the common workflows. Run `make help` for the list.
-.PHONY: help install data simulate warehouse-up train train-warehouse train-promote pipeline pipeline-drift backfill schedule stream stream-up audit observability-up metrics mlflow-ui evaluate serve test lint format docker-build docker-run docker-up clean
+.PHONY: help install data simulate warehouse-up train train-warehouse train-promote pipeline pipeline-drift backfill schedule stream stream-up audit observability-up metrics mlflow-ui evaluate repro params metrics-diff dag serve test lint format docker-build docker-run docker-up clean
 
 PYTHON ?= python
 IMAGE  ?= subscriber-dropout-api
@@ -60,6 +60,18 @@ audit:  ## Print the decision-quality report from the last training run
 
 mlflow-ui:  ## Browse runs and the registry at http://127.0.0.1:5000
 	$(PYTHON) -m mlflow ui --backend-store-uri $${MLFLOW_TRACKING_URI:-sqlite:///mlflow.db}
+
+repro:  ## Rerun the DVC pipeline, skipping stages whose inputs did not change
+	dvc repro
+
+params:  ## Show the parameters the last locked run actually used
+	dvc params diff --all
+
+metrics-diff:  ## How the working tree's metrics compare against main
+	dvc metrics diff main
+
+dag:  ## Print the pipeline graph
+	dvc dag
 
 evaluate:  ## Evaluate the saved artifact on the held-out test split
 	$(PYTHON) -m src.models.evaluate

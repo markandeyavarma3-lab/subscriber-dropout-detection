@@ -1,0 +1,109 @@
+schema: '2.0'
+stages:
+  simulate:
+    cmd: python -m src.warehouse.simulate
+    deps:
+    - path: src/warehouse/database.py
+      hash: md5
+      md5: 7ba4a68f19d7006513b30396ccc03d3a
+      size: 3685
+    - path: src/warehouse/schema.py
+      hash: md5
+      md5: cdd42d4f721c6a22cb2e4ed5044f5ff3
+      size: 3523
+    - path: src/warehouse/simulate.py
+      hash: md5
+      md5: 618a03118e8f97a541ec1569f9b93d06
+      size: 16230
+    params:
+      params.yaml:
+        simulation:
+          n_subscribers: 8000
+          start: '2024-01-01'
+          end: '2025-06-30'
+    outs:
+    - path: src/data/warehouse.db
+      hash: md5
+      md5: 755fd940f8e12e1e1305fa2ef024c7ff
+      size: 66625536
+  train:
+    cmd: python -m src.models.train --source warehouse
+    deps:
+    - path: src/data/warehouse.db
+      hash: md5
+      md5: 755fd940f8e12e1e1305fa2ef024c7ff
+      size: 66625536
+    - path: src/evaluation/fairness.py
+      hash: md5
+      md5: 32bd2277ba07373ec12eef5df8a8f50e
+      size: 9556
+    - path: src/features/build_features.py
+      hash: md5
+      md5: d34d54e15e9483669a9279ae596cc4af
+      size: 6768
+    - path: src/features/point_in_time.py
+      hash: md5
+      md5: 8da76f16430a9de9977ed5f1ffb7e26e
+      size: 14667
+    - path: src/models/calibration.py
+      hash: md5
+      md5: 3f87b1f0093e87db067f695730fb44a5
+      size: 8415
+    - path: src/models/costs.py
+      hash: md5
+      md5: 37f212bdb759e902f9df51e7444ad2be
+      size: 18882
+    - path: src/models/train.py
+      hash: md5
+      md5: dd0bdad371ca5474a67fda7ade3dc32a
+      size: 22884
+    - path: src/monitoring/profile.py
+      hash: md5
+      md5: 4de0b9a47259e59be465dfd1646d1a90
+      size: 6466
+    params:
+      params.yaml:
+        capacity:
+          max_offer_rate:
+        costs:
+          false_negative: 240.0
+          false_positive: 20.0
+          offer: 20.0
+          offer_efficacy: 0.3
+          calibration_method: isotonic
+        fairness:
+          disparity_threshold: 0.8
+          min_group_size: 30
+        features:
+          observation_window_days: 30
+          prediction_horizon_days: 30
+        model:
+          n_estimators: 300
+          learning_rate: 0.05
+          max_depth: 3
+          subsample: 0.9
+          min_samples_leaf: 20
+        split:
+          test_size: 0.15
+          validation_size: 0.15
+          random_seed: 42
+        threshold:
+          tune: true
+          decision_threshold: 0.5
+    outs:
+    - path: src/models/artifacts/metadata.json
+      hash: md5
+      md5: 092dd8f2de4d5e13825f8ec46f02b0a6
+      size: 773
+    - path: src/models/artifacts/metrics.json
+      hash: md5
+      md5: eb95af254c27ade7642cedece75cb5f6
+      size: 7316
+    - path: src/models/artifacts/model.joblib
+      hash: md5
+      md5: 9e97a5984357f8710467373114ae8a8b
+      size: 383694
+    - path: src/models/artifacts/reference_profile.json
+      hash: md5
+      md5: 246995de8a37f0158d90c1df9c3e6376
+      size: 3605

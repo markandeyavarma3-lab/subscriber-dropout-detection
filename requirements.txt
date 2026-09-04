@@ -19,6 +19,13 @@ mlflow>=2.14,<4.0
 # Workflow orchestration for the scheduled retraining pipeline.
 prefect>=3.0,<4.0
 
+# params.yaml is read at import time by src/config/settings.py, so YAML is a
+# runtime dependency rather than a tooling one. Settings fall back to their
+# code defaults if it is unreadable, but a container that silently trains on
+# different parameters than the pipeline declares is exactly the failure the
+# parameter file exists to prevent.
+PyYAML>=6.0,<7.0
+
 # Prometheus exposition for the /metrics/prometheus scrape target.
 prometheus-client>=0.20,<1.0
 

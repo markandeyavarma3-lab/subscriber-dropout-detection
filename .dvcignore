@@ -1,0 +1,11 @@
+# Paths DVC should not walk when computing directory hashes.
+#
+# Without these, a stage that depends on a source directory rehashes on every
+# stray .pyc and reruns training for no reason.
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+mlruns/
+*.db-journal

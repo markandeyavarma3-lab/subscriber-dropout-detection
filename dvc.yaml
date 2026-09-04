@@ -1,0 +1,61 @@
+# The reproducible path from nothing to a trained model.
+#
+# Two stages, matching how the project actually runs. Adding an intermediate
+# "build features" stage would look more impressive on a DAG and would be
+# fiction: point-in-time features are computed inside the training run, from
+# the warehouse, at the cutoffs the run chooses.
+#
+# What this buys that the Makefile does not: `dvc repro` reruns a stage only
+# when something it depends on actually changed, and `dvc.lock` records the
+# content hash of every input and output, so "which data produced this model"
+# has an answer that survives the next simulation. `dvc exp run --set-param`
+# sweeps parameters that genuinely reach the code - see params.yaml.
+
+stages:
+  simulate:
+    # Stands in for extracting from a real event warehouse. When the KKBox
+    # loader replaces it (see src/data/external/), only this stage changes.
+    cmd: python -m src.warehouse.simulate
+    deps:
+      - src/warehouse/simulate.py
+      - src/warehouse/schema.py
+      - src/warehouse/database.py
+    params:
+      - simulation
+    outs:
+      - src/data/warehouse.db
+
+  train:
+    # Point-in-time features, temporal split, gradient boosting, threshold
+    # tuning, calibration, cost and fairness diagnostics - one command,
+    # because they are one decision about one model.
+    cmd: python -m src.models.train --source warehouse
+    deps:
+      - src/data/warehouse.db
+      - src/features/point_in_time.py
+      - src/features/build_features.py
+      - src/models/train.py
+      - src/models/costs.py
+      - src/models/calibration.py
+      - src/evaluation/fairness.py
+      - src/monitoring/profile.py
+    params:
+      # Listed by section: DVC hashes each one, so changing a learning rate
+      # reruns training while changing a PSI threshold does not.
+      - features
+      - split
+      - model
+      - threshold
+      - costs
+      - capacity
+      - fairness
+    outs:
+      - src/models/artifacts/model.joblib
+      - src/models/artifacts/metadata.json
+      - src/models/artifacts/reference_profile.json
+    metrics:
+      # cache: false keeps this one in git rather than in the DVC cache, which
+      # is what makes `dvc metrics diff main` able to say how a change moved
+      # ROC-AUC. It is a few kilobytes of JSON; the model is not.
+      - src/models/artifacts/metrics.json:
+          cache: false

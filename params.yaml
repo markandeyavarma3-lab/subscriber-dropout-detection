@@ -1,0 +1,92 @@
+# Pipeline parameters, read by src/config/settings.py.
+#
+# This file is not documentation. Every value below is loaded at import time
+# and is what the code actually uses, so `dvc exp run --set-param
+# model.n_estimators=500` changes the model that gets trained rather than
+# changing a number nobody reads. A test enforces that: any key here with no
+# consumer in settings.py, or any setting that quietly stopped reading its key,
+# fails the build.
+#
+# Precedence is: SDD_* environment variable > this file > the default in
+# settings.py. The environment wins because containers and CI need to redirect
+# paths and shrink models without editing a tracked file - and because a
+# committed params.yaml should describe the pipeline's intent, not whatever the
+# last debugging session needed.
+#
+# Anything genuinely environmental - database URLs, artifact directories,
+# tracking server addresses - is deliberately absent. Those are deployment
+# facts, not experiment parameters, and versioning them here would suggest
+# reproducing a run means reproducing where it wrote its files.
+
+simulation:
+  # Population and window for the event generator that stands in for a real
+  # warehouse. See src/warehouse/simulate.py.
+  n_subscribers: 8000
+  start: "2024-01-01"
+  end: "2025-06-30"
+
+features:
+  # How far back behavioural features look from a cutoff, and how far forward
+  # the label looks. They never overlap, which is what makes the features
+  # point-in-time correct rather than leaky.
+  observation_window_days: 30
+  prediction_horizon_days: 30
+
+split:
+  # Fractions of the full dataset; training gets the remainder.
+  test_size: 0.15
+  validation_size: 0.15
+  random_seed: 42
+
+model:
+  n_estimators: 300
+  learning_rate: 0.05
+  max_depth: 3
+  subsample: 0.9
+  min_samples_leaf: 20
+
+threshold:
+  # When tuning is on, training searches for the threshold maximising
+  # validation F1 and persists it; the value below is the fallback.
+  tune: true
+  decision_threshold: 0.5
+
+costs:
+  # Replace with real figures before quoting any money number this produces.
+  # Defaults model a ~20/month subscriber worth roughly a year of remaining
+  # revenue against a 20 retention offer.
+  false_negative: 240.0
+  false_positive: 20.0
+  offer: 20.0
+  # How often a retention offer actually saves a subscriber who would
+  # otherwise have left. 1.0 makes blanket outreach look optimal, because
+  # under that assumption it is.
+  offer_efficacy: 0.30
+  calibration_method: isotonic
+
+capacity:
+  # Retention offers available per scoring cycle, as a fraction of the scored
+  # population. Left null on purpose: inventing a budget would repeat the
+  # mistake offer_efficacy exists to fix. The capacity report computes either
+  # way; setting this makes it constrain the threshold too.
+  max_offer_rate: null
+
+drift:
+  # PSI cut-offs, the long-standing convention from credit-risk monitoring.
+  psi_moderate: 0.10
+  psi_significant: 0.25
+  bin_count: 10
+
+fairness:
+  # The four-fifths rule - not a law of nature, and not a legal standard here,
+  # but a widely understood starting point that beats inventing a number.
+  disparity_threshold: 0.8
+  min_group_size: 30
+
+promotion:
+  # PR-AUC rather than ROC-AUC: at a ~20% positive rate, average precision
+  # reflects retention performance far more honestly.
+  metric: pr_auc
+  # A challenger must beat the champion by this margin, not merely tie it.
+  # Without one, noise alone would promote a new model about half the time.
+  min_improvement: 0.005
