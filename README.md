@@ -1165,7 +1165,7 @@ verdict — in either direction.
 
 ### Tests
 
-407 tests across fourteen files, all runnable with `pytest`:
+410 tests across fourteen files, all runnable with `pytest`:
 
 - `test_features.py` — derived-column presence, row-count preservation, input immutability,
   finiteness, zero-denominator edge cases, hand-computed formula checks, output shape,

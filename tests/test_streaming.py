@@ -486,3 +486,65 @@ def test_the_stream_scorer_manifest_exposes_its_metrics_port() -> None:
     assert any(p["containerPort"] == 8001 for p in container["ports"])
     assert template["metadata"]["annotations"]["prometheus.io/scrape"] == "true"
     assert template["metadata"]["annotations"]["prometheus.io/port"] == "8001"
+
+
+# --------------------------------------------------------------------------- #
+# The event producer
+# --------------------------------------------------------------------------- #
+
+
+def test_sample_events_carry_every_column_the_scorer_requires() -> None:
+    """Built from the training generator, not hand-written.
+
+    A hand-rolled dict drifts the moment a feature is added, and the symptom
+    would be every event silently dead-lettered rather than an obvious error.
+    """
+    from src.features.build_features import REQUIRED_INPUT_COLUMNS
+    from src.streaming import produce
+
+    events = produce.sample_events(5)
+
+    assert len(events) == 5
+    for event in events:
+        assert not set(REQUIRED_INPUT_COLUMNS) - set(event)
+        assert event["subscriber_id"]
+
+
+def test_sample_events_are_scoreable_by_the_real_parser() -> None:
+    """The claim that matters: these survive the path a real message takes."""
+    import json
+
+    from src.streaming import produce
+    from src.streaming.transport import Message
+
+    for event in produce.sample_events(3):
+        message = Message(
+            topic="subscriber-events",
+            partition=0,
+            offset=0,
+            key=event["subscriber_id"],
+            value=json.dumps(event).encode("utf-8"),
+        )
+        features, error = processor.parse_message(message)
+
+        assert error is None
+        assert features is not None
+
+
+def test_corrupt_events_cover_all_three_failure_modes() -> None:
+    """Unparseable bytes, wrong JSON type, and missing fields.
+
+    They take different paths through parse_message, so a dead-letter topic
+    that only ever sees one of them has not really been exercised.
+    """
+    from src.streaming import produce
+    from src.streaming.transport import Message
+
+    reasons = set()
+    for value in produce.corrupt_events(3):
+        message = Message(topic="t", partition=0, offset=0, key=None, value=value)
+        _, error = processor.parse_message(message)
+        assert error is not None
+        reasons.add(error.split(":")[0])
+
+    assert len(reasons) == 3, f"expected three distinct failures, got {reasons}"

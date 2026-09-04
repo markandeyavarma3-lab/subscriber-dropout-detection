@@ -1,5 +1,5 @@
 # Shortcuts for the common workflows. Run `make help` for the list.
-.PHONY: help install data simulate ingest ingest-check warehouse-up train train-warehouse train-promote pipeline pipeline-drift backfill schedule stream stream-up audit observability-up metrics mlflow-ui evaluate repro params metrics-diff dag serve test lint format docker-build docker-run docker-up clean
+.PHONY: help install data simulate ingest ingest-check warehouse-up train train-warehouse train-promote pipeline pipeline-drift backfill schedule stream stream-up stream-events stream-poison audit observability-up metrics mlflow-ui evaluate repro params metrics-diff dag serve test lint format docker-build docker-run docker-up clean
 
 PYTHON ?= python
 IMAGE  ?= subscriber-dropout-api
@@ -50,6 +50,12 @@ schedule:  ## Serve the pipeline on a nightly cron (blocks; Ctrl-C to stop)
 
 stream:  ## Run the streaming scorer against Redpanda (needs the broker up)
 	$(PYTHON) -m src.streaming.kafka
+
+stream-events:  ## Publish sample events onto the input topic (N=50, RATE=0)
+	$(PYTHON) -m src.streaming.produce --count $(or $(N),50) --rate $(or $(RATE),0) --brokers localhost:19092
+
+stream-poison:  ## Publish malformed events to exercise the dead-letter topic
+	$(PYTHON) -m src.streaming.produce --count 5 --corrupt --brokers localhost:19092
 
 stream-up:  ## Start Redpanda and the streaming scorer
 	docker compose up -d redpanda stream-scorer
