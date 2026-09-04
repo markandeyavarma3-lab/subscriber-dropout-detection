@@ -29,6 +29,12 @@ coverage.xml
 src/data/raw/*.csv
 src/data/processed/*.csv
 src/data/*.db
+# SQLite's transient sidecars. These exist only while a write transaction is
+# open, so a committed one is always noise - and during a large load it churns
+# on every flush. Found tracked after the KKBox ingest made it visible.
+src/data/*.db-journal
+src/data/*.db-wal
+src/data/*.db-shm
 *.sqlite
 *.sqlite3
 src/models/artifacts/*.joblib
