@@ -49,3 +49,8 @@ mlruns/
 .prefect/
 prefect.db
 src/models/artifacts/last_pipeline_run.json
+
+# Real datasets downloaded from external sources. Multi-gigabyte and
+# re-downloadable, so they never belong in git.
+data/kkbox/
+data/*.zip

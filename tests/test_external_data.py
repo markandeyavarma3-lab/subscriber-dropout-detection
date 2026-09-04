@@ -386,6 +386,56 @@ def test_the_cli_names_the_features_this_dataset_cannot_support() -> None:
     assert "no customer-service data" in text
 
 
+def test_subscriber_ids_fit_real_hashed_identifiers() -> None:
+    """The bug that would only ever have bitten in production.
+
+    KKBox identifies subscribers by a base64-encoded SHA256 - exactly 44
+    characters. The schema declared String(32), sized for the simulator's short
+    synthetic ids.
+
+    What makes it worth a test: SQLite ignores VARCHAR lengths, so the load
+    succeeds locally and every test passes, while Postgres rejects every row
+    with "value too long for type character varying(32)". The local warehouse
+    and the deployed one would have disagreed completely, and only real data
+    could have shown it.
+    """
+    from src.warehouse.schema import SUBSCRIBER_ID_LENGTH
+
+    base64_sha256 = 44
+    hex_sha256 = 64
+    assert base64_sha256 <= SUBSCRIBER_ID_LENGTH
+    assert hex_sha256 <= SUBSCRIBER_ID_LENGTH
+
+    for table in schema.EVENT_TABLES:
+        column = table.columns["subscriber_id"]
+        assert column.type.length == SUBSCRIBER_ID_LENGTH, (
+            f"{table.name}.subscriber_id is {column.type.length}, "
+            "which will truncate or reject real hashed identifiers on Postgres"
+        )
+
+
+def test_a_realistic_hashed_id_survives_a_round_trip(tmp_path) -> None:
+    """End to end with an id shaped like the real thing, not like a fixture."""
+    engine = database.get_engine(f"sqlite:///{tmp_path / 'ids.db'}")
+    database.create_schema(engine)
+
+    real_shape = "Rb9UwLQTrxzBVwCB6+bCcSQWZ9JiNLC9dXtM1oEsZA8="
+    assert len(real_shape) == 44
+
+    database.insert_rows(
+        schema.subscribers,
+        [{
+            "subscriber_id": real_shape,
+            "signup_date": pd.Timestamp("2020-01-01").date(),
+            "acquisition_channel": "via_7",
+        }],
+        engine=engine,
+    )
+
+    stored = database.read_sql("SELECT subscriber_id FROM subscribers", engine=engine)
+    assert stored.iloc[0]["subscriber_id"] == real_shape
+
+
 def test_the_loader_fills_exactly_the_tables_the_simulator_does() -> None:
     """The claim that swapping data sources is a change of command, not pipeline.
 

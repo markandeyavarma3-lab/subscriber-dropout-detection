@@ -535,7 +535,7 @@ tests/test_prometheus.py     35 tests   — exposition format, both coverage gua
                                           Alertmanager routing and inhibition
 tests/test_streaming.py      37 tests   — poison messages, partial batch failures, a
                                           produce failure that must not commit
-tests/test_external_data.py  26 tests   — KKBox mapping, warehouse contract, orphan
+tests/test_external_data.py  30 tests   — KKBox mapping, warehouse contract, orphan
                                           events, pre-signup activity
 tests/test_orchestration.py  22 tests   — ingest idempotency, run-report escalation,
                                           one real Prefect flow run

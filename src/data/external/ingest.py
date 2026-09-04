@@ -68,6 +68,63 @@ def build_kkbox_tables(source_dir: Path, session_chunk_size: int = 2_000_000) ->
 LOADERS: dict[str, Callable[[Path, int], dict]] = {"kkbox": build_kkbox_tables}
 
 
+def drop_orphan_events(tables: dict) -> tuple[dict, dict[str, int]]:
+    """Remove event rows whose subscriber is absent from ``subscribers``.
+
+    Real exports are not referentially complete. KKBox's members file covers
+    6.77M subscribers but its transaction log references 432,623 more that it
+    never describes - 18.3% of everyone who actually transacts.
+
+    Dropping is the conservative choice, and it is a modelling decision rather
+    than a plumbing one. The alternative is to backfill a subscriber row per
+    orphan with ``signup_date`` set to their first transaction. That is
+    tempting and wrong here: the earliest inferable signup lands exactly on the
+    first day of the transaction log, which means those subscribers almost
+    certainly predate the data. Backfilling would assign them a signup that is
+    too late, understate ``tenure_days``, and mark long-tenured stable
+    subscribers as "still new" - which the model reads as a churn risk signal.
+
+    Losing rows is visible and countable. Corrupting tenure for 432,623
+    subscribers would be neither.
+    """
+    subscribers = tables.get("subscribers")
+    if subscribers is None or subscribers.empty:
+        return tables, {}
+
+    known = set(subscribers["subscriber_id"])
+    cleaned = dict(tables)
+    dropped: dict[str, int] = {}
+
+    for name, value in tables.items():
+        if name == "subscribers" or callable(value) or value.empty:
+            continue
+        if "subscriber_id" not in value.columns:
+            continue
+        keep = value["subscriber_id"].isin(known)
+        removed = int((~keep).sum())
+        if removed:
+            cleaned[name] = value[keep].reset_index(drop=True)
+            dropped[name] = removed
+
+    # Streamed tables are filtered lazily, chunk by chunk, so the 400M-row
+    # user log never has to be held in memory just to drop a few thousand rows.
+    for name, value in tables.items():
+        if callable(value):
+            cleaned[name] = _filtered_stream(value, known)
+
+    return cleaned, dropped
+
+
+def _filtered_stream(factory, known: set):
+    """Wrap a chunk iterator so each chunk is filtered as it arrives."""
+
+    def wrapped():
+        for chunk in factory():
+            yield chunk[chunk["subscriber_id"].isin(known)]
+
+    return wrapped
+
+
 def _validation_sample(tables: dict, session_rows: int = 500_000) -> dict[str, pd.DataFrame]:
     """Materialise enough of each table to validate against the contract.
 
@@ -176,6 +233,15 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Rows per chunk when streaming the usage log.",
     )
     parser.add_argument(
+        "--drop-orphans",
+        action="store_true",
+        help=(
+            "Discard event rows whose subscriber is missing from the "
+            "subscribers table. Required for KKBox, whose members file does "
+            "not cover every subscriber in its transaction log."
+        ),
+    )
+    parser.add_argument(
         "--force",
         action="store_true",
         help="Write even if validation found errors. Rarely the right answer.",
@@ -188,6 +254,14 @@ def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
 
     tables = LOADERS[args.dataset](args.source_dir, args.session_chunk_size)
+
+    if args.drop_orphans:
+        tables, dropped = drop_orphan_events(tables)
+        if dropped:
+            print("Dropped event rows with no matching subscriber:")
+            for name, count in dropped.items():
+                print(f"  {name:<22} {count:>12,}")
+            print()
 
     ok, report = validate(tables)
     print(report)

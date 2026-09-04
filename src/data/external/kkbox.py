@@ -111,13 +111,36 @@ class KKBoxPaths:
     transactions: Path
     user_logs: Path
 
+    # The real archive does not use the names the competition docs imply.
+    # Found on first contact with the actual download: members ships as
+    # `members_v3.csv`, and transactions and user_logs each ship twice - the
+    # original and a `_v2` covering the later second-stage period. Candidates
+    # are tried in order, so the plain name still wins where it exists and the
+    # fixtures in the test suite keep working unchanged.
+    MEMBER_NAMES = ("members.csv", "members_v3.csv", "members_v2.csv")
+    TRANSACTION_NAMES = ("transactions.csv", "transactions_v2.csv")
+    USER_LOG_NAMES = ("user_logs.csv", "user_logs_v2.csv")
+
     @classmethod
     def under(cls, directory: Path) -> KKBoxPaths:
-        """Standard layout: the files as Kaggle names them, in one directory."""
+        """Locate the three files this loader needs inside ``directory``.
+
+        Falls back to the first candidate name when none exist, so the error
+        message from :meth:`missing` names something a person can act on rather
+        than an empty path.
+        """
+
+        def pick(names: tuple[str, ...]) -> Path:
+            for name in names:
+                candidate = directory / name
+                if candidate.exists():
+                    return candidate
+            return directory / names[0]
+
         return cls(
-            members=directory / "members.csv",
-            transactions=directory / "transactions.csv",
-            user_logs=directory / "user_logs.csv",
+            members=pick(cls.MEMBER_NAMES),
+            transactions=pick(cls.TRANSACTION_NAMES),
+            user_logs=pick(cls.USER_LOG_NAMES),
         )
 
     def missing(self) -> list[Path]:
