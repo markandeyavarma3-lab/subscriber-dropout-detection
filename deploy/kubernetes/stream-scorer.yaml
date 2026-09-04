@@ -16,6 +16,12 @@ spec:
   template:
     metadata:
       labels: { app: subscriber-stream-scorer }
+      annotations:
+        # The scorer serves its own metrics: it has no API, so without this
+        # every streamed prediction is invisible to the dashboards.
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8001"
+        prometheus.io/path: "/metrics"
     spec:
       securityContext:
         runAsNonRoot: true
@@ -28,6 +34,8 @@ spec:
         - name: scorer
           image: subscriber-dropout-api:latest
           command: ["python", "-m", "src.streaming.kafka"]
+          ports:
+            - { name: metrics, containerPort: 8001 }
           envFrom:
             - configMapRef: { name: subscriber-config }
           resources:

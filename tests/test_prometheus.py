@@ -34,6 +34,22 @@ def _value(name: str, **labels: str) -> float:
     return 0.0 if sample is None else float(sample)
 
 
+def _populate_labelled_families() -> None:
+    """Touch every labelled metric so it appears in the exposition.
+
+    Counters and gauges with labels only materialise once a label combination
+    is used, so both coverage guards below need the same warm-up. Sharing it
+    keeps them from drifting apart and disagreeing about what "exposed" means.
+    """
+    prometheus.refresh_model_source("local")
+    prometheus.DRIFT_PSI.labels(feature="tenure_days").set(0.0)
+    prometheus.MODEL_FAIRNESS_RATIO.labels(metric="recall_ratio").set(1.0)
+    prometheus.record_prediction(0.5, 1, "medium")
+    prometheus.record_shadow_comparison(
+        type("C", (), {"agreed": True, "divergence": 0.0})()
+    )
+
+
 def _exposed_names() -> set[str]:
     """Every metric family name currently in the registry."""
     return {
@@ -198,11 +214,7 @@ def test_every_alert_references_a_metric_that_exists() -> None:
     An alert on a metric nobody exposes never fires and never complains. This
     catches a renamed metric before it silently disables an alert.
     """
-    # Populate every labelled family so it appears in the exposition.
-    prometheus.refresh_model_source("local")
-    prometheus.DRIFT_PSI.labels(feature="tenure_days").set(0.0)
-    prometheus.record_prediction(0.5, 1, "medium")
-
+    _populate_labelled_families()
     exposed = _exposed_names()
     rules = yaml.safe_load((DEPLOY / "prometheus" / "alerts.yml").read_text())
 
@@ -257,9 +269,7 @@ def test_grafana_dashboard_is_valid_and_provisioned() -> None:
 
 def test_grafana_panels_query_metrics_that_exist() -> None:
     """A panel querying a non-existent metric renders an empty graph forever."""
-    prometheus.refresh_model_source("local")
-    prometheus.DRIFT_PSI.labels(feature="tenure_days").set(0.0)
-    prometheus.record_prediction(0.5, 1, "medium")
+    _populate_labelled_families()
     exposed = _exposed_names()
 
     dashboard = json.loads(
@@ -297,3 +307,94 @@ def test_compose_wires_prometheus_to_the_api() -> None:
 def test_prometheus_settings_are_not_hard_coded_in_the_endpoint() -> None:
     """The report location follows settings, so a redirected run still scrapes."""
     assert settings.ARTIFACTS_DIR.name
+
+
+# --------------------------------------------------------------------------- #
+# Decision quality reaches the monitoring stack
+# --------------------------------------------------------------------------- #
+
+
+def test_decision_quality_is_exposed_to_prometheus(tmp_path) -> None:
+    """A fairness audit nobody can graph is a file, not monitoring.
+
+    Regression guard: calibration, cost and fairness were computed at training
+    time and written only to metrics.json - invisible to every dashboard and
+    alert in the project.
+    """
+    metrics = {
+        "decision_quality": {
+            "calibration": {"expected_calibration_error": 0.0231},
+            "costs": {"savings": 564.0},
+            "fairness": {
+                "passes": False,
+                "selection_rate_ratio": 0.4622,
+                "recall_ratio": 0.626,
+                "roc_auc_ratio": 0.8995,
+            },
+        }
+    }
+    path = tmp_path / "metrics.json"
+    path.write_text(json.dumps(metrics))
+
+    assert prometheus.refresh_decision_quality(path) is True
+    assert _value("subscriber_model_calibration_ece") == pytest.approx(0.0231)
+    assert _value("subscriber_model_fairness_passes") == 0
+    assert _value("subscriber_model_cost_savings_available") == pytest.approx(564.0)
+    assert _value("subscriber_model_fairness_ratio", metric="recall_ratio") == pytest.approx(0.626)
+
+
+def test_missing_metrics_file_is_not_an_error(tmp_path) -> None:
+    """Before the first training run there is simply nothing to report."""
+    assert prometheus.refresh_decision_quality(tmp_path / "absent.json") is False
+
+
+def test_a_failed_decision_quality_report_is_skipped(tmp_path) -> None:
+    """Diagnostics that errored must not publish misleading zeros."""
+    path = tmp_path / "metrics.json"
+    path.write_text(json.dumps({"decision_quality": {"error": "boom"}}))
+
+    assert prometheus.refresh_decision_quality(path) is False
+
+
+def test_the_fairness_alert_references_a_real_metric() -> None:
+    """The audit is only monitoring if something alerts on it."""
+    rules = yaml.safe_load((DEPLOY / "prometheus" / "alerts.yml").read_text())
+    by_name = {r["alert"]: r for g in rules["groups"] for r in g["rules"]}
+
+    assert "FairnessDisparity" in by_name
+    assert "subscriber_model_fairness_passes" in by_name["FairnessDisparity"]["expr"]
+
+
+def test_the_stream_scorer_is_scraped_as_its_own_job() -> None:
+    """A dead consumer must not be hidden behind a healthy API."""
+    config = yaml.safe_load((DEPLOY / "prometheus" / "prometheus.yml").read_text())
+    jobs = {j["job_name"] for j in config["scrape_configs"]}
+
+    assert "stream-scorer" in jobs
+
+
+def test_every_exposed_metric_is_graphed_or_alerted_on() -> None:
+    """The reverse of the dead-alert guard.
+
+    That guard catches panels pointing at metrics that do not exist. This
+    catches the opposite and equally quiet failure: a metric computed, exported
+    and then displayed nowhere - which is how the fairness audit ended up
+    invisible to every dashboard in the project.
+    """
+    _populate_labelled_families()
+
+    families = {
+        name.replace("_total", "").replace("_bucket", "").replace("_count", "")
+        .replace("_sum", "").replace("_created", "")
+        for name in _exposed_names()
+        if name.startswith("subscriber_")
+    }
+
+    dashboard = json.dumps(
+        json.loads((DEPLOY / "grafana" / "dashboards" / "subscriber-dropout.json").read_text())
+    )
+    alerts = (DEPLOY / "prometheus" / "alerts.yml").read_text()
+    surfaced = dashboard + alerts
+
+    unused = {family for family in families if family not in surfaced}
+    assert not unused, f"exposed but never graphed or alerted on: {sorted(unused)}"

@@ -132,6 +132,10 @@ def train_and_gate(
     )
 
     promotion = result.promotion or {}
+    quality = result.decision_quality or {}
+    fairness = quality.get("fairness") or {}
+    costs = quality.get("costs") or {}
+
     return {
         "threshold": result.threshold,
         "validation": _headline(result.validation_metrics),
@@ -142,6 +146,15 @@ def train_and_gate(
         "challenger_score": promotion.get("challenger_score"),
         "champion_score": promotion.get("champion_score"),
         "model_path": str(result.model_path),
+        # Surfaced so the run report can escalate on them. A model that works
+        # measurably worse for one group is not something to leave sitting in
+        # an artifact nobody opens.
+        "fairness_passes": fairness.get("passes"),
+        "fairness_concerns": fairness.get("concerns", []),
+        "calibration_ece": (quality.get("calibration") or {}).get(
+            "expected_calibration_error"
+        ),
+        "cost_savings_available": costs.get("savings"),
     }
 
 
@@ -251,19 +264,31 @@ def build_run_report(
 ) -> dict[str, Any]:
     """Assemble the single artifact a pipeline run leaves behind.
 
-    ``needs_attention`` is the field worth alerting on: it fires when a
-    challenger was rejected (the model did not improve) or when live data has
-    drifted significantly (the model may be going stale).  Both are situations
-    a human should look at; neither should stop the pipeline.
+    ``needs_attention`` is the field worth alerting on. It fires on three
+    things, all of which a human should look at and none of which should stop
+    the pipeline:
+
+    - a challenger was rejected, so the model did not improve;
+    - live data has drifted significantly, so the model may be going stale;
+    - the fairness audit found a disparity, so the model may be working
+      measurably worse for some group.
+
+    The third was missing initially, which meant a model that discriminated
+    could ship with an entirely green pipeline: the audit ran, wrote its
+    verdict to an artifact, and nothing ever read it.
     """
     rejected = training.get("promoted") is False
     drifted = drift.get("available") and drift.get("overall_verdict") == "significant"
+    unfair = training.get("fairness_passes") is False
 
     reasons: list[str] = []
     if rejected:
         reasons.append(f"challenger rejected: {training.get('promotion_reason')}")
     if drifted:
         reasons.append(f"significant drift in {', '.join(drift.get('drifted_features', []))}")
+    if unfair:
+        concerns = training.get("fairness_concerns") or ["disparity detected"]
+        reasons.append(f"fairness: {concerns[0]}")
 
     return {
         "finished_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),

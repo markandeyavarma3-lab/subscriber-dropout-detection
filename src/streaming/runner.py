@@ -168,6 +168,32 @@ class StreamingScorer:
         logger.info("Streaming scorer stopped: %s", self.stats.summary())
         return self.stats
 
+    def serve_metrics(self, port: int | None = None) -> bool:
+        """Expose this process's Prometheus metrics for scraping.
+
+        The scorer already records every prediction through
+        :func:`src.api.service.predict_batch`, which increments the same
+        counters the API uses. Without an HTTP server those numbers accumulate
+        in a process nothing can reach - every streamed prediction invisible to
+        the dashboards, and no way to tell a busy consumer from a dead one.
+
+        Returns ``False`` rather than raising if the port is taken: a metrics
+        endpoint failing to bind must not stop the scorer from scoring.
+        """
+        from prometheus_client import start_http_server
+
+        from src.monitoring.prometheus import REGISTRY
+
+        target = port or settings.STREAM_METRICS_PORT
+        try:
+            start_http_server(target, registry=REGISTRY)
+        except OSError as exc:  # pragma: no cover - depends on the environment
+            logger.warning("Could not serve metrics on port %s: %s", target, exc)
+            return False
+
+        logger.info("Serving Prometheus metrics on :%s/metrics", target)
+        return True
+
     def close(self) -> None:
         """Flush and release both ends."""
         try:

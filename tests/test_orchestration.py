@@ -297,3 +297,74 @@ def test_retraining_flow_runs_end_to_end(warehouse, artifacts, monkeypatch) -> N
     assert report["drift"]["available"] is False
     assert report["training"]["promoted"] is True
     assert (artifacts / "last_pipeline_run.json").exists()
+
+
+# --------------------------------------------------------------------------- #
+# Escalation wiring
+#
+# These guard integration, not logic. Each component below was individually
+# correct and simply not connected to the next one - which is the failure mode
+# unit tests are worst at catching.
+# --------------------------------------------------------------------------- #
+
+
+def test_a_fairness_failure_escalates_to_needs_attention() -> None:
+    """The audit must reach a human, not just an artifact.
+
+    Regression guard: fairness was computed at training time and written to
+    metrics.json, but the run report only escalated on rejected promotions and
+    drift. A model that worked measurably worse for one group could ship with
+    an entirely green pipeline.
+    """
+    report = pipeline.build_run_report(
+        ingest={"total_events": 100},
+        training={
+            "promoted": True,
+            "promotion_reason": "beat champion",
+            "fairness_passes": False,
+            "fairness_concerns": ["recall differs by more than the 0.8 ratio (0.61)"],
+        },
+        drift={"available": True, "overall_verdict": "stable", "drifted_features": []},
+    )
+
+    assert report["needs_attention"] is True
+    assert any("fairness" in reason for reason in report["attention_reasons"])
+
+
+def test_a_passing_fairness_audit_does_not_escalate() -> None:
+    """No false alarms: passing the audit is the quiet path."""
+    report = pipeline.build_run_report(
+        ingest={"total_events": 100},
+        training={"promoted": True, "promotion_reason": "ok", "fairness_passes": True},
+        drift={"available": True, "overall_verdict": "stable", "drifted_features": []},
+    )
+
+    assert report["needs_attention"] is False
+
+
+def test_missing_fairness_data_does_not_escalate() -> None:
+    """An absent audit is unknown, not a failure - `is False` is deliberate."""
+    report = pipeline.build_run_report(
+        ingest={"total_events": 100},
+        training={"promoted": True, "promotion_reason": "ok"},
+        drift={"available": False},
+    )
+
+    assert report["needs_attention"] is False
+
+
+def test_train_and_gate_surfaces_decision_quality(warehouse, artifacts, monkeypatch) -> None:
+    """The pipeline cannot escalate on what training does not hand it."""
+    monkeypatch.setattr(settings, "MLFLOW_TRACKING_URI", f"sqlite:///{artifacts / 'mlflow.db'}")
+    monkeypatch.setenv("MLFLOW_TRACKING_URI", f"sqlite:///{artifacts / 'mlflow.db'}")
+    pipeline.ingest_events(n_subscribers=400)
+
+    cutoffs = pipeline.usable_cutoffs(
+        ["2024-03-01", "2024-05-01", "2024-07-01", "2024-09-01", "2024-11-01"]
+    )
+    result = pipeline.train_and_gate(cutoffs=cutoffs, promote=False)
+
+    # The three fields the run report needs to escalate on.
+    assert "fairness_passes" in result
+    assert "fairness_concerns" in result
+    assert "calibration_ece" in result

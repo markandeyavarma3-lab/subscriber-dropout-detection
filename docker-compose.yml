@@ -157,6 +157,9 @@ services:
     command: >
       sh -c "pip install --no-cache-dir kafka-python &&
              python -m src.streaming.kafka --brokers redpanda:9092"
+    ports:
+      # Its own Prometheus endpoint: the scorer has no API to scrape.
+      - "8001:8001"
     environment:
       SDD_STREAM_BROKERS: redpanda:9092
     restart: unless-stopped

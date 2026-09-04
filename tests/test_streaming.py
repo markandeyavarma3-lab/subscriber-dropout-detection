@@ -455,3 +455,34 @@ def test_kafka_adapter_fails_with_an_actionable_message(monkeypatch) -> None:
 
     with pytest.raises(kafka.MissingKafkaClientError, match="pip install kafka-python"):
         kafka._require_kafka()
+
+
+def test_the_scorer_can_serve_its_own_metrics() -> None:
+    """The scorer has no API, so it must expose its own scrape endpoint.
+
+    Regression guard: every streamed prediction incremented the shared
+    Prometheus counters inside a process nothing could reach, so all streaming
+    traffic was invisible to the dashboards.
+    """
+    import urllib.request
+
+    broker = InMemoryBroker()
+    scorer = StreamingScorer(
+        consumer=broker.consumer(INPUT), producer=broker.producer(), output_topic=OUTPUT
+    )
+
+    assert scorer.serve_metrics(port=8098) is True
+
+    body = urllib.request.urlopen("http://127.0.0.1:8098/metrics", timeout=5).read().decode()
+    assert "subscriber_predictions_total" in body
+
+
+def test_the_stream_scorer_manifest_exposes_its_metrics_port() -> None:
+    """Serving metrics is useless if the deployment never exposes the port."""
+    deployment = _k8s_docs("stream-scorer.yaml")[0]
+    template = deployment["spec"]["template"]
+    container = template["spec"]["containers"][0]
+
+    assert any(p["containerPort"] == 8001 for p in container["ports"])
+    assert template["metadata"]["annotations"]["prometheus.io/scrape"] == "true"
+    assert template["metadata"]["annotations"]["prometheus.io/port"] == "8001"

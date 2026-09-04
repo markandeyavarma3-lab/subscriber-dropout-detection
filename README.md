@@ -728,10 +728,19 @@ Grafana comes up already wired — datasource and dashboard are provisioned from
 - **Grafana** http://localhost:3000 (anonymous viewer enabled, local demo only)
 - **Prometheus** http://localhost:9090
 
-Two test classes guard the config, not just the code: every alert expression and every
-dashboard panel query is cross-checked against the metrics the code actually exposes. An
-alert on a renamed metric never fires and never complains, which is the worst failure mode
-monitoring has.
+Three test classes guard the config, not just the code, and they check **both directions**:
+
+- every alert expression and dashboard panel query must reference a metric the code
+  actually exposes — an alert on a renamed metric never fires and never complains;
+- and every exposed metric must appear on a panel or in an alert — a metric computed,
+  exported and displayed nowhere is just as quiet a failure.
+
+The second guard found two orphans the first time it ran (`subscriber_drift_sample_size`
+and `subscriber_shadow_comparisons_total`), which is precisely the point.
+
+The stream scorer serves its own metrics on `:8001` and is scraped as a **separate job**.
+It has no API of its own, so without that its counters would increment inside a process
+nothing could reach — and a dead consumer would be hidden behind a healthy API.
 
 ### Shadow scoring — the challenger on live traffic
 

@@ -137,6 +137,10 @@ def main() -> None:  # pragma: no cover - CLI wiring
     parser.add_argument("--output-topic", default=settings.STREAM_OUTPUT_TOPIC)
     parser.add_argument("--batch-size", type=int, default=settings.STREAM_BATCH_SIZE)
     parser.add_argument("--max-batches", type=int, default=None)
+    parser.add_argument(
+        "--metrics-port", type=int, default=settings.STREAM_METRICS_PORT,
+        help="Port to expose Prometheus metrics on.",
+    )
     args = parser.parse_args()
 
     logging.basicConfig(
@@ -152,6 +156,9 @@ def main() -> None:  # pragma: no cover - CLI wiring
         batch_size=args.batch_size,
     )
     scorer.install_signal_handlers()
+    # Without this, every streamed prediction is invisible to monitoring: the
+    # counters increment inside a process nothing can scrape.
+    scorer.serve_metrics(args.metrics_port)
     try:
         scorer.run(max_batches=args.max_batches)
     finally:

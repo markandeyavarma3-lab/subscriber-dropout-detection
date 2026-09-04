@@ -223,6 +223,10 @@ STREAM_CONSUMER_GROUP: str = os.getenv("SDD_STREAM_GROUP", "subscriber-scorer")
 STREAM_BATCH_SIZE: int = _env_int("SDD_STREAM_BATCH_SIZE", 200)
 STREAM_POLL_TIMEOUT: float = _env_float("SDD_STREAM_POLL_TIMEOUT", 1.0)
 
+# The scorer runs as its own process with no API, so it serves its Prometheus
+# metrics itself. Different port from the API so both can run on one host.
+STREAM_METRICS_PORT: int = _env_int("SDD_STREAM_METRICS_PORT", 8001)
+
 # The gate a challenger must clear to take over.  PR-AUC rather than ROC-AUC:
 # with a ~20% positive rate, average precision reflects retention-outreach
 # performance far more honestly than ROC-AUC, which flatters imbalanced data.

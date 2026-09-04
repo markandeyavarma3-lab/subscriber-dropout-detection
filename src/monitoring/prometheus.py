@@ -210,6 +210,42 @@ SHADOW_FLAGGED_RATE_DELTA = Gauge(
 
 
 # --------------------------------------------------------------------------- #
+# Decision quality - calibration, cost and fairness from the last training run
+# --------------------------------------------------------------------------- #
+#
+# These are computed at training time and written to metrics.json. Without
+# exposing them here they would be invisible to the dashboards and alerts that
+# everything else in this project is monitored by - a fairness audit nobody
+# ever looks at is not a fairness audit.
+
+MODEL_CALIBRATION_ECE = Gauge(
+    "subscriber_model_calibration_ece",
+    "Expected Calibration Error of the trained model on its test split.",
+    registry=REGISTRY,
+)
+
+MODEL_FAIRNESS_PASSES = Gauge(
+    "subscriber_model_fairness_passes",
+    "1 when the last training run's fairness audit found no disparity.",
+    registry=REGISTRY,
+)
+
+MODEL_FAIRNESS_RATIO = Gauge(
+    "subscriber_model_fairness_ratio",
+    "Worst-to-best group ratio from the fairness audit, by metric.",
+    ["metric"],
+    registry=REGISTRY,
+)
+
+MODEL_COST_SAVINGS = Gauge(
+    "subscriber_model_cost_savings_available",
+    "Money left on the table by the threshold in use, versus the cost-optimal "
+    "one, on the test split.",
+    registry=REGISTRY,
+)
+
+
+# --------------------------------------------------------------------------- #
 # Recording
 # --------------------------------------------------------------------------- #
 
@@ -312,6 +348,45 @@ def refresh_pipeline_gauges(report_path: Path | None = None) -> bool:
     return True
 
 
+def refresh_decision_quality(metrics_path: Path | None = None) -> bool:
+    """Publish the last training run's calibration, cost and fairness results.
+
+    Read from ``metrics.json`` at scrape time, the same way pipeline gauges are
+    read from the run report: training is a batch job with no endpoint of its
+    own, and adding a Pushgateway to carry four numbers is not worth the
+    operational surface.
+    """
+    path = metrics_path or (settings.ARTIFACTS_DIR / "metrics.json")
+    if not path.exists():
+        return False
+
+    try:
+        quality = (json.loads(path.read_text()) or {}).get("decision_quality") or {}
+    except json.JSONDecodeError:  # pragma: no cover - partially written file
+        return False
+
+    if not quality or "error" in quality:
+        return False
+
+    calibration = quality.get("calibration") or {}
+    if "expected_calibration_error" in calibration:
+        MODEL_CALIBRATION_ECE.set(float(calibration["expected_calibration_error"]))
+
+    costs = quality.get("costs") or {}
+    if costs.get("savings") is not None:
+        MODEL_COST_SAVINGS.set(float(costs["savings"]))
+
+    fairness = quality.get("fairness") or {}
+    if "passes" in fairness:
+        MODEL_FAIRNESS_PASSES.set(1 if fairness["passes"] else 0)
+    for metric in ("selection_rate_ratio", "recall_ratio", "roc_auc_ratio"):
+        value = fairness.get(metric)
+        if value is not None:
+            MODEL_FAIRNESS_RATIO.labels(metric=metric).set(float(value))
+
+    return True
+
+
 def render() -> tuple[bytes, str]:
     """Refresh point-in-time gauges and render the exposition payload.
 
@@ -334,4 +409,5 @@ def render() -> tuple[bytes, str]:
         logger.exception("Could not refresh serving gauges; exposing what we have")
 
     refresh_pipeline_gauges()
+    refresh_decision_quality()
     return generate_latest(REGISTRY), CONTENT_TYPE_LATEST

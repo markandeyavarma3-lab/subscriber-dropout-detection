@@ -74,6 +74,10 @@ class TrainingResult:
     # data, not as a log line it would have to scrape.
     promotion: dict[str, Any] | None = None
     mlflow_run_id: str | None = None
+    # Calibration, cost and fairness. Carried on the result rather than only
+    # written to metrics.json, so the orchestrator can escalate on a fairness
+    # failure instead of having to re-read and re-parse the artifact.
+    decision_quality: dict[str, Any] | None = None
 
 
 def build_model_pipeline(model_params: dict[str, Any] | None = None) -> Pipeline:
@@ -358,6 +362,7 @@ def run_training(
         reference_profile_path=profile_path,
         promotion=promotion_outcome,
         mlflow_run_id=mlflow_run_id,
+        decision_quality=decision_report,
     )
 
 

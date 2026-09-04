@@ -94,6 +94,35 @@ groups:
             than a failing one: the model quietly ages while everything looks
             green.
 
+      - alert: FairnessDisparity
+        # The audit runs at training time and writes a verdict. Alerting on it
+        # is the difference between an audit and a file nobody opens.
+        expr: subscriber_model_fairness_passes == 0
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: "The fairness audit found a disparity between groups"
+          description: >-
+            Check subscriber_model_fairness_ratio by metric. A selection-rate
+            gap may be correct if those groups genuinely churn at different
+            rates; a gap in recall or AUC means the model is measurably worse
+            for some people, which is far harder to justify.
+
+      - alert: StreamScorerDown
+        # Scraped as its own job precisely so a dead consumer is not hidden
+        # behind a healthy API.
+        expr: up{job="stream-scorer"} == 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "The streaming scorer is not responding to scrapes"
+          description: >-
+            Subscriber events are accumulating unscored. The consumer commits
+            offsets only after producing, so nothing is lost - but nothing is
+            being scored either.
+
       - alert: PipelineNeedsAttention
         expr: subscriber_pipeline_needs_attention == 1
         for: 1h

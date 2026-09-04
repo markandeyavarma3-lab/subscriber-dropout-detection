@@ -25,6 +25,15 @@ scrape_configs:
         labels:
           component: serving
 
+  # The streaming scorer has no API, so it serves its own metrics on 8001.
+  # Scraped separately from the API: they are different workloads that fail in
+  # different ways, and a dead consumer should not be hidden by a healthy API.
+  - job_name: stream-scorer
+    static_configs:
+      - targets: ["stream-scorer:8001"]
+        labels:
+          component: streaming
+
   - job_name: prometheus
     static_configs:
       - targets: ["localhost:9090"]
