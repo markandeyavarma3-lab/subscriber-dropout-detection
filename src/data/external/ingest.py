@@ -39,7 +39,9 @@ logger = logging.getLogger(__name__)
 TABLES = ("subscribers", "subscription_events", "payments", "sessions", "support_tickets")
 
 
-def build_kkbox_tables(source_dir: Path, session_chunk_size: int = 2_000_000) -> dict:
+def build_kkbox_tables(
+    source_dir: Path, session_chunk_size: int = 2_000_000, sessions_since: str | None = None
+) -> dict:
     """Map the KKBox export into warehouse-shaped frames.
 
     Sessions are returned as an iterator rather than a frame - the user log is
@@ -60,7 +62,9 @@ def build_kkbox_tables(source_dir: Path, session_chunk_size: int = 2_000_000) ->
         "subscribers": kkbox.load_members(paths.members),
         "subscription_events": events,
         "payments": payments,
-        "sessions": lambda: kkbox.iter_user_logs(paths.user_logs, session_chunk_size),
+        "sessions": lambda: kkbox.iter_user_logs(
+            paths.user_logs, session_chunk_size, sessions_since
+        ),
         "support_tickets": kkbox.empty_support_tickets(),
     }
 
@@ -233,6 +237,16 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Rows per chunk when streaming the usage log.",
     )
     parser.add_argument(
+        "--sessions-since",
+        default=None,
+        help=(
+            "Only load usage sessions on or after this date (YYYY-MM-DD). "
+            "KKBox's full log is 392 million rows - far more history than a "
+            "30-day observation window needs, and hours of index maintenance "
+            "to write."
+        ),
+    )
+    parser.add_argument(
         "--drop-orphans",
         action="store_true",
         help=(
@@ -253,7 +267,9 @@ def main(argv: list[str] | None = None) -> int:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
     args = parse_args(argv)
 
-    tables = LOADERS[args.dataset](args.source_dir, args.session_chunk_size)
+    tables = LOADERS[args.dataset](
+        args.source_dir, args.session_chunk_size, args.sessions_since
+    )
 
     if args.drop_orphans:
         tables, dropped = drop_orphan_events(tables)

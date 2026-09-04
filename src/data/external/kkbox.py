@@ -249,7 +249,9 @@ def load_transactions(path: Path) -> tuple[pd.DataFrame, pd.DataFrame]:
     return events, payments
 
 
-def iter_user_logs(path: Path, chunk_size: int = 2_000_000) -> Iterator[pd.DataFrame]:
+def iter_user_logs(
+    path: Path, chunk_size: int = 2_000_000, since: str | None = None
+) -> Iterator[pd.DataFrame]:
     """user_logs.csv -> ``sessions``, in chunks.
 
     This file is the reason the loader streams rather than reading frames. It
@@ -261,14 +263,37 @@ def iter_user_logs(path: Path, chunk_size: int = 2_000_000) -> Iterator[pd.DataF
     session. ``avg_session_count_last_30d`` therefore counts *active days* and
     is bounded above by 30 - a different quantity from the simulator's session
     count, and one worth remembering before comparing the two.
+
+    ``since`` bounds the window. The full log is 392 million rows, which is
+    hours of index maintenance to write and far more history than a model with
+    a 30-day observation window and a handful of cutoffs can use. Filtering
+    happens per chunk, before anything reaches the database.
+
+    One consequence to be aware of: session *recency* scans all loaded history,
+    so a subscriber whose last activity predates ``since`` looks like they have
+    never had a session. That reads as maximally dormant, which is directionally
+    right but not identical to the truth.
     """
+    cutoff = pd.Timestamp(since) if since else None
+
     for chunk in pd.read_csv(
         path, usecols=lambda column: column in USER_LOG_COLUMNS, chunksize=chunk_size
     ):
+        occurred_at = _to_datetime(chunk["date"])
+        if cutoff is not None:
+            # Filtered here rather than after loading, so the rows never reach
+            # the database at all. Reading past 392 million rows is I/O; writing
+            # them is hours of index maintenance.
+            keep = occurred_at >= cutoff
+            chunk = chunk[keep]
+            occurred_at = occurred_at[keep]
+            if chunk.empty:
+                continue
+
         yield pd.DataFrame(
             {
                 "subscriber_id": chunk["msno"].astype(str),
-                "occurred_at": _to_datetime(chunk["date"]),
+                "occurred_at": occurred_at,
                 # total_secs occasionally goes negative in this dataset - a
                 # known artefact of the logging. Clipped rather than dropped:
                 # the day still happened, and dropping it would understate
