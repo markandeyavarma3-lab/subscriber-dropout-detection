@@ -8,13 +8,28 @@ a churn label defined by a subscription failing to renew.
 Status of this loader
 ---------------------
 
-**Written against the published schema and tested against fixtures that match
-it. It has never been run against the real files.** Those are roughly 30GB and
-sit behind a Kaggle account, which is not something this repository can fetch
-for you. What that means practically: the column names, dtypes and date formats
-below come from the dataset's documentation, and the mapping decisions are
-mine. Expect the first real run to surface something the documentation does not
-mention - that is what `--dry-run` and the contract validation are for.
+**Run against the real dataset.** It was written against the published schema
+first and tested against fixtures matching it; first contact with the actual
+8.3GB download then found five things the documentation did not mention, all of
+which are fixed here:
+
+1. The archive ships ``.7z`` files, not plain CSV.
+2. Members arrive as ``members_v3.csv``; transactions and user logs each have a
+   ``_v2`` second-stage variant alongside the original.
+3. ``msno`` is a 44-character base64 SHA256. The warehouse declared
+   ``String(32)``, which SQLite silently ignores and Postgres rejects on every
+   row - see ``SUBSCRIBER_ID_LENGTH`` in :mod:`src.warehouse.schema`.
+4. 2,656,043 transaction rows reference 432,623 subscribers that
+   ``members_v3.csv`` never describes. The contract caught them before the
+   write; ``--drop-orphans`` handles them.
+5. The full user log is 392 million rows - impractical to write to SQLite and
+   far more history than a 30-day observation window uses. ``--sessions-since``
+   bounds it.
+
+The fixtures could not have found any of them: they were referentially perfect,
+correctly named, plain CSV, four rows long, with three-character ids. That gap
+is exactly what `--dry-run` and the contract validation exist to close, and
+they did.
 
 What KKBox does not have
 ------------------------

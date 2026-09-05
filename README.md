@@ -895,10 +895,32 @@ A loader's whole job is to fill the same five warehouse tables. Nothing downstre
 simulator fill exactly the same set — that is what makes swapping data sources a change of
 command rather than a change of pipeline.
 
-**Scope, stated plainly: this has never run against the real files.** They are ~30GB behind
-a Kaggle account. The mapping is written against KKBox's published schema and tested against
-fixtures matching it, which is a real test of the mapping and no test at all of whether the
-published schema matches the actual files. `--dry-run` exists for that first contact.
+**This has now been run against the real dataset** — the 8.3GB download, 30.5GB extracted.
+The mapping was written against KKBox's published schema and tested against fixtures matching
+it; first contact found **five things the documentation did not mention**, every one of them
+invisible to a fixture that was four rows long, correctly named, plain CSV, referentially
+perfect and used three-character ids:
+
+| Found | Why no test could catch it |
+| --- | --- |
+| Archive ships `.7z`, not CSV | Fixtures wrote plain CSVs |
+| `members_v3.csv`, not `members.csv` | Fixtures used the documented name |
+| **`msno` is 44 chars; schema said `String(32)`** | **SQLite ignores VARCHAR limits — Postgres rejects every row** |
+| **2,656,043 orphan rows (432,623 subscribers, 18.3%)** | Fixtures were referentially perfect |
+| Full user log is 392M rows | Nothing about scale is visible in four rows |
+
+The third is the one that mattered. It would have loaded flawlessly into SQLite, passed all
+416 tests, and then failed on *every single row* against the compose stack's Postgres with
+`value too long for type character varying(32)` — a constraint that only bites in production
+is worse than no constraint at all. The fourth would not have errored either: point-in-time
+queries join outward from `subscribers`, so 2.65M rows would have silently vanished from
+every training set.
+
+A sixth was caught in design rather than by the validator. `user_logs_v2.csv` looked like the
+obvious shortcut at 18M rows instead of 392M — but it covers March 2017 alone, while
+transactions span 2015-01 to 2017-02. Loading them together would have left every cutoff
+before March 2017 with no session data, and the features would have computed, returned zeros,
+and looked entirely plausible. `--sessions-since` bounds the window properly instead.
 
 The most useful output is a negative result. KKBox has no customer-service data and records
 a transaction only when money moved, so five of the model's twenty-one features go constant:
@@ -1281,10 +1303,13 @@ uncomfortable list than a feature backlog.
   Desktop's built-in one) to apply against, which is a separate exercise from bringing up
   compose. The eight-service compose stack itself has now been run end to end — see
   "Running with Docker" below, including the two bugs that only surfaced once it was.
-- **The KKBox loader has never met KKBox.** It is written against the published schema and
-  tested against fixtures matching it, but the real files are ~30GB behind a Kaggle account.
-  Run `make ingest-check SRC=...` first; the contract validation exists precisely because
-  first contact with a real export usually surfaces something the documentation omits.
+- **The KKBox load is bounded, not complete.** The loader has now met the real dataset and
+  the six mismatches it found are fixed. What is loaded is every subscriber, transaction and
+  payment, plus usage sessions from 2016-10-01 onward — five months, chosen to overlap the
+  transaction window and give the temporal split enough cutoffs. The full 392M-row session
+  history is 7+ hours of SQLite index maintenance and more history than a 30-day observation
+  window can use; `--sessions-since` is the knob, and Postgres is the right target if you
+  want all of it.
 - **Alertmanager routes to nowhere on purpose.** The tree is real — grouping, inhibition,
   severity-based repeat intervals — but no receiver has an integration attached, because a
   Slack webhook or a PagerDuty key is a credential and credentials do not belong in a
