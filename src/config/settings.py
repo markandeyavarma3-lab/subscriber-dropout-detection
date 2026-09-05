@@ -204,6 +204,19 @@ PREDICTION_HORIZON_DAYS: int = _env_int(
     "SDD_PREDICTION_HORIZON_DAYS", 30, "features.prediction_horizon_days"
 )
 
+# Cap the population each cutoff builds features for.
+#
+# The simulator makes 8,000 subscribers, so this never mattered. A real
+# warehouse is a different proposition: KKBox carries 6.77 million, and the
+# point-in-time query joins their entire session history at every cutoff. That
+# is far more than a churn model needs - a few hundred thousand subscribers
+# estimate the same relationships - and the cost lands in the wrong places.
+#
+# Unset means no cap, which keeps the simulator path and every test unchanged.
+MAX_TRAINING_SUBSCRIBERS: int | None = _env_optional_int(
+    "SDD_MAX_SUBSCRIBERS", "features.max_subscribers"
+)
+
 # --------------------------------------------------------------------------- #
 # Data & splitting
 # --------------------------------------------------------------------------- #

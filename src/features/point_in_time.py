@@ -53,6 +53,7 @@ WITH base AS (
         s.acquisition_channel
     FROM subscribers s
     WHERE s.signup_date < :cutoff
+    {subscriber_limit}
 ),
 -- The subscription state as of the cutoff: the most recent lifecycle event
 -- strictly before T. Ordering by occurred_at then event_id keeps the pick
@@ -185,11 +186,39 @@ def _as_datetime(value: date) -> datetime:
     return datetime.combine(value, datetime.min.time())
 
 
+def _feature_sql(max_subscribers: int | None) -> str:
+    """The feature query, optionally capped to a fixed number of subscribers.
+
+    The cap is expressed as ``ORDER BY subscriber_id LIMIT n`` rather than a
+    random sample, for three reasons that all matter here:
+
+    **It is deterministic**, so every cutoff sees the same subscribers. A
+    different random draw per cutoff would produce a panel where subscribers
+    appear and vanish for no reason, and the temporal split would be comparing
+    different populations rather than the same one over time.
+
+    **It is portable.** SQLite and Postgres spell random sampling and hashing
+    differently; ``ORDER BY ... LIMIT`` is identical in both, and this query
+    has to run on whichever one the warehouse points at.
+
+    **On hashed identifiers it is effectively random anyway.** KKBox's
+    ``msno`` is a base64-encoded SHA256, so ordering by it is uncorrelated with
+    anything about the subscriber - the slice behaves like a sample without
+    needing to be one.
+    """
+    if not max_subscribers:
+        return _FEATURE_SQL.format(subscriber_limit="")
+    return _FEATURE_SQL.format(
+        subscriber_limit=f"ORDER BY s.subscriber_id LIMIT {int(max_subscribers)}"
+    )
+
+
 def build_training_snapshot(
     cutoff: str | date,
     observation_days: int | None = None,
     horizon_days: int | None = None,
     engine: Engine | None = None,
+    max_subscribers: int | None = None,
 ) -> tuple[pd.DataFrame, TrainingWindow]:
     """Build one labelled training set as of ``cutoff``.
 
@@ -198,11 +227,17 @@ def build_training_snapshot(
         observation_days: Behavioural window length. Defaults to settings.
         horizon_days: Label window length. Defaults to settings.
         engine: Optional SQLAlchemy engine.
+        max_subscribers: Cap the population. Defaults to the configured value.
+            Real warehouses are far larger than a churn model needs - KKBox
+            carries 6.77 million subscribers, and this query joins their whole
+            session history at every cutoff.
 
     Returns:
         ``(frame, window)`` where ``frame`` carries the raw serving columns plus
         ``dropout``, and ``window`` records the boundaries used.
     """
+    if max_subscribers is None:
+        max_subscribers = settings.MAX_TRAINING_SUBSCRIBERS
     as_of = cutoff if isinstance(cutoff, date) else date.fromisoformat(cutoff)
     window = TrainingWindow(
         cutoff=as_of,
@@ -220,7 +255,7 @@ def build_training_snapshot(
         "ticket_start": cutoff_dt - timedelta(days=90),
     }
 
-    frame = read_sql(_FEATURE_SQL, params, engine=engine)
+    frame = read_sql(_feature_sql(max_subscribers), params, engine=engine)
     if frame.empty:
         return frame.assign(dropout=pd.Series(dtype=int)), window
 

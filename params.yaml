@@ -31,6 +31,9 @@ features:
   # point-in-time correct rather than leaky.
   observation_window_days: 30
   prediction_horizon_days: 30
+  # Subscribers per cutoff. null means all of them, which is right for the
+  # 8,000-row simulator and wrong for a 6.77-million-row real warehouse.
+  max_subscribers: null
 
 split:
   # Fractions of the full dataset; training gets the remainder.
