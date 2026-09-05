@@ -72,7 +72,7 @@ latest_state AS (
                 ORDER BY e.occurred_at DESC, e.event_id DESC
             ) AS rn
         FROM subscription_events e
-        WHERE e.occurred_at < :cutoff
+        WHERE e.occurred_at < :cutoff {base_filter_e}
     ) ranked
     WHERE rn = 1
 ),
@@ -83,7 +83,7 @@ session_window AS (
         AVG(duration_minutes) AS avg_duration,
         MAX(occurred_at)      AS last_session_at
     FROM sessions
-    WHERE occurred_at >= :window_start AND occurred_at < :cutoff
+    WHERE occurred_at >= :window_start AND occurred_at < :cutoff {base_filter}
     GROUP BY subscriber_id
 ),
 -- Recency must look across all history, not just the window: a subscriber
@@ -92,7 +92,7 @@ session_window AS (
 session_recency AS (
     SELECT subscriber_id, MAX(occurred_at) AS last_session_ever
     FROM sessions
-    WHERE occurred_at < :cutoff
+    WHERE occurred_at < :cutoff {base_filter}
     GROUP BY subscriber_id
 ),
 payment_window AS (
@@ -101,13 +101,13 @@ payment_window AS (
         SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END)      AS payment_failures,
         SUM(CASE WHEN discount_applied THEN 1 ELSE 0 END)       AS discounts_used
     FROM payments
-    WHERE occurred_at >= :billing_start AND occurred_at < :cutoff
+    WHERE occurred_at >= :billing_start AND occurred_at < :cutoff {base_filter}
     GROUP BY subscriber_id
 ),
 ticket_window AS (
     SELECT subscriber_id, COUNT(*) AS support_tickets
     FROM support_tickets
-    WHERE occurred_at >= :ticket_start AND occurred_at < :cutoff
+    WHERE occurred_at >= :ticket_start AND occurred_at < :cutoff {base_filter}
     GROUP BY subscriber_id
 )
 SELECT
@@ -207,9 +207,25 @@ def _feature_sql(max_subscribers: int | None) -> str:
     needing to be one.
     """
     if not max_subscribers:
-        return _FEATURE_SQL.format(subscriber_limit="")
+        # Uncapped: no filter at all. Adding `IN (SELECT ... FROM base)` when
+        # base is every subscriber would make the planner do strictly more work
+        # for an identical result.
+        return _FEATURE_SQL.format(subscriber_limit="", base_filter="", base_filter_e="")
+
+    # Capping `base` alone is not enough, and this was a real bug: every
+    # aggregate below is over a whole table with no reference to `base`, so a
+    # LIMIT on the subscriber list left `session_recency` grouping all 38
+    # million session rows regardless. Measured: one cutoff at a 100,000
+    # subscriber cap had not finished after ten minutes.
+    #
+    # Restricting each aggregate to the capped set is what makes the cap mean
+    # anything - the indexes on (subscriber_id, occurred_at) can then be used
+    # instead of scanning.
+    restrict = "AND subscriber_id IN (SELECT subscriber_id FROM base)"
     return _FEATURE_SQL.format(
-        subscriber_limit=f"ORDER BY s.subscriber_id LIMIT {int(max_subscribers)}"
+        subscriber_limit=f"ORDER BY s.subscriber_id LIMIT {int(max_subscribers)}",
+        base_filter=restrict,
+        base_filter_e="AND e.subscriber_id IN (SELECT subscriber_id FROM base)",
     )
 
 
