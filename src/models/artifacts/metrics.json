@@ -1,125 +1,111 @@
 {
   "model_name": "gradient_boosting_classifier",
-  "trained_at": "2026-09-04T10:04:12+00:00",
-  "decision_threshold": 0.18,
+  "trained_at": "2026-09-05T23:30:47+00:00",
+  "decision_threshold": 0.05,
   "dataset": {
     "source": "warehouse",
     "cutoffs": {
       "train": [
-        "2024-01-01",
-        "2024-01-31",
-        "2024-03-01",
-        "2024-03-31",
-        "2024-04-30",
-        "2024-05-30",
-        "2024-06-29",
-        "2024-07-29",
-        "2024-08-28",
-        "2024-09-27",
-        "2024-10-27",
-        "2024-11-26",
-        "2024-12-26",
-        "2025-01-25",
-        "2025-02-24",
-        "2025-03-26"
+        "2016-11-01",
+        "2016-12-01"
       ],
       "validation": [
-        "2025-04-25"
+        "2016-12-31"
       ],
       "test": [
-        "2025-05-25"
+        "2017-01-29"
       ]
     },
-    "train_rows": 18599,
-    "validation_rows": 1610,
-    "test_rows": 1615
+    "train_rows": 66704,
+    "validation_rows": 33600,
+    "test_rows": 33042
   },
   "validation": {
-    "threshold": 0.18,
-    "n_samples": 1610,
-    "positive_rate_actual": 0.223,
-    "positive_rate_predicted": 0.5553,
-    "accuracy": 0.5348,
-    "precision": 0.2819,
-    "recall": 0.7019,
-    "f1": 0.4022,
-    "roc_auc": 0.6391,
-    "pr_auc": 0.3337,
+    "threshold": 0.05,
+    "n_samples": 33600,
+    "positive_rate_actual": 0.0143,
+    "positive_rate_predicted": 0.0333,
+    "accuracy": 0.9569,
+    "precision": 0.067,
+    "recall": 0.1566,
+    "f1": 0.0938,
+    "roc_auc": 0.8335,
+    "pr_auc": 0.0521,
     "confusion_matrix": {
-      "true_negatives": 609,
-      "false_positives": 642,
-      "false_negatives": 107,
-      "true_positives": 252
+      "true_negatives": 32076,
+      "false_positives": 1045,
+      "false_negatives": 404,
+      "true_positives": 75
     }
   },
   "test": {
-    "threshold": 0.18,
-    "n_samples": 1615,
-    "positive_rate_actual": 0.2099,
-    "positive_rate_predicted": 0.5734,
-    "accuracy": 0.5337,
-    "precision": 0.2765,
-    "recall": 0.7552,
-    "f1": 0.4047,
-    "roc_auc": 0.6742,
-    "pr_auc": 0.3448,
+    "threshold": 0.05,
+    "n_samples": 33042,
+    "positive_rate_actual": 0.0153,
+    "positive_rate_predicted": 0.034,
+    "accuracy": 0.9558,
+    "precision": 0.0756,
+    "recall": 0.168,
+    "f1": 0.1042,
+    "roc_auc": 0.8352,
+    "pr_auc": 0.0729,
     "confusion_matrix": {
-      "true_negatives": 606,
-      "false_positives": 670,
-      "false_negatives": 83,
-      "true_positives": 256
+      "true_negatives": 31496,
+      "false_positives": 1040,
+      "false_negatives": 421,
+      "true_positives": 85
     }
   },
   "top_feature_importances": [
     {
       "feature": "is_auto_renew_enabled",
-      "importance": 0.3347
+      "importance": 0.283
     },
     {
-      "feature": "avg_session_count_last_30d",
-      "importance": 0.1191
-    },
-    {
-      "feature": "tenure_months",
-      "importance": 0.0787
-    },
-    {
-      "feature": "sessions_per_day_last_30d",
-      "importance": 0.0768
+      "feature": "monthly_fee",
+      "importance": 0.1667
     },
     {
       "feature": "tenure_days",
-      "importance": 0.0726
+      "importance": 0.0971
     },
     {
       "feature": "recency_ratio",
-      "importance": 0.0721
+      "importance": 0.0961
     },
     {
-      "feature": "engagement_recency_score",
-      "importance": 0.0688
+      "feature": "discount_dependency",
+      "importance": 0.0757
+    },
+    {
+      "feature": "tenure_months",
+      "importance": 0.071
     },
     {
       "feature": "fee_per_session",
-      "importance": 0.0472
+      "importance": 0.0588
     },
     {
       "feature": "last_activity_days_ago",
-      "importance": 0.0429
+      "importance": 0.0554
     },
     {
-      "feature": "payment_failures_last_6m",
-      "importance": 0.0201
+      "feature": "discounts_used_last_6m",
+      "importance": 0.0546
+    },
+    {
+      "feature": "engagement_recency_score",
+      "importance": 0.0236
     }
   ],
   "decision_quality": {
     "calibration": {
-      "brier_score": 0.15663,
-      "expected_calibration_error": 0.02961,
-      "mean_predicted": 0.2281,
-      "observed_rate": 0.2099,
-      "mean_bias": 0.0182,
-      "n_samples": 1615
+      "brier_score": 0.01461,
+      "expected_calibration_error": 0.00395,
+      "mean_predicted": 0.0116,
+      "observed_rate": 0.0153,
+      "mean_bias": -0.0037,
+      "n_samples": 33042
     },
     "costs": {
       "costs": {
@@ -131,92 +117,92 @@
         "ratio": 12.0
       },
       "current": {
-        "threshold": 0.18,
-        "total_cost": 81448.0,
-        "cost_per_subscriber": 50.4322,
-        "true_positives": 256,
-        "false_positives": 670,
-        "false_negatives": 83,
-        "true_negatives": 606,
-        "flagged": 926,
-        "flagged_rate": 0.5734
+        "threshold": 0.05,
+        "total_cost": 137820.0,
+        "cost_per_subscriber": 4.1711,
+        "true_positives": 85,
+        "false_positives": 1040,
+        "false_negatives": 421,
+        "true_negatives": 31496,
+        "flagged": 1125,
+        "flagged_rate": 0.034
       },
       "cost_optimal": {
-        "threshold": 0.3,
-        "total_cost": 78580.0,
-        "cost_per_subscriber": 48.6563,
-        "true_positives": 125,
-        "false_positives": 186,
-        "false_negatives": 214,
-        "true_negatives": 1090,
-        "flagged": 311,
-        "flagged_rate": 0.1926
+        "threshold": 0.43,
+        "total_cost": 121312.0,
+        "cost_per_subscriber": 3.6714,
+        "true_positives": 4,
+        "false_positives": 4,
+        "false_negatives": 502,
+        "true_negatives": 32532,
+        "flagged": 8,
+        "flagged_rate": 0.0002
       },
       "analytic": {
         "threshold": 0.2778,
-        "total_cost": 78660.0,
-        "cost_per_subscriber": 48.7059,
-        "true_positives": 145,
-        "false_positives": 242,
-        "false_negatives": 194,
-        "true_negatives": 1034,
-        "flagged": 387,
-        "flagged_rate": 0.2396
+        "total_cost": 121436.0,
+        "cost_per_subscriber": 3.6752,
+        "true_positives": 7,
+        "false_positives": 18,
+        "false_negatives": 499,
+        "true_negatives": 32518,
+        "flagged": 25,
+        "flagged_rate": 0.0008
       },
-      "analytic_vs_empirical_gap": 0.0222,
-      "savings": 2868.0,
-      "savings_per_subscriber": 1.7759,
-      "extra_offers_required": -615,
+      "analytic_vs_empirical_gap": 0.1522,
+      "savings": 16508.0,
+      "savings_per_subscriber": 0.4996,
+      "extra_offers_required": -1117,
       "capacity": {
-        "population": 1615,
+        "population": 33042,
         "configured": false,
         "max_offers": null,
         "unconstrained": {
-          "threshold": 0.3,
-          "offers_required": 311,
-          "total_cost": 78580.0
+          "threshold": 0.43,
+          "offers_required": 8,
+          "total_cost": 121312.0
         },
         "marginal_value": [
           {
-            "max_offers": 78,
-            "threshold": 0.4984,
-            "offers_used": 78,
-            "total_cost": 80544.0,
+            "max_offers": 2,
+            "threshold": 0.59,
+            "offers_used": 2,
+            "total_cost": 121408.0,
             "value_per_extra_slot": null
           },
           {
-            "max_offers": 156,
-            "threshold": 0.4034,
-            "offers_used": 156,
-            "total_cost": 79584.0,
-            "value_per_extra_slot": 12.31
+            "max_offers": 4,
+            "threshold": 0.4751,
+            "offers_used": 4,
+            "total_cost": 121376.0,
+            "value_per_extra_slot": 16.0
           },
           {
-            "max_offers": 233,
-            "threshold": 0.3357,
-            "offers_used": 233,
-            "total_cost": 78820.0,
-            "value_per_extra_slot": 9.92
+            "max_offers": 6,
+            "threshold": 0.4588,
+            "offers_used": 6,
+            "total_cost": 121344.0,
+            "value_per_extra_slot": 16.0
           },
           {
-            "max_offers": 311,
-            "threshold": 0.301,
-            "offers_used": 311,
-            "total_cost": 78580.0,
-            "value_per_extra_slot": 3.08
+            "max_offers": 8,
+            "threshold": 0.4338,
+            "offers_used": 8,
+            "total_cost": 121312.0,
+            "value_per_extra_slot": 16.0
           },
           {
-            "max_offers": 389,
-            "threshold": 0.3,
-            "offers_used": 311,
-            "total_cost": 78580.0,
+            "max_offers": 10,
+            "threshold": 0.43,
+            "offers_used": 8,
+            "total_cost": 121312.0,
             "value_per_extra_slot": 0.0
           },
           {
-            "max_offers": 466,
-            "threshold": 0.3,
-            "offers_used": 311,
-            "total_cost": 78580.0,
+            "max_offers": 12,
+            "threshold": 0.43,
+            "offers_used": 8,
+            "total_cost": 121312.0,
             "value_per_extra_slot": 0.0
           }
         ],
@@ -229,60 +215,60 @@
     "calibration_attempt": {
       "method": "isotonic",
       "improved": true,
-      "ece_improvement": 0.00306,
+      "ece_improvement": 0.00295,
       "applied": false
     },
     "fairness": {
       "attribute": "plan_type",
-      "threshold": 0.18,
+      "threshold": 0.05,
       "n_groups": 3,
       "n_groups_evaluated": 3,
       "disparity_threshold": 0.8,
-      "selection_rate_ratio": 0.577,
-      "recall_ratio": 0.6532,
-      "roc_auc_ratio": 0.944,
+      "selection_rate_ratio": 0.0286,
+      "recall_ratio": null,
+      "roc_auc_ratio": 0.6404,
       "weakest_group": {
-        "group": "premium",
-        "roc_auc": 0.6367,
-        "n": 424
+        "group": "standard",
+        "roc_auc": 0.5374,
+        "n": 949
       },
       "concerns": [
-        "selection rates differ by more than the 0.8 ratio (0.577) - check whether the underlying churn rates differ too, which would make this expected",
-        "recall differs by more than the 0.8 ratio (0.6532) - some groups' churners are being missed far more often"
+        "selection rates differ by more than the 0.8 ratio (0.0286) - check whether the underlying churn rates differ too, which would make this expected",
+        "discrimination differs by more than the 0.8 ratio (0.6404) - the model is measurably less able to rank some groups"
       ],
       "passes": false,
       "groups": [
         {
-          "group": "standard",
-          "n": 634,
-          "base_rate": 0.2098,
-          "selection_rate": 0.582,
-          "recall": 0.7594,
-          "precision": 0.2737,
-          "false_negative_rate": 0.2406,
-          "roc_auc": 0.6745,
-          "sufficient_sample": true
-        },
-        {
           "group": "basic",
-          "n": 557,
-          "base_rate": 0.2442,
-          "selection_rate": 0.6948,
-          "recall": 0.8529,
-          "precision": 0.2997,
-          "false_negative_rate": 0.1471,
-          "roc_auc": 0.6694,
+          "n": 29294,
+          "base_rate": 0.0172,
+          "selection_rate": 0.0384,
+          "recall": 0.1687,
+          "precision": 0.0756,
+          "false_negative_rate": 0.8313,
+          "roc_auc": 0.8159,
           "sufficient_sample": true
         },
         {
           "group": "premium",
-          "n": 424,
-          "base_rate": 0.1651,
-          "selection_rate": 0.4009,
-          "recall": 0.5571,
-          "precision": 0.2294,
-          "false_negative_rate": 0.4429,
-          "roc_auc": 0.6367,
+          "n": 2799,
+          "base_rate": 0.0004,
+          "selection_rate": 0.0,
+          "recall": 0.0,
+          "precision": null,
+          "false_negative_rate": 1.0,
+          "roc_auc": 0.8392,
+          "sufficient_sample": true
+        },
+        {
+          "group": "standard",
+          "n": 949,
+          "base_rate": 0.0011,
+          "selection_rate": 0.0011,
+          "recall": 0.0,
+          "precision": 0.0,
+          "false_negative_rate": 1.0,
+          "roc_auc": 0.5374,
           "sufficient_sample": true
         }
       ]

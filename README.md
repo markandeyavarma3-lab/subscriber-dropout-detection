@@ -399,10 +399,11 @@ Split -> train=18,599 validation=1,610 test=1,615
 
 Honest reporting of the result, because the headline number moved a long way:
 
-| | ROC-AUC | PR-AUC | Recall |
-| --- | --- | --- | --- |
-| Old flat CSV, random split | 0.907 | 0.766 | 0.724 |
-| Warehouse, temporal split | **0.674** | **0.345** | **0.755** |
+| | Base rate | ROC-AUC | PR-AUC | Recall |
+| --- | --- | --- | --- | --- |
+| Old flat CSV, random split | ~20% | 0.907 | 0.766 | 0.724 |
+| Simulated warehouse, temporal split | ~20% | 0.674 | 0.345 | 0.755 |
+| **Real KKBox, temporal split** | **1.53%** | **0.835** | **0.073** | **0.168** |
 
 **That drop is not a regression — it is the removal of a fiction.** The old generator drew
 the `dropout` label from a logistic function of the very columns it then handed the model,
@@ -417,6 +418,50 @@ subscribers over a shorter window — the CLI defaulted to 4,000 while the confi
 reading either number too closely: validation and test are adjacent cutoffs of the *same*
 run and differ by 0.035 ROC-AUC, so cutoff-to-cutoff variation on this data is already
 larger than the gap between the two reported figures.
+
+#### What real data proved about the metric this project gates on
+
+The most valuable result here is the third row of that table, and it is not the ROC-AUC.
+
+Moving from the simulator to 6.77 million real KKBox subscribers, **ROC-AUC went *up*, from
+0.674 to 0.835, while PR-AUC collapsed from 0.345 to 0.073** — a factor of nearly five. The
+model got *better* at ranking and dramatically worse at the job.
+
+Both are true, and the reason is the base rate: ~20% in the simulator, **1.53%** in reality.
+ROC-AUC asks "does a random churner outrank a random stayer?", which stays easy as positives
+get rarer. Average precision asks "of the people you actually contact, how many were right?",
+which gets brutally harder.
+
+This is the exact claim the promotion gate was built on, written long before any real data
+existed:
+
+> The gating metric is **PR-AUC, not ROC-AUC** — at a ~20% positive rate, average precision
+> reflects retention-outreach performance far more honestly than ROC-AUC, which flatters
+> imbalanced data.
+
+That was a design decision taken on principle. It is now an empirical finding: a model
+promoted on ROC-AUC would have looked like a substantial *improvement* over the simulator,
+while being roughly five times worse at the thing it exists to do. Gating on PR-AUC catches
+that; gating on ROC-AUC rewards it.
+
+Three other things only real data could say:
+
+**The cost model says contact almost nobody.** The F1-tuned threshold of 0.05 flags 1,125 of
+33,042 subscribers. The cost-optimal threshold is **0.43, and flags 8** — saving 16,508 on the
+test split. At a 1.5% base rate with `offer_efficacy` at 0.30, the arithmetic of blanket
+outreach simply stops working. On the simulator this same model produced a sane-looking
+outreach list; on real economics it says the campaign is not worth running as specified. That
+is the cost model doing its job, and it is a far more useful answer than a plausible one.
+
+**Calibration flipped direction.** On the simulator, isotonic regression made ECE *worse*
+(0.038 → 0.062) and was correctly not applied. On real data it *improves* ECE by 0.00295.
+Same code, same guard, opposite verdict — which is the entire argument for measuring whether
+calibration helps rather than assuming it does.
+
+**Fairness fails, and differently.** `roc_auc_ratio` is 0.6404: the model is measurably worse
+at ranking some plan types than others. The selection-rate ratio of 0.0286 is more extreme
+still. Neither showed at this magnitude on synthetic data, where the groups were generated
+from the same process.
 
 One measurement worth recording, since it contradicts the usual claim: switching from a
 random to a temporal split changed ROC-AUC by only **−0.065** on this data. Random
