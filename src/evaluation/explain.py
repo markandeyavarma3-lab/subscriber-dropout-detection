@@ -45,6 +45,8 @@ import numpy as np
 import pandas as pd
 from sklearn.pipeline import Pipeline
 
+from src.config import settings
+
 logger = logging.getLogger(__name__)
 
 
@@ -110,6 +112,10 @@ def _phrase(column: str, record: dict[str, Any], raises_risk: bool) -> str:
     fee = float(record.get("monthly_fee", 0.0) or 0.0)
     plan = record.get("plan_type", "unknown")
 
+    stated = _boolean_phrase(column, record)
+    if stated is not None:
+        return stated
+
     up, down = {
         "last_activity_days_ago": (
             f"inactive for {days} days",
@@ -120,10 +126,6 @@ def _phrase(column: str, record: dict[str, Any], raises_risk: bool) -> str:
         "recency_ratio": (
             f"a {days}-day gap is long for a {tenure}-day-old account",
             f"a {days}-day gap is short against {tenure} days of tenure",
-        ),
-        "is_dormant": (
-            f"dormant - no session in over {days} days",
-            "not dormant",
         ),
         "avg_session_count_last_30d": (
             f"low recent activity ({sessions:.1f} sessions/30d)",
@@ -172,10 +174,40 @@ def _phrase(column: str, record: dict[str, Any], raises_risk: bool) -> str:
             f"poor value per session ({fee / (sessions + 1.0):.2f} per session)",
             f"good value per session ({fee / (sessions + 1.0):.2f} per session)",
         ),
-        "is_auto_renew_enabled": ("auto-renew disabled", "auto-renew enabled"),
     }.get(column, _fallback_phrase(column, plan))
 
     return up if raises_risk else down
+
+
+# Columns whose wording states a *fact about the input*, not a direction.
+#
+# Everything else in the table above describes a quantity and quotes the
+# subscriber's real number, so keying the two variants on SHAP's direction is
+# fine - "inactive for 45 days" and "last seen 45 days ago" are both true.
+#
+# Booleans are different, and getting this wrong produced a genuinely wrong
+# sentence: a request with is_auto_renew_enabled=False came back explained as
+# "auto-renew enabled", because on real KKBox data the model reads a missing
+# auto-renew as *lowering* risk, and the phrase followed the direction instead
+# of the value. An explanation that contradicts its own input is worse than no
+# explanation. These read the record instead.
+def _boolean_phrase(column: str, record: dict[str, Any]) -> str | None:
+    """Wording for columns that must state the input's value, or None."""
+    if column == "is_auto_renew_enabled":
+        return (
+            "auto-renew enabled"
+            if record.get("is_auto_renew_enabled")
+            else "auto-renew disabled"
+        )
+    if column == "is_dormant":
+        days = record.get("last_activity_days_ago", 0)
+        dormant_after = settings.EXPLANATION_RULES.dormant_days
+        return (
+            f"dormant - no session in {days} days"
+            if days > dormant_after
+            else f"active within the last {days} days"
+        )
+    return None
 
 
 def _fallback_phrase(column: str, plan: str) -> tuple[str, str]:

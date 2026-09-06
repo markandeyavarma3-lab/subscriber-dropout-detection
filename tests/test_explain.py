@@ -127,12 +127,49 @@ def test_wording_follows_the_dominant_column_not_the_group():
     assert "inactive" in gap_driven
 
 
-def test_phrases_flip_with_the_direction():
-    """The same concept means opposite things depending on which way it pushed."""
-    record = {"is_auto_renew_enabled": False}
+def test_quantity_phrases_flip_with_the_direction():
+    """For a *quantity*, both readings of the same number are true.
 
-    assert explain._phrase("is_auto_renew_enabled", record, True) == "auto-renew disabled"  # noqa: SLF001
-    assert explain._phrase("is_auto_renew_enabled", record, False) == "auto-renew enabled"  # noqa: SLF001
+    "inactive for 45 days" and "last seen 45 days ago" describe one value from
+    two angles, so keying them on which way the model pushed is legitimate.
+    Booleans are the exception - see the test below.
+    """
+    record = {"last_activity_days_ago": 45}
+
+    assert explain._phrase("last_activity_days_ago", record, True) == "inactive for 45 days"  # noqa: SLF001
+    assert explain._phrase("last_activity_days_ago", record, False) == "last seen 45 days ago"  # noqa: SLF001
+
+
+def test_boolean_phrases_state_the_input_not_the_model_direction():
+    """The bug this catches produced a sentence contradicting its own input.
+
+    A request with is_auto_renew_enabled=False came back explained as
+    "auto-renew enabled", because on real KKBox data the model reads a missing
+    auto-renew as *lowering* risk, and the wording followed SHAP's direction
+    rather than the value. For a quantity that is harmless - "inactive for 45
+    days" and "last seen 45 days ago" are both true. For a boolean it is a
+    false statement about what the caller sent.
+    """
+    disabled = {"is_auto_renew_enabled": False}
+    enabled = {"is_auto_renew_enabled": True}
+
+    # The direction must not change what the sentence claims about the input.
+    for raises in (True, False):
+        assert explain._phrase("is_auto_renew_enabled", disabled, raises) == (  # noqa: SLF001
+            "auto-renew disabled"
+        )
+        assert explain._phrase("is_auto_renew_enabled", enabled, raises) == (  # noqa: SLF001
+            "auto-renew enabled"
+        )
+
+
+def test_dormancy_is_stated_from_the_actual_gap() -> None:
+    """Same rule for is_dormant: the record decides, not the attribution."""
+    active = explain._phrase("is_dormant", {"last_activity_days_ago": 2}, True)  # noqa: SLF001
+    stale = explain._phrase("is_dormant", {"last_activity_days_ago": 90}, False)  # noqa: SLF001
+
+    assert "dormant" not in active
+    assert "dormant" in stale and "90" in stale
 
 
 def test_an_unknown_column_still_produces_readable_text():

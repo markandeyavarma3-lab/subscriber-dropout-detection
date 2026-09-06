@@ -152,7 +152,7 @@ subscriber-dropout-detection/
         ├── schemas.py               (182 lines) Pydantic request/response contract
         ├── service.py               (271 lines) model loading, prediction, explanations
         └── static/index.html              browser dashboard, no build step
-└── tests/                     14 files, 416 tests total (see §3.6)
+└── tests/                     14 files, 418 tests total (see §3.6)
 ```
 
 **The model pipeline** (`src/models/train.py` + `src/features/build_features.py`):
@@ -513,7 +513,7 @@ python -m src.models.train --source warehouse --promote    # + register in MLflo
 python -m src.models.train --cutoffs 2024-06-01 2024-07-01 2024-08-01   # explicit cutoffs
 ```
 
-### 3.6 Full test suite — 416 tests, all passing
+### 3.6 Full test suite — 418 tests, all passing
 
 ```
 tests/test_api.py            83 tests   — every endpoint, 422 validation, 503 degraded
@@ -546,7 +546,7 @@ tests/test_shadow.py         16 tests   — the safety contract: a raising chall
 tests/test_explain.py        14 tests   — SHAP additivity, concept grouping, and the
                                           three ways attribution degrades safely
 ─────────────────────────────────────────
-Total                       416 tests   — runs in ~15-30 seconds
+Total                       418 tests   — runs in ~15-30 seconds
 ```
 
 The suite trains one small model per session into a temporary directory — it never writes
@@ -793,7 +793,7 @@ make docker-build            build the image (trains model during build) — unt
 make docker-up               full compose stack — untested locally
 
 # --- quality ---
-make test                    run all 416 tests
+make test                    run all 418 tests
 make lint                    ruff check
 make clean                   remove generated data, artifacts, caches
 ```

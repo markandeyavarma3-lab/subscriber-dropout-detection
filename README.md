@@ -955,7 +955,7 @@ perfect and used three-character ids:
 | Full user log is 392M rows | Nothing about scale is visible in four rows |
 
 The third is the one that mattered. It would have loaded flawlessly into SQLite, passed all
-416 tests, and then failed on *every single row* against the compose stack's Postgres with
+418 tests, and then failed on *every single row* against the compose stack's Postgres with
 `value too long for type character varying(32)` — a constraint that only bites in production
 is worse than no constraint at all. The fourth would not have errored either: point-in-time
 queries join outward from `subscribers`, so 2.65M rows would have silently vanished from
@@ -1260,7 +1260,7 @@ verdict — in either direction.
 
 ### Tests
 
-416 tests across fourteen files, all runnable with `pytest`:
+418 tests across fourteen files, all runnable with `pytest`:
 
 - `test_features.py` — derived-column presence, row-count preservation, input immutability,
   finiteness, zero-denominator edge cases, hand-computed formula checks, output shape,
