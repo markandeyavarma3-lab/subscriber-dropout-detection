@@ -9,559 +9,613 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&family=Instrument+Serif&family=JetBrains+Mono:wght@400;500&display=swap">
 <style>
   /* ---------------------------------------------------------------------- *
-   * Tokens. Every colour is declared here first so both themes resolve as a
-   * set; the dark block below only ever redefines, never introduces.
+   * A dark theme by design, not by inversion. Single theme on purpose: two
+   * tuned to this standard would double the surface for no benefit.
    * ---------------------------------------------------------------------- */
   :root {
-    --paper:      #FAF9F7;
-    --surface:    #FFFFFF;
-    --sunk:       #F4F2EE;
-    --ink:        #1C1917;
-    --ink-soft:   #44403C;
-    --muted:      #78716C;
-    --line:       #E7E5E4;
-    --line-firm:  #D6D3D1;
+    --void:       #08090B;
+    --paper:      #0E1014;
+    --paper-lift: #171B22;
+    --sunk:       #0A0C0F;
+    --surface:    #14171C;
+    --raised:     #1A1E25;
 
-    --accent:      #0D6E6E;
-    --accent-soft: #E6F2F1;
-    --accent-ink:  #0A5555;
+    --line:      #232831;
+    --line-firm: #343B46;
+    --edge:      rgba(255, 255, 255, .055);
 
-    --low:         #15803D;
-    --low-soft:    #E8F5ED;
-    --medium:      #B45309;
-    --medium-soft: #FDF3E7;
-    --high:        #B91C1C;
-    --high-soft:   #FCEDEC;
+    --ink:      #F4F6F8;
+    --ink-soft: #A9B2BE;
+    --muted:    #6B7480;
 
-    --shadow-sm: 0 1px 2px rgba(28, 25, 23, .05);
-    --shadow-md: 0 1px 2px rgba(28, 25, 23, .05), 0 12px 28px -12px rgba(28, 25, 23, .16);
+    --accent:      #3ED6C0;
+    --accent-dim:  #123F3A;
+    --accent-glow: rgba(62, 214, 192, .22);
+
+    /* Every human-facing display figure is set in this, in the serif. Machine
+       figures - log-odds, PSI, versions - stay mono and muted. One rule,
+       applied without exception, is most of what reads as "designed". */
+    --bone: #E8DFCE;
+
+    --low:         #46C88A;
+    --low-soft:    #16302A;
+    --medium:      #F0A94A;
+    --medium-soft: #33270F;
+    --high:        #FF6A5A;
+    --high-soft:   #35191A;
+
+    /* All three cues together are what separate a card from the page. The
+       previous version used one, and the cards vanished. */
+    --panel-shadow:
+      inset 0 1px 0 var(--edge),
+      0 1px 2px rgba(0, 0, 0, .6),
+      0 24px 48px -28px rgba(0, 0, 0, .95);
 
     --font-display: "Instrument Serif", Georgia, "Times New Roman", serif;
     --font-ui: "Instrument Sans", ui-sans-serif, -apple-system, "Segoe UI", Roboto, sans-serif;
     --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
 
-    --r-sm: 7px;
-    --r-md: 12px;
-    --r-lg: 16px;
+    --r-hero: 20px;
+    --r-panel: 14px;
+    --r-input: 8px;
+    --r-chip: 5px;
 
-    /* Motion. Three durations and two easings, and nothing else - restraint
-       here comes from short durations, not from animating fewer things. */
-    --dur-1: 120ms;   /* state feedback: hover, focus, slider echo */
-    --dur-2: 240ms;   /* entrances, value changes, tab crossfade */
-    --dur-3: 480ms;   /* the gauge sweep, the one deliberately slower move */
+    --dur-1: 120ms;
+    --dur-2: 240ms;
+    --dur-3: 480ms;
     --ease-out: cubic-bezier(.2, .7, .2, 1);
     --ease-inout: cubic-bezier(.65, 0, .35, 1);
     --stagger: 40ms;
-  }
-
-  @media (prefers-color-scheme: dark) {
-    :root:not([data-theme="light"]) {
-      --paper:      #17161A;
-      --surface:    #1F1E24;
-      --sunk:       #26252C;
-      --ink:        #F0EEEA;
-      --ink-soft:   #CFCBC4;
-      --muted:      #948E85;
-      --line:       #302E36;
-      --line-firm:  #423F49;
-
-      --accent:      #4FB3A8;
-      --accent-soft: #14302D;
-      --accent-ink:  #7FD0C6;
-
-      --low:         #57BE7F;
-      --low-soft:    #16281D;
-      --medium:      #E0A040;
-      --medium-soft: #2B2317;
-      --high:        #F0736A;
-      --high-soft:   #301A19;
-
-      --shadow-sm: 0 1px 2px rgba(0, 0, 0, .4);
-      --shadow-md: 0 1px 2px rgba(0, 0, 0, .4), 0 12px 28px -12px rgba(0, 0, 0, .55);
-    }
   }
 
   * { box-sizing: border-box; }
 
   body {
     margin: 0;
-    background: var(--paper);
+    background:
+      radial-gradient(1300px 760px at 50% -12%, var(--paper-lift), var(--paper) 55%, var(--void) 100%)
+      fixed;
     color: var(--ink);
     font-family: var(--font-ui);
-    font-size: 15px;
-    line-height: 1.55;
+    font-size: 16px;
+    line-height: 1.6;
     -webkit-font-smoothing: antialiased;
+    min-height: 100vh;
   }
 
-  .shell { max-width: 1140px; margin: 0 auto; padding: 0 22px 72px; }
+  /* Grain. A flat #0E1014 bands visibly across 900px of gradient; this stops
+     it, and costs one inline SVG. */
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+    opacity: .035;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+
+  .shell { max-width: 1320px; margin: 0 auto; padding: 0 32px 56px; position: relative; z-index: 1; }
 
   /* ------------------------------ header ------------------------------- */
 
   header {
     display: flex;
     flex-wrap: wrap;
-    gap: 16px;
+    gap: 18px;
     align-items: flex-end;
     justify-content: space-between;
-    padding: 38px 0 22px;
+    padding: 40px 0 20px;
   }
 
   h1 {
     font-family: var(--font-display);
     font-weight: 400;
-    font-size: clamp(30px, 4.4vw, 42px);
-    line-height: 1.05;
-    letter-spacing: -0.005em;
+    font-size: clamp(36px, 4.2vw, 52px);
+    line-height: 1.02;
+    letter-spacing: -0.015em;
     margin: 0;
+    color: var(--ink);
   }
 
-  .tagline { margin: 5px 0 0; color: var(--muted); font-size: 14.5px; }
+  .tagline { margin: 6px 0 0; color: var(--ink-soft); font-size: 16px; }
 
   .status {
     display: inline-flex;
     align-items: center;
-    gap: 9px;
+    gap: 10px;
     background: var(--surface);
     border: 1px solid var(--line);
     border-radius: 999px;
-    padding: 7px 15px 7px 12px;
-    font-size: 13px;
+    padding: 8px 16px 8px 13px;
+    font-family: var(--font-mono);
+    font-size: 12.5px;
     color: var(--ink-soft);
-    box-shadow: var(--shadow-sm);
+    box-shadow: var(--panel-shadow);
     white-space: nowrap;
   }
 
   .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex: none; }
-  .dot.ok { background: var(--low); }
-  .dot.bad { background: var(--high); }
+  .dot.ok { background: var(--low); box-shadow: 0 0 10px rgba(70, 200, 138, .6); }
+  .dot.bad { background: var(--high); box-shadow: 0 0 10px rgba(255, 106, 90, .6); }
 
   /* ------------------------------- tabs -------------------------------- */
 
   .tabs {
     display: flex;
-    gap: 4px;
+    gap: 2px;
     border-bottom: 1px solid var(--line);
-    margin-bottom: 26px;
+    margin-bottom: 24px;
     overflow-x: auto;
+    position: relative;
   }
 
   .tab {
     appearance: none;
     background: none;
     border: none;
-    border-bottom: 2px solid transparent;
     margin-bottom: -1px;
-    padding: 11px 15px;
+    padding: 12px 18px;
     font-family: var(--font-ui);
-    font-size: 14.5px;
+    font-size: 15px;
     font-weight: 500;
     color: var(--muted);
     cursor: pointer;
     white-space: nowrap;
-    transition: color .15s, border-color .15s;
+    transition: color var(--dur-1);
   }
-  .tab:hover { color: var(--ink); }
-  .tab.is-active { color: var(--accent-ink); border-bottom-color: var(--accent); }
+  .tab:hover { color: var(--ink-soft); }
+  .tab.is-active { color: var(--accent); }
   .tab:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; border-radius: 4px; }
+
+  .tab-ink {
+    position: absolute;
+    bottom: -1px;
+    height: 2px;
+    background: var(--accent);
+    border-radius: 1px;
+    box-shadow: 0 0 10px var(--accent-glow);
+    transition: transform var(--dur-2) var(--ease-inout), width var(--dur-2) var(--ease-inout);
+    pointer-events: none;
+  }
 
   /* ------------------------------- views ------------------------------- */
 
   .view { display: none; }
   .view.is-active { display: block; }
 
-  .split {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr);
-    gap: 22px;
-    align-items: start;
-  }
-  @media (max-width: 880px) { .split { grid-template-columns: minmax(0, 1fr); } }
-
-  .card {
+  .panel {
     background: var(--surface);
     border: 1px solid var(--line);
-    border-radius: var(--r-lg);
-    padding: 22px;
-    box-shadow: var(--shadow-sm);
+    border-radius: var(--r-panel);
+    padding: 22px 24px;
+    box-shadow: var(--panel-shadow);
   }
-  .card.lift { box-shadow: var(--shadow-md); }
 
-  .card-title {
-    font-family: var(--font-ui);
-    font-size: 15px;
+  .panel-title {
+    font-size: 20px;
     font-weight: 600;
-    margin: 0 0 3px;
-    letter-spacing: -0.005em;
+    letter-spacing: -0.01em;
+    margin: 0 0 4px;
+    color: var(--ink);
   }
-  .card-sub { margin: 0 0 18px; color: var(--muted); font-size: 13.5px; }
+  .panel-sub { margin: 0 0 18px; color: var(--muted); font-size: 14px; }
 
-  /* ------------------------------- form -------------------------------- */
-
-  .presets { display: flex; gap: 6px; margin-bottom: 20px; flex-wrap: wrap; }
-
-  .preset {
-    appearance: none;
-    background: var(--sunk);
-    border: 1px solid transparent;
-    border-radius: 999px;
-    padding: 6px 13px;
-    font-family: var(--font-ui);
-    font-size: 13px;
-    font-weight: 500;
-    color: var(--ink-soft);
-    cursor: pointer;
-    transition: background .15s, color .15s, border-color .15s;
-  }
-  .preset:hover { background: var(--accent-soft); color: var(--accent-ink); }
-  .preset:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-
-  .group + .group { margin-top: 20px; }
-
-  .group-label {
+  .eyebrow {
     font-family: var(--font-mono);
-    font-size: 10.5px;
+    font-size: 11px;
     font-weight: 500;
-    letter-spacing: 0.13em;
+    letter-spacing: 0.16em;
     text-transform: uppercase;
     color: var(--muted);
-    margin-bottom: 10px;
   }
 
-  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-  @media (max-width: 460px) { .grid { grid-template-columns: 1fr; } }
+  /* --------------------------- the verdict slab ------------------------ */
 
-  .field { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
-  .field.wide { grid-column: 1 / -1; }
-
-  .field label { font-size: 13px; font-weight: 500; color: var(--ink-soft); }
-  .field .hint { font-size: 11.5px; color: var(--muted); }
-
-  input[type="number"], select {
-    font-family: var(--font-mono);
-    font-size: 13.5px;
-    color: var(--ink);
-    background: var(--surface);
-    border: 1px solid var(--line-firm);
-    border-radius: var(--r-sm);
-    padding: 8px 10px;
-    width: 100%;
-    transition: border-color .15s, box-shadow .15s;
+  .slab {
+    position: relative;
+    overflow: hidden;
+    background: var(--raised);
+    border: 1px solid var(--line);
+    border-top-color: rgba(62, 214, 192, .4);
+    border-radius: var(--r-hero);
+    padding: 20px 30px;
+    box-shadow: var(--panel-shadow);
+    margin-bottom: 20px;
   }
-  select { font-family: var(--font-ui); }
-  input[type="number"]:focus, select:focus {
-    outline: none;
-    border-color: var(--accent);
-    box-shadow: 0 0 0 3px var(--accent-soft);
+  /* The one glowing element on the page. Everything else is quietly raised. */
+  .slab::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: radial-gradient(620px 220px at 14% 0%, var(--accent-glow), transparent 70%);
   }
-
-  .check { flex-direction: row; align-items: center; gap: 9px; }
-  .check input { width: auto; accent-color: var(--accent); }
-  .check label { font-size: 13.5px; }
-
-  .submit {
-    appearance: none;
-    width: 100%;
-    margin-top: 22px;
-    background: var(--accent);
-    color: #fff;
-    border: none;
-    border-radius: var(--r-sm);
-    padding: 12px 18px;
-    font-family: var(--font-ui);
-    font-size: 14.5px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: background .15s, opacity .15s;
+  .slab-grid {
+    position: relative;
+    display: grid;
+    grid-template-columns: 320px 1fr 360px;
+    gap: 30px;
+    align-items: center;
   }
-  .submit:hover:not(:disabled) { background: var(--accent-ink); }
-  .submit:disabled { opacity: .55; cursor: default; }
-  .submit:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-
-  /* ------------------------------ result ------------------------------- */
-
-  .empty {
-    color: var(--muted);
-    font-size: 14px;
-    text-align: center;
-    padding: 54px 20px;
-    border: 1px dashed var(--line-firm);
-    border-radius: var(--r-md);
+  @media (max-width: 1100px) { .slab-grid { grid-template-columns: 1fr; gap: 22px; } }
+  .slab-cell + .slab-cell { border-left: 1px solid var(--line); padding-left: 30px; }
+  @media (max-width: 1100px) {
+    .slab-cell + .slab-cell { border-left: none; padding-left: 0; border-top: 1px solid var(--line); padding-top: 22px; }
   }
 
-  .hidden { display: none !important; }
-
-  .gauge-wrap { display: flex; flex-direction: column; align-items: center; gap: 2px; }
-  .gauge { width: 100%; max-width: 260px; height: auto; display: block; }
-
-  .pct {
+  /* Instrument Serif has proportional figures, so a count-up would shimmy.
+     Each glyph gets a fixed-advance cell instead, so the width never moves. */
+  .hero { display: flex; align-items: baseline; gap: 2px; color: var(--bone); }
+  .hero .d {
     font-family: var(--font-display);
-    font-size: 46px;
-    line-height: 1;
-    letter-spacing: -0.01em;
-    font-variant-numeric: tabular-nums;
+    font-size: clamp(84px, 9vw, 124px);
+    line-height: .85;
+    letter-spacing: -0.03em;
+    display: inline-block;
+    width: .52em;
+    text-align: center;
   }
+  .hero .d.sep { width: .22em; }
+  .hero .unit { font-family: var(--font-display); font-size: 38px; color: var(--muted); margin-left: 2px; }
 
   .band {
     display: inline-block;
     border-radius: 999px;
-    padding: 3px 12px;
-    font-size: 12px;
+    padding: 4px 14px;
+    font-size: 13px;
     font-weight: 600;
     letter-spacing: 0.02em;
-    margin-top: 8px;
+    margin-top: 14px;
   }
   .band.low    { background: var(--low-soft);    color: var(--low); }
   .band.medium { background: var(--medium-soft); color: var(--medium); }
   .band.high   { background: var(--high-soft);   color: var(--high); }
 
-  .gauge-note {
-    font-family: var(--font-mono);
-    font-size: 11.5px;
-    color: var(--muted);
-    margin-top: 10px;
-    text-align: center;
+  .slab-note { font-family: var(--font-mono); font-size: 11.5px; color: var(--muted); margin-top: 10px; }
+
+  .verdict { font-size: 19px; line-height: 1.5; color: var(--ink-soft); margin: 0; }
+  .method { margin-top: 14px; font-family: var(--font-mono); font-size: 11.5px; color: var(--muted); }
+
+  /* ------------------- population ribbon + threshold rule -------------- */
+
+  /* 6.77M training subscribers, binned by score. The envelope is masked to the
+     real shape of the distribution - heavy left mass, thin right tail - so it
+     reads as a waveform without a single note glyph. */
+  .ribbon {
+    position: relative;
+    height: 58px;
+    background: repeating-linear-gradient(90deg, var(--line-firm) 0 1px, transparent 1px 6px);
+    -webkit-mask-image: var(--envelope);
+    mask-image: var(--envelope);
+    --envelope: linear-gradient(90deg,
+      rgba(0,0,0,.18) 0%, rgba(0,0,0,1) 4%, rgba(0,0,0,.62) 12%,
+      rgba(0,0,0,.34) 26%, rgba(0,0,0,.2) 44%, rgba(0,0,0,.13) 64%,
+      rgba(0,0,0,.09) 82%, rgba(0,0,0,.06) 100%);
   }
-
-  .verdict {
-    margin: 20px 0 0;
-    padding-top: 18px;
-    border-top: 1px solid var(--line);
-    font-size: 14.5px;
-    color: var(--ink-soft);
-  }
-
-  /* --------------------------- shap bars ------------------------------- */
-
-  .drivers { margin-top: 20px; }
-
-  .driver { margin-bottom: 13px; }
-  .driver:last-child { margin-bottom: 0; }
-
-  .driver-top {
-    display: flex;
-    justify-content: space-between;
-    align-items: baseline;
-    gap: 12px;
-    margin-bottom: 5px;
-  }
-  .driver-label { font-size: 13.5px; color: var(--ink-soft); min-width: 0; }
-  .driver-val {
-    font-family: var(--font-mono);
-    font-size: 12px;
-    font-variant-numeric: tabular-nums;
-    flex: none;
-  }
-  .driver-val.up { color: var(--high); }
-  .driver-val.down { color: var(--low); }
-
-  /* Diverging bar: a centre line with the bar growing left (lowers risk) or
-     right (raises risk), so direction is readable without reading the number. */
-  .diverge { position: relative; height: 9px; background: var(--sunk); border-radius: 999px; }
-  .diverge::before {
-    content: "";
+  .ribbon .plumb {
     position: absolute;
-    left: 50%; top: -2px; bottom: -2px;
-    width: 1px;
-    background: var(--line-firm);
+    top: -4px; bottom: -4px;
+    width: 2px;
+    background: var(--bone);
+    box-shadow: 0 0 6px rgba(232, 223, 206, .9), 0 0 18px var(--accent-glow);
+    transition: left var(--dur-3) var(--ease-out);
   }
-  .diverge span {
-    position: absolute;
-    top: 0; bottom: 0;
+
+  .rule {
+    position: relative;
+    height: 10px;
+    margin-top: 12px;
     border-radius: 999px;
-    transition: width .3s ease, left .3s ease;
+    background: var(--sunk);
+    box-shadow: inset 0 1px 2px rgba(0, 0, 0, .7);
+    overflow: hidden;
   }
-  .diverge span.up { background: var(--high); left: 50%; }
-  .diverge span.down { background: var(--low); }
+  .rule i { position: absolute; top: 0; bottom: 0; }
+  .rule i.low { background: rgba(70, 200, 138, .32); }
+  .rule i.medium { background: rgba(240, 169, 74, .28); }
+  .rule i.high { background: rgba(255, 106, 90, .28); }
 
-  .method {
-    margin-top: 18px;
+  .rule-marks { position: relative; height: 20px; }
+  .rule-marks .tick {
+    position: absolute;
+    top: -14px;
+    width: 2px; height: 20px;
+    background: var(--bone);
+  }
+  .rule-marks .tick::after {
+    content: attr(data-l);
+    position: absolute;
+    top: 22px; left: 50%;
+    transform: translateX(-50%);
     font-family: var(--font-mono);
     font-size: 11px;
     color: var(--muted);
+    white-space: nowrap;
   }
-
-  .error {
-    margin-top: 16px;
-    background: var(--high-soft);
-    border: 1px solid var(--high);
-    border-radius: var(--r-sm);
-    padding: 11px 14px;
-    font-size: 13.5px;
-    color: var(--high);
+  .rule-marks .gap {
+    position: absolute;
+    top: -6px;
+    height: 2px;
+    background: var(--high);
   }
-
-  /* ------------------------------ tiles -------------------------------- */
-
-  .tiles {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(158px, 1fr));
-    gap: 12px;
-    margin-bottom: 22px;
-  }
-
-  .tile {
-    background: var(--surface);
-    border: 1px solid var(--line);
-    border-radius: var(--r-md);
-    padding: 15px 17px;
-  }
-  .tile-l {
-    font-family: var(--font-mono);
-    font-size: 10.5px;
-    letter-spacing: 0.11em;
-    text-transform: uppercase;
-    color: var(--muted);
-    display: block;
-    margin-bottom: 7px;
-  }
-  .tile-v {
-    font-family: var(--font-display);
-    font-size: 27px;
-    line-height: 1.1;
-    font-variant-numeric: tabular-nums;
-    display: block;
-  }
-  .tile-s { font-size: 12.5px; color: var(--muted); display: block; margin-top: 3px; }
-
-  /* stacked proportion bar for the risk-band mix */
-  .stack { display: flex; height: 30px; border-radius: var(--r-sm); overflow: hidden; background: var(--sunk); }
-  .stack i { display: block; transition: width .35s ease; }
-  .stack i.low { background: var(--low); }
-  .stack i.medium { background: var(--medium); }
-  .stack i.high { background: var(--high); }
-
-  .legend { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 12px; font-size: 13px; color: var(--ink-soft); }
-  .legend span { display: inline-flex; align-items: center; gap: 7px; }
-  .legend b { width: 9px; height: 9px; border-radius: 2px; display: inline-block; }
-  .legend .n { font-family: var(--font-mono); font-variant-numeric: tabular-nums; color: var(--muted); }
-
-  /* percentile track */
-  .track { position: relative; height: 8px; background: var(--sunk); border-radius: 999px; margin: 26px 0 8px; }
-  .track i { position: absolute; top: -5px; width: 2px; height: 18px; background: var(--accent); border-radius: 1px; }
-  .track i::after {
+  .rule-marks .gap::after {
     content: attr(data-l);
     position: absolute;
-    top: -19px; left: 50%;
-    transform: translateX(-50%);
+    top: -20px; right: 0;
     font-family: var(--font-mono);
-    font-size: 10px;
-    color: var(--muted);
+    font-size: 11px;
+    color: var(--high);
     white-space: nowrap;
   }
 
-  /* ---------------------------- key/value ------------------------------ */
+  /* ------------------------------ layout ------------------------------- */
 
-  .kv { display: grid; grid-template-columns: minmax(150px, auto) 1fr; gap: 10px 20px; }
-  @media (max-width: 560px) { .kv { grid-template-columns: 1fr; gap: 3px 0; } }
-  .kv dt { font-size: 13px; color: var(--muted); }
-  .kv dd {
-    margin: 0;
-    font-family: var(--font-mono);
-    font-size: 13px;
-    color: var(--ink-soft);
-    word-break: break-word;
-  }
-  @media (max-width: 560px) { .kv dd { margin-bottom: 9px; } }
+  .row2 { display: grid; grid-template-columns: minmax(0, 1.24fr) minmax(0, 1fr); gap: 24px; align-items: start; }
+  @media (max-width: 1000px) { .row2 { grid-template-columns: minmax(0, 1fr); } }
 
-  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
-  .chip {
-    font-family: var(--font-mono);
-    font-size: 11.5px;
-    background: var(--sunk);
-    border-radius: var(--r-sm);
-    padding: 3px 8px;
-    color: var(--ink-soft);
-  }
+  .two-col { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 22px; align-items: start; }
 
-  /* ------------------------------ drift -------------------------------- */
+  /* ------------------------------- form -------------------------------- */
 
-  .row-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 18px; }
+  .presets { display: flex; gap: 6px; margin-bottom: 18px; flex-wrap: wrap; }
 
-  .ghost {
+  .preset {
     appearance: none;
-    background: var(--surface);
-    border: 1px solid var(--line-firm);
-    border-radius: var(--r-sm);
-    padding: 8px 14px;
+    background: var(--sunk);
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 7px 15px;
     font-family: var(--font-ui);
     font-size: 13.5px;
     font-weight: 500;
     color: var(--ink-soft);
     cursor: pointer;
-    transition: border-color .15s, color .15s;
+    transition: border-color var(--dur-1), color var(--dur-1), background var(--dur-1);
   }
-  .ghost:hover:not(:disabled) { border-color: var(--accent); color: var(--accent-ink); }
+  .preset:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-dim); }
+  .preset:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .group + .group { margin-top: 14px; }
+  .group-label { margin-bottom: 10px; }
+
+  /* Three columns, and the number input lives inside the label row rather than
+     on its own line. That is what brings the form back inside the fold. */
+  .grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px 18px; }
+  @media (max-width: 760px) { .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  @media (max-width: 480px) { .grid { grid-template-columns: minmax(0, 1fr); } }
+
+  .field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+  .field.wide { grid-column: 1 / -1; }
+
+  .label-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .field label { font-size: 15px; font-weight: 500; color: var(--ink); }
+  .field .hint { font-size: 13px; color: var(--muted); }
+
+  input[type="number"], select {
+    font-family: var(--font-mono);
+    font-size: 14px;
+    color: var(--bone);
+    background: var(--sunk);
+    border: 1px solid var(--line-firm);
+    border-radius: var(--r-input);
+    padding: 7px 9px;
+    width: 100%;
+    transition: border-color var(--dur-1), box-shadow var(--dur-1);
+  }
+  input[type="number"] { width: 92px; text-align: right; padding: 5px 8px; }
+  select { font-family: var(--font-ui); color: var(--ink); }
+  input[type="number"]:focus, select:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-dim);
+  }
+
+  .check { flex-direction: row; align-items: center; gap: 10px; }
+  .check input { width: auto; accent-color: var(--accent); transform: scale(1.15); }
+  .check label { font-size: 15px; }
+
+  .submit {
+    appearance: none;
+    position: relative;
+    overflow: hidden;
+    width: 100%;
+    margin-top: 16px;
+    background: var(--accent);
+    color: #06231F;
+    border: none;
+    border-radius: var(--r-input);
+    padding: 13px 18px;
+    font-family: var(--font-ui);
+    font-size: 15.5px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: filter var(--dur-1), opacity var(--dur-1);
+  }
+  .submit:hover:not(:disabled) { filter: brightness(1.1); }
+  .submit:disabled { opacity: .55; cursor: default; }
+  .submit:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* --------------------------- sliders --------------------------------- */
+
+  input[type="range"] {
+    appearance: none;
+    width: 100%;
+    height: 6px;
+    border-radius: 999px;
+    background: var(--sunk);
+    box-shadow: inset 0 1px 2px rgba(0, 0, 0, .7);
+    outline: none;
+    cursor: pointer;
+  }
+  input[type="range"]::-webkit-slider-thumb {
+    appearance: none;
+    width: 18px; height: 18px;
+    border-radius: 50%;
+    background: var(--bone);
+    border: 3px solid var(--surface);
+    transition: box-shadow var(--dur-1);
+  }
+  input[type="range"]::-moz-range-thumb {
+    width: 18px; height: 18px;
+    border: 3px solid var(--surface);
+    border-radius: 50%;
+    background: var(--bone);
+  }
+  input[type="range"]:active::-webkit-slider-thumb,
+  input[type="range"]:focus-visible::-webkit-slider-thumb {
+    box-shadow: 0 0 0 7px var(--accent-glow);
+  }
+
+  /* ------------------------- impact badges ----------------------------- */
+
+  .impact {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 500;
+    border-radius: var(--r-chip);
+    padding: 1px 6px;
+    white-space: nowrap;
+  }
+  .impact.up { background: var(--high-soft); color: var(--high); }
+  .impact.down { background: var(--low-soft); color: var(--low); }
+
+  /* ---------------------------- shap bars ------------------------------ */
+
+  .driver { margin-bottom: 16px; }
+  .driver:last-child { margin-bottom: 0; }
+  .driver-top { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-bottom: 6px; }
+  .driver-label { font-size: 15px; color: var(--ink-soft); min-width: 0; }
+  .driver-val { font-family: var(--font-mono); font-size: 14px; font-variant-numeric: tabular-nums; flex: none; }
+  .driver-val.up { color: var(--high); }
+  .driver-val.down { color: var(--low); }
+
+  .diverge { position: relative; height: 10px; background: var(--sunk); border-radius: 999px; box-shadow: inset 0 1px 2px rgba(0,0,0,.7); }
+  .diverge::before { content: ""; position: absolute; left: 50%; top: -3px; bottom: -3px; width: 1px; background: var(--line-firm); }
+  .diverge span { position: absolute; top: 0; bottom: 0; border-radius: 999px; transition: width var(--dur-3) var(--ease-out); }
+  .diverge span.up { background: var(--high); left: 50%; }
+  .diverge span.down { background: var(--low); }
+
+  .empty {
+    color: var(--muted);
+    font-size: 15px;
+    text-align: center;
+    padding: 40px 20px;
+    border: 1px dashed var(--line-firm);
+    border-radius: var(--r-panel);
+  }
+  .hidden { display: none !important; }
+
+  .error {
+    margin-top: 16px;
+    background: var(--high-soft);
+    border: 1px solid var(--high);
+    border-radius: var(--r-input);
+    padding: 12px 15px;
+    font-size: 14px;
+    color: var(--high);
+  }
+
+  /* ------------------------------ tiles -------------------------------- */
+
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; margin-bottom: 22px; }
+  .tile { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-panel); padding: 18px 20px; box-shadow: var(--panel-shadow); }
+  .tile-l { font-family: var(--font-mono); font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); display: block; margin-bottom: 10px; }
+  .tile-v { font-family: var(--font-display); font-size: 40px; line-height: 1; color: var(--bone); display: block; }
+  .tile-s { font-size: 13px; color: var(--muted); display: block; margin-top: 6px; }
+
+  .stack { display: flex; height: 34px; border-radius: var(--r-input); overflow: hidden; background: var(--sunk); box-shadow: inset 0 1px 2px rgba(0,0,0,.7); }
+  .stack i { display: block; transition: width var(--dur-3) var(--ease-out); }
+  .stack i.low { background: var(--low); }
+  .stack i.medium { background: var(--medium); }
+  .stack i.high { background: var(--high); }
+
+  .legend { display: flex; gap: 20px; flex-wrap: wrap; margin-top: 14px; font-size: 14px; color: var(--ink-soft); }
+  .legend span { display: inline-flex; align-items: center; gap: 8px; }
+  .legend b { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+  .legend .n { font-family: var(--font-mono); color: var(--muted); }
+
+  .track { position: relative; height: 10px; background: var(--sunk); border-radius: 999px; margin: 30px 0 10px; box-shadow: inset 0 1px 2px rgba(0,0,0,.7); }
+  .track i { position: absolute; top: -6px; width: 2px; height: 22px; background: var(--accent); border-radius: 1px; }
+  .track i::after { content: attr(data-l); position: absolute; top: -20px; left: 50%; transform: translateX(-50%); font-family: var(--font-mono); font-size: 11px; color: var(--muted); white-space: nowrap; }
+
+  /* ---------------------------- key/value ------------------------------ */
+
+  .kv { display: grid; grid-template-columns: minmax(150px, auto) 1fr; gap: 12px 22px; }
+  @media (max-width: 560px) { .kv { grid-template-columns: 1fr; gap: 4px 0; } }
+  .kv dt { font-size: 14px; color: var(--muted); }
+  .kv dd { margin: 0; font-family: var(--font-mono); font-size: 13px; color: var(--ink-soft); word-break: break-word; }
+  @media (max-width: 560px) { .kv dd { margin-bottom: 10px; } }
+
+  .chips { display: flex; flex-wrap: wrap; gap: 7px; }
+  .chip { font-family: var(--font-mono); font-size: 12px; background: var(--sunk); border: 1px solid var(--line); border-radius: var(--r-chip); padding: 4px 9px; color: var(--ink-soft); }
+
+  /* ------------------------------ drift -------------------------------- */
+
+  .row-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 18px; }
+  .ghost {
+    appearance: none;
+    background: var(--sunk);
+    border: 1px solid var(--line-firm);
+    border-radius: var(--r-input);
+    padding: 10px 16px;
+    font-family: var(--font-ui);
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--ink-soft);
+    cursor: pointer;
+    transition: border-color var(--dur-1), color var(--dur-1);
+  }
+  .ghost:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
   .ghost:disabled { opacity: .55; cursor: default; }
   .ghost:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
-  .psi { margin-bottom: 11px; }
-  .psi:last-child { margin-bottom: 0; }
-  .psi-top { display: flex; justify-content: space-between; gap: 12px; font-size: 13px; margin-bottom: 4px; }
-  .psi-name { color: var(--ink-soft); font-family: var(--font-mono); font-size: 12.5px; }
-  .psi-val { font-family: var(--font-mono); font-size: 12px; font-variant-numeric: tabular-nums; flex: none; }
-  .psi-bar { height: 7px; background: var(--sunk); border-radius: 999px; overflow: hidden; }
-  .psi-bar i { display: block; height: 100%; border-radius: 999px; transition: width .3s ease; }
-  .psi-bar i.stable { background: var(--low); }
-  .psi-bar i.moderate { background: var(--medium); }
-  .psi-bar i.significant { background: var(--high); }
+  .method-line { font-family: var(--font-mono); font-size: 12px; color: var(--muted); background: var(--sunk); border: 1px solid var(--line); border-radius: var(--r-input); padding: 12px 15px; margin-bottom: 18px; line-height: 1.8; }
+  .finding { font-size: 16px; color: var(--ink-soft); border-left: 3px solid var(--accent); background: var(--accent-dim); border-radius: 0 var(--r-input) var(--r-input) 0; padding: 14px 17px; margin-bottom: 22px; }
 
-  .verdict-pill {
-    display: inline-block;
-    border-radius: 999px;
-    padding: 3px 12px;
-    font-size: 12px;
-    font-weight: 600;
-    margin-bottom: 16px;
-  }
-  .verdict-pill.stable { background: var(--low-soft); color: var(--low); }
-  .verdict-pill.moderate { background: var(--medium-soft); color: var(--medium); }
-  .verdict-pill.significant { background: var(--high-soft); color: var(--high); }
+  .axis { position: relative; height: 22px; margin: 0 0 8px 190px; border-bottom: 1px solid var(--line); }
+  @media (max-width: 620px) { .axis { margin-left: 0; } }
+  .axis i { position: absolute; top: 0; bottom: 0; width: 1px; border-left: 1px dashed var(--line-firm); }
+  .axis i::after { content: attr(data-l); position: absolute; top: 1px; left: 5px; font-family: var(--font-mono); font-size: 10.5px; color: var(--muted); white-space: nowrap; }
 
-  footer {
-    margin-top: 40px;
-    padding-top: 20px;
-    border-top: 1px solid var(--line);
-    font-size: 13px;
-    color: var(--muted);
-  }
-  footer a { color: var(--accent-ink); }
+  .dumb { display: grid; grid-template-columns: 190px 1fr; gap: 5px 0; margin-bottom: 16px; }
+  @media (max-width: 620px) { .dumb { grid-template-columns: 1fr; } }
+  .dumb.pinned { padding-bottom: 16px; border-bottom: 1px solid var(--line); margin-bottom: 20px; }
+  .dumb-name { font-family: var(--font-mono); font-size: 13px; color: var(--ink-soft); padding-right: 12px; }
+  .dumb-sub { grid-column: 1 / -1; font-family: var(--font-mono); font-size: 11px; color: var(--muted); }
+  @media (min-width: 621px) { .dumb-sub { grid-column: 2; } }
+  .dumb-track { position: relative; height: 22px; }
+  .dumb-track .link { position: absolute; top: 10px; height: 2px; border-radius: 1px; }
+  .dumb-track .pt { position: absolute; top: 6px; width: 11px; height: 11px; border-radius: 50%; margin-left: -5.5px; transition: left var(--dur-3) var(--ease-out); }
+  .dumb-track .pt.from { background: var(--surface); border: 2px solid var(--line-firm); }
+  .dumb-track .pt.to.stable { background: var(--low); }
+  .dumb-track .pt.to.moderate { background: var(--medium); }
+  .dumb-track .pt.to.significant { background: var(--high); }
 
-  /* ---------------------------- motion -------------------------------- */
+  .progress { font-family: var(--font-mono); font-size: 13px; color: var(--muted); }
 
-  @keyframes rise { from { opacity: 0; transform: translateY(8px); } }
+  footer { margin-top: 44px; padding-top: 22px; border-top: 1px solid var(--line); font-size: 14px; color: var(--muted); }
+  footer a { color: var(--accent); }
 
-  /* Every entrance rides this one class, so reduced-motion needs exactly one
-     rule to disable all of them. */
-  .enter {
-    animation: rise var(--dur-3) var(--ease-out) both;
-    animation-delay: calc(var(--i, 0) * var(--stagger));
-  }
+  /* ------------------------------ motion ------------------------------- */
+
+  @keyframes rise { from { opacity: 0; transform: translateY(10px); } }
+  .enter { animation: rise var(--dur-3) var(--ease-out) both; animation-delay: calc(var(--i, 0) * var(--stagger)); }
 
   @keyframes pop { 50% { transform: scale(1.35); } }
   .dot.settled { animation: pop 400ms var(--ease-out); }
 
-  /* Applied only to fields a preset actually changed, so the eye is drawn to
-     the difference rather than to all nine at once. */
-  @keyframes touch {
-    from { background: var(--accent-soft); }
-    to   { background: transparent; }
-  }
-  .field.touched { animation: touch 500ms var(--ease-out); border-radius: var(--r-sm); }
+  @keyframes touch { from { background: var(--accent-dim); } to { background: transparent; } }
+  .field.touched { animation: touch 500ms var(--ease-out); border-radius: var(--r-input); }
 
-  /* A result already on screen is dimmed while a new score is in flight, so a
-     stale number is never mistaken for a fresh one. */
-  #result.stale { opacity: .55; pointer-events: none; transition: opacity var(--dur-2); }
+  #result.stale { opacity: .55; transition: opacity var(--dur-2); }
 
-  /* /predict answers in about 7ms locally. A loading state that appears at all
-     in that window is a flicker, so this one is delayed past 200ms and in
-     practice is only ever seen on a slow link. */
-  .submit { position: relative; overflow: hidden; }
   .submit::after {
     content: "";
     position: absolute;
     left: 0; right: 0; bottom: 0;
     height: 2px;
-    background: rgba(255, 255, 255, .55);
+    background: rgba(6, 35, 31, .5);
     transform: translateX(-100%);
     opacity: 0;
   }
@@ -572,148 +626,6 @@
   }
   @keyframes slide { to { transform: translateX(100%); } }
 
-  /* ---------------------------- sliders -------------------------------- */
-
-  .with-slider { display: flex; flex-direction: column; gap: 6px; }
-
-  input[type="range"] {
-    appearance: none;
-    width: 100%;
-    height: 3px;
-    border-radius: 999px;
-    background: var(--line-firm);
-    outline: none;
-    cursor: pointer;
-  }
-  input[type="range"]::-webkit-slider-thumb {
-    appearance: none;
-    width: 15px; height: 15px;
-    border-radius: 50%;
-    background: var(--accent);
-    border: 2px solid var(--surface);
-    box-shadow: var(--shadow-sm);
-    transition: transform var(--dur-1) var(--ease-out);
-  }
-  input[type="range"]::-moz-range-thumb {
-    width: 15px; height: 15px;
-    border: 2px solid var(--surface);
-    border-radius: 50%;
-    background: var(--accent);
-  }
-  input[type="range"]:active::-webkit-slider-thumb { transform: scale(1.25); }
-  input[type="range"]:focus-visible { box-shadow: 0 0 0 3px var(--accent-soft); }
-
-  /* ------------------------- impact badges ----------------------------- */
-
-  .label-row { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
-
-  .impact {
-    font-family: var(--font-mono);
-    font-size: 10.5px;
-    font-weight: 500;
-    border-radius: 999px;
-    padding: 1px 7px;
-    white-space: nowrap;
-    animation: rise var(--dur-2) var(--ease-out) both;
-  }
-  .impact.up { background: var(--high-soft); color: var(--high); }
-  .impact.down { background: var(--low-soft); color: var(--low); }
-
-  /* --------------------------- tab underline --------------------------- */
-
-  .tabs { position: relative; }
-  .tab-ink {
-    position: absolute;
-    bottom: -1px;
-    height: 2px;
-    background: var(--accent);
-    border-radius: 1px;
-    transition: transform var(--dur-2) var(--ease-inout), width var(--dur-2) var(--ease-inout);
-    pointer-events: none;
-  }
-  .tab.is-active { border-bottom-color: transparent; }
-
-  /* --------------------------- drift dumbbell -------------------------- */
-
-  .method-line {
-    font-family: var(--font-mono);
-    font-size: 11.5px;
-    color: var(--muted);
-    background: var(--sunk);
-    border-radius: var(--r-sm);
-    padding: 10px 13px;
-    margin-bottom: 18px;
-    line-height: 1.7;
-  }
-
-  .finding {
-    font-size: 15px;
-    color: var(--ink-soft);
-    border-left: 3px solid var(--accent);
-    background: var(--accent-soft);
-    border-radius: 0 var(--r-sm) var(--r-sm) 0;
-    padding: 12px 15px;
-    margin-bottom: 20px;
-  }
-
-  .axis {
-    position: relative;
-    height: 20px;
-    margin: 0 0 6px 190px;
-    border-bottom: 1px solid var(--line);
-  }
-  @media (max-width: 620px) { .axis { margin-left: 0; } }
-  .axis i {
-    position: absolute;
-    top: 0; bottom: 0;
-    width: 1px;
-    border-left: 1px dashed var(--line-firm);
-  }
-  .axis i::after {
-    content: attr(data-l);
-    position: absolute;
-    top: 0; left: 4px;
-    font-family: var(--font-mono);
-    font-size: 10px;
-    color: var(--muted);
-    white-space: nowrap;
-  }
-
-  .dumb { display: grid; grid-template-columns: 190px 1fr; gap: 4px 0; margin-bottom: 14px; }
-  @media (max-width: 620px) { .dumb { grid-template-columns: 1fr; } }
-  .dumb.pinned { padding-bottom: 14px; border-bottom: 1px solid var(--line); margin-bottom: 18px; }
-
-  .dumb-name { font-family: var(--font-mono); font-size: 12.5px; color: var(--ink-soft); padding-right: 12px; }
-  .dumb-sub {
-    grid-column: 1 / -1;
-    font-family: var(--font-mono);
-    font-size: 10.5px;
-    color: var(--muted);
-  }
-  @media (min-width: 621px) { .dumb-sub { grid-column: 2; } }
-
-  .dumb-track { position: relative; height: 20px; }
-  .dumb-track .link { position: absolute; top: 9px; height: 2px; border-radius: 1px; }
-  .dumb-track .pt {
-    position: absolute; top: 5px;
-    width: 10px; height: 10px;
-    border-radius: 50%;
-    margin-left: -5px;
-    transition: left var(--dur-3) var(--ease-out);
-  }
-  .dumb-track .pt.from { background: var(--surface); border: 2px solid var(--line-firm); }
-  .dumb-track .pt.to.stable { background: var(--low); }
-  .dumb-track .pt.to.moderate { background: var(--medium); }
-  .dumb-track .pt.to.significant { background: var(--high); }
-
-  .progress {
-    font-family: var(--font-mono);
-    font-size: 12px;
-    color: var(--muted);
-  }
-
-  /* Durations go to 1ms rather than 0 so transitionend still fires, and the
-     iteration count is what actually stops a looping shimmer. */
   @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after {
       animation-duration: 1ms !important;
@@ -748,11 +660,43 @@
 
   <!-- =========================== SCORE =========================== -->
   <section class="view is-active" data-view="score">
-    <div class="split">
 
-      <div class="card">
-        <p class="card-title">Subscriber</p>
-        <p class="card-sub">Describe someone, or start from an example.</p>
+    <!-- Row 1: the verdict, full width. The result is the hero here, not the
+         form - which is the opposite of how this page used to be arranged. -->
+    <div class="slab" id="result">
+      <div class="slab-grid">
+        <div class="slab-cell">
+          <div class="hero" id="hero"></div>
+          <span id="band" class="band low">—</span>
+          <div class="slab-note" id="slabNote"></div>
+        </div>
+
+        <div class="slab-cell">
+          <div class="eyebrow" style="margin-bottom:12px">Where this subscriber sits</div>
+          <div class="ribbon"><span class="plumb" id="plumb" style="left:0%"></span></div>
+          <div class="rule">
+            <i class="low" id="ruleLow"></i>
+            <i class="medium" id="ruleMedium"></i>
+            <i class="high" id="ruleHigh"></i>
+          </div>
+          <div class="rule-marks" id="ruleMarks"></div>
+        </div>
+
+        <div class="slab-cell">
+          <p class="verdict" id="verdict"></p>
+          <div class="method" id="method"></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="empty" class="empty hidden">Score a subscriber to see their risk.</div>
+    <div id="error" class="error hidden"></div>
+
+    <!-- Row 2: inputs on the left, attribution on the right. -->
+    <div class="row2">
+      <div class="panel">
+        <p class="panel-title">Subscriber</p>
+        <p class="panel-sub">Describe someone, or start from an example.</p>
 
         <div class="presets">
           <button type="button" class="preset" data-preset="at_risk">At-risk</button>
@@ -762,110 +706,111 @@
 
         <form id="form">
           <div class="group">
-            <div class="group-label">Account</div>
+            <div class="group-label eyebrow">Account</div>
             <div class="grid">
-              <div class="field" data-field="tenure_days">
-                <div class="label-row">
-                  <label for="tenure_days">Tenure</label>
-                  <span class="impact-slot" data-impact="tenure_days"></span>
-                </div>
-                <div class="with-slider">
-                  <input type="number" id="tenure_days" min="0" max="4600" step="1" required>
-                  <input type="range" data-for="tenure_days" min="0" max="4600" step="1">
-                </div>
-                <span class="hint">days since signup</span>
+            <div class="field" data-field="tenure_days">
+              <div class="label-row">
+                <label for="tenure_days">Tenure</label>
+                <span class="impact-slot" data-impact="tenure_days"></span>
               </div>
-              <div class="field">
-                <label for="plan_type">Plan</label>
+              <div class="label-row">
+                <span class="hint">days</span>
+                <input type="number" id="tenure_days" min="0" max="4600" step="1" required>
+              </div>
+              <input type="range" data-for="tenure_days" min="0" max="4600" step="1">
+            </div>
+              <div class="field" data-field="plan_type">
+                <div class="label-row"><label for="plan_type">Plan</label></div>
+                <div class="label-row"><span class="hint">tier</span></div>
                 <select id="plan_type">
                   <option value="basic">basic</option>
                   <option value="standard">standard</option>
                   <option value="premium">premium</option>
                 </select>
-                <span class="hint">subscription tier</span>
               </div>
-              <div class="field" data-field="monthly_fee">
-                <div class="label-row">
-                  <label for="monthly_fee">Monthly fee</label>
-                  <span class="impact-slot" data-impact="monthly_fee"></span>
-                </div>
-                <div class="with-slider">
-                  <input type="number" id="monthly_fee" min="0" max="185" step="0.5" required>
-                  <input type="range" data-for="monthly_fee" min="0" max="185" step="0.5">
-                </div>
+            <div class="field" data-field="monthly_fee">
+              <div class="label-row">
+                <label for="monthly_fee">Monthly fee</label>
+                <span class="impact-slot" data-impact="monthly_fee"></span>
+              </div>
+              <div class="label-row">
                 <span class="hint">per month</span>
+                <input type="number" id="monthly_fee" min="0" max="185" step="0.01" required>
               </div>
-              <div class="field check wide">
-                <input type="checkbox" id="is_auto_renew_enabled">
-                <label for="is_auto_renew_enabled">Auto-renew enabled</label>
-              </div>
+              <input type="range" data-for="monthly_fee" min="0" max="185" step="0.5">
+            </div>
+            </div>
+            <div class="field check" style="margin-top:14px">
+              <input type="checkbox" id="is_auto_renew_enabled">
+              <label for="is_auto_renew_enabled">Auto-renew enabled</label>
+              <span class="impact-slot" data-impact="is_auto_renew_enabled"></span>
             </div>
           </div>
 
           <div class="group">
-            <div class="group-label">Engagement</div>
+            <div class="group-label eyebrow">Engagement</div>
             <div class="grid">
-              <div class="field" data-field="avg_session_count_last_30d">
-                <div class="label-row">
-                  <label for="avg_session_count_last_30d">Sessions</label>
-                  <span class="impact-slot" data-impact="avg_session_count_last_30d"></span>
-                </div>
-                <div class="with-slider">
-                  <input type="number" id="avg_session_count_last_30d" min="0" max="30" step="0.5" required>
-                  <input type="range" data-for="avg_session_count_last_30d" min="0" max="30" step="0.5">
-                </div>
-                <span class="hint">in the last 30 days</span>
+            <div class="field" data-field="avg_session_count_last_30d">
+              <div class="label-row">
+                <label for="avg_session_count_last_30d">Sessions</label>
+                <span class="impact-slot" data-impact="avg_session_count_last_30d"></span>
               </div>
-              <div class="field" data-field="last_activity_days_ago">
-                <div class="label-row">
-                  <label for="last_activity_days_ago">Last active</label>
-                  <span class="impact-slot" data-impact="last_activity_days_ago"></span>
-                </div>
-                <div class="with-slider">
-                  <input type="number" id="last_activity_days_ago" min="0" max="1200" step="1" required>
-                  <input type="range" data-for="last_activity_days_ago" min="0" max="1200" step="1">
-                </div>
+              <div class="label-row">
+                <span class="hint">last 30d</span>
+                <input type="number" id="avg_session_count_last_30d" min="0" max="30" step="0.1" required>
+              </div>
+              <input type="range" data-for="avg_session_count_last_30d" min="0" max="30" step="0.5">
+            </div>
+            <div class="field" data-field="last_activity_days_ago">
+              <div class="label-row">
+                <label for="last_activity_days_ago">Last active</label>
+                <span class="impact-slot" data-impact="last_activity_days_ago"></span>
+              </div>
+              <div class="label-row">
                 <span class="hint">days ago</span>
+                <input type="number" id="last_activity_days_ago" min="0" max="1200" step="1" required>
               </div>
+              <input type="range" data-for="last_activity_days_ago" min="0" max="1200" step="1">
+            </div>
             </div>
           </div>
 
           <div class="group">
-            <div class="group-label">Friction</div>
+            <div class="group-label eyebrow">Friction</div>
             <div class="grid">
-              <div class="field" data-field="support_tickets_last_90d">
-                <div class="label-row">
-                  <label for="support_tickets_last_90d">Support tickets</label>
-                  <span class="impact-slot" data-impact="support_tickets_last_90d"></span>
-                </div>
-                <div class="with-slider">
-                  <input type="number" id="support_tickets_last_90d" min="0" max="10" step="1" required>
-                  <input type="range" data-for="support_tickets_last_90d" min="0" max="10" step="1">
-                </div>
-                <span class="hint">last 90 days</span>
+            <div class="field" data-field="support_tickets_last_90d">
+              <div class="label-row">
+                <label for="support_tickets_last_90d">Support tickets</label>
+                <span class="impact-slot" data-impact="support_tickets_last_90d"></span>
               </div>
-              <div class="field" data-field="payment_failures_last_6m">
-                <div class="label-row">
-                  <label for="payment_failures_last_6m">Payment failures</label>
-                  <span class="impact-slot" data-impact="payment_failures_last_6m"></span>
-                </div>
-                <div class="with-slider">
-                  <input type="number" id="payment_failures_last_6m" min="0" max="10" step="1" required>
-                  <input type="range" data-for="payment_failures_last_6m" min="0" max="10" step="1">
-                </div>
-                <span class="hint">last 6 months</span>
+              <div class="label-row">
+                <span class="hint">90d</span>
+                <input type="number" id="support_tickets_last_90d" min="0" max="10" step="1" required>
               </div>
-              <div class="field wide" data-field="discounts_used_last_6m">
-                <div class="label-row">
-                  <label for="discounts_used_last_6m">Discounts used</label>
-                  <span class="impact-slot" data-impact="discounts_used_last_6m"></span>
-                </div>
-                <div class="with-slider">
-                  <input type="number" id="discounts_used_last_6m" min="0" max="10" step="1" required>
-                  <input type="range" data-for="discounts_used_last_6m" min="0" max="10" step="1">
-                </div>
-                <span class="hint">last 6 months</span>
+              <input type="range" data-for="support_tickets_last_90d" min="0" max="10" step="1">
+            </div>
+            <div class="field" data-field="payment_failures_last_6m">
+              <div class="label-row">
+                <label for="payment_failures_last_6m">Payment failures</label>
+                <span class="impact-slot" data-impact="payment_failures_last_6m"></span>
               </div>
+              <div class="label-row">
+                <span class="hint">6m</span>
+                <input type="number" id="payment_failures_last_6m" min="0" max="10" step="1" required>
+              </div>
+              <input type="range" data-for="payment_failures_last_6m" min="0" max="10" step="1">
+            </div>
+            <div class="field" data-field="discounts_used_last_6m">
+              <div class="label-row">
+                <label for="discounts_used_last_6m">Discounts used</label>
+                <span class="impact-slot" data-impact="discounts_used_last_6m"></span>
+              </div>
+              <div class="label-row">
+                <span class="hint">6m</span>
+                <input type="number" id="discounts_used_last_6m" min="0" max="10" step="1" required>
+              </div>
+              <input type="range" data-for="discounts_used_last_6m" min="0" max="10" step="1">
+            </div>
             </div>
           </div>
 
@@ -873,36 +818,11 @@
         </form>
       </div>
 
-      <div class="card lift">
-        <p class="card-title">Prediction</p>
-        <p class="card-sub">Probability, risk band, and what drove it.</p>
-
-        <div id="empty" class="empty">Score a subscriber to see their risk.</div>
-
-        <div id="result" class="hidden">
-          <div class="gauge-wrap">
-            <svg class="gauge" viewBox="0 0 240 150" role="img" aria-labelledby="gaugeTitle">
-              <title id="gaugeTitle">Dropout probability against the decision threshold</title>
-              <path id="arcLow"    d="M 20 120 A 100 100 0 0 1 220 120" fill="none" stroke-width="14" stroke-linecap="round"></path>
-              <path id="arcMedium" d="M 20 120 A 100 100 0 0 1 220 120" fill="none" stroke-width="14" stroke-linecap="butt"></path>
-              <path id="arcHigh"   d="M 20 120 A 100 100 0 0 1 220 120" fill="none" stroke-width="14" stroke-linecap="round"></path>
-              <line id="thrTick" x1="0" y1="0" x2="0" y2="0" stroke-width="2"></line>
-              <circle id="marker" cx="0" cy="0" r="7" stroke-width="3"></circle>
-              <text id="pctText" x="120" y="112" text-anchor="middle" class="pct" fill="currentColor">—</text>
-            </svg>
-            <span id="band" class="band low">—</span>
-            <div class="gauge-note" id="gaugeNote"></div>
-          </div>
-
-          <p class="verdict" id="verdict"></p>
-
-          <div class="drivers" id="drivers"></div>
-          <div class="method" id="method"></div>
-        </div>
-
-        <div id="error" class="error hidden"></div>
+      <div class="panel">
+        <p class="panel-title">What drove it</p>
+        <p class="panel-sub">SHAP attributions, strongest first.</p>
+        <div class="drivers" id="drivers"></div>
       </div>
-
     </div>
   </section>
 
@@ -931,9 +851,9 @@
       </div>
     </div>
 
-    <div class="card">
-      <p class="card-title">Risk mix</p>
-      <p class="card-sub">How the scored population splits across the three bands.</p>
+    <div class="panel">
+      <p class="panel-title">Risk mix</p>
+      <p class="panel-sub">How the scored population splits across the three bands.</p>
       <div class="stack">
         <i class="low" id="sLow" style="width:0%"></i>
         <i class="medium" id="sMedium" style="width:0%"></i>
@@ -946,9 +866,9 @@
       </div>
     </div>
 
-    <div class="card" style="margin-top:22px">
-      <p class="card-title">Score spread</p>
-      <p class="card-sub">Where the recent predictions actually landed, 0 to 1.</p>
+    <div class="panel" style="margin-top:22px">
+      <p class="panel-title">Score spread</p>
+      <p class="panel-sub">Where the recent predictions actually landed, 0 to 1.</p>
       <div class="track" id="spread"></div>
       <div class="gauge-note" id="spreadNote" style="text-align:left"></div>
     </div>
@@ -956,21 +876,21 @@
 
   <!-- =========================== MODEL =========================== -->
   <section class="view" data-view="model">
-    <div class="card">
-      <p class="card-title">Provenance</p>
-      <p class="card-sub">Which artifact is answering requests, and where it came from.</p>
+    <div class="panel">
+      <p class="panel-title">Provenance</p>
+      <p class="panel-sub">Which artifact is answering requests, and where it came from.</p>
       <dl class="kv" id="modelKv"></dl>
     </div>
 
-    <div class="card" style="margin-top:22px">
-      <p class="card-title">Required inputs</p>
-      <p class="card-sub">Every column the pipeline expects on a request.</p>
+    <div class="panel" style="margin-top:22px">
+      <p class="panel-title">Required inputs</p>
+      <p class="panel-sub">Every column the pipeline expects on a request.</p>
       <div class="chips" id="modelCols"></div>
     </div>
 
-    <div class="card" style="margin-top:22px">
-      <p class="card-title">Reading the drivers</p>
-      <p class="card-sub">Two things about this model surprise people. Both are real.</p>
+    <div class="panel" style="margin-top:22px">
+      <p class="panel-title">Reading the drivers</p>
+      <p class="panel-sub">Two things about this model surprise people. Both are real.</p>
       <dl class="kv">
         <dt>Auto-renew reads backwards</dt>
         <dd>
@@ -989,24 +909,24 @@
       </dl>
     </div>
 
-    <div class="card" style="margin-top:22px">
-      <p class="card-title">Library versions</p>
-      <p class="card-sub">Pinned at training time — a mismatch here is how artifacts silently break.</p>
+    <div class="panel" style="margin-top:22px">
+      <p class="panel-title">Library versions</p>
+      <p class="panel-sub">Pinned at training time — a mismatch here is how artifacts silently break.</p>
       <dl class="kv" id="modelLibs"></dl>
     </div>
   </section>
 
   <!-- ========================= MONITORING ========================= -->
   <section class="view" data-view="monitoring">
-    <div class="card">
-      <p class="card-title">Champion vs challenger</p>
-      <p class="card-sub">Shadow scoring runs both models on live traffic and serves only the champion.</p>
+    <div class="panel">
+      <p class="panel-title">Champion vs challenger</p>
+      <p class="panel-sub">Shadow scoring runs both models on live traffic and serves only the champion.</p>
       <div id="shadowBody"><div class="empty">Loading…</div></div>
     </div>
 
-    <div class="card" style="margin-top:22px">
-      <p class="card-title">Drift detector response</p>
-      <p class="card-sub">
+    <div class="panel" style="margin-top:22px">
+      <p class="panel-title">Drift detector response</p>
+      <p class="panel-sub">
         We move two features by a known amount and watch which ones the detector ranks.
         This is an instrument test, not a health readout — the point is whether the
         detector responds to a change we control.
@@ -1119,7 +1039,7 @@
     if (!REDUCED) {
       const view = document.querySelector(`.view[data-view="${name}"]`);
       if (view) {
-        [...view.querySelectorAll(".card, .tiles")].slice(0, 4).forEach((card, i) => {
+        [...view.querySelectorAll(".panel, .tiles")].slice(0, 4).forEach((card, i) => {
           card.classList.remove("enter");
           void card.offsetWidth;
           card.style.setProperty("--i", i);
@@ -1235,60 +1155,69 @@
 
   /* ------------------------------ rendering ---------------------------- */
 
-  function renderGauge(probability, threshold) {
-    const highStart = threshold + (1 - threshold) * HIGH_RISK_SPAN;
-
-    const segment = (el, from, to, color) => {
-      const len = Math.max(0, to - from) * ARC_LEN;
-      el.setAttribute("stroke", color);
-      el.setAttribute("stroke-dasharray", `${len} ${ARC_LEN}`);
-      el.setAttribute("stroke-dashoffset", `${-from * ARC_LEN}`);
-    };
-
-    const css = getComputedStyle(document.body);
-    segment($("arcLow"), 0, threshold, css.getPropertyValue("--low").trim());
-    segment($("arcMedium"), threshold, highStart, css.getPropertyValue("--medium").trim());
-    segment($("arcHigh"), highStart, 1, css.getPropertyValue("--high").trim());
-
-    const t = arcPoint(threshold);
-    const inner = { x: 120 + 84 * Math.cos(Math.PI - threshold * Math.PI),
-                    y: 120 - 84 * Math.sin(Math.PI - threshold * Math.PI) };
-    const outer = { x: 120 + 116 * Math.cos(Math.PI - threshold * Math.PI),
-                    y: 120 - 116 * Math.sin(Math.PI - threshold * Math.PI) };
-    const tick = $("thrTick");
-    tick.setAttribute("x1", inner.x); tick.setAttribute("y1", inner.y);
-    tick.setAttribute("x2", outer.x); tick.setAttribute("y2", outer.y);
-    tick.setAttribute("stroke", css.getPropertyValue("--ink").trim());
-
-    const m = arcPoint(probability);
-    const marker = $("marker");
-    marker.setAttribute("cx", m.x);
-    marker.setAttribute("cy", m.y);
-    marker.setAttribute("fill", css.getPropertyValue("--ink").trim());
-    marker.setAttribute("stroke", css.getPropertyValue("--surface").trim());
-
-    $("gaugeNote").textContent =
-      `decision threshold ${pct(threshold)} · marked on the arc`;
-    void t;
+  // Instrument Serif has proportional figures, so a count-up would visibly
+  // shimmy. Each glyph gets its own fixed-advance cell instead.
+  function setHero(text) {
+    const host = $("hero");
+    const chars = text.replace("%", "").split("");
+    if (host.children.length !== chars.length + 1) {
+      host.replaceChildren();
+      chars.forEach(() => host.appendChild(el("span", "d")));
+      host.appendChild(el("span", "unit", "%"));
+    }
+    chars.forEach((ch, i) => {
+      const cell = host.children[i];
+      cell.textContent = ch;
+      cell.className = "d" + (/[.,]/.test(ch) ? " sep" : "");
+    });
   }
 
-  // Counts from the previous value rather than always from zero, so a re-score
-  // reads as a change rather than a fresh reveal.
   let lastShown = 0;
   function countUp(target) {
-    const node = $("pctText");
-    if (REDUCED) { node.textContent = pct(target); lastShown = target; return; }
-
+    if (REDUCED) { setHero(pct(target)); lastShown = target; return; }
     const from = lastShown;
     const start = performance.now();
     const step = (now) => {
-      const p = Math.min(1, (now - start) / 480);
-      const eased = 1 - Math.pow(1 - p, 3);
-      node.textContent = pct(from + (target - from) * eased);
-      if (p < 1) requestAnimationFrame(step);
-      else lastShown = target;
+      const q = Math.min(1, (now - start) / 480);
+      setHero(pct(from + (target - from) * (1 - Math.pow(1 - q, 3))));
+      if (q < 1) requestAnimationFrame(step); else lastShown = target;
     };
     requestAnimationFrame(step);
+  }
+
+  // The population ribbon and the threshold rule replace the arc gauge. The
+  // distance between the marker and the threshold is the story of the
+  // prediction, and a linear rule shows it where an arc could not.
+  function renderSpectrum(probability, threshold) {
+    const highStart = threshold + (1 - threshold) * HIGH_RISK_SPAN;
+    const pos = (v) => Math.max(0, Math.min(100, v * 100));
+
+    $("ruleLow").style.cssText = `left:0%;width:${pos(threshold)}%`;
+    $("ruleMedium").style.cssText = `left:${pos(threshold)}%;width:${pos(highStart) - pos(threshold)}%`;
+    $("ruleHigh").style.cssText = `left:${pos(highStart)}%;width:${100 - pos(highStart)}%`;
+    $("plumb").style.left = pos(probability) + "%";
+
+    const marks = $("ruleMarks");
+    marks.replaceChildren();
+    const tick = el("span", "tick");
+    tick.style.left = pos(threshold) + "%";
+    tick.dataset.l = "threshold " + pct(threshold);
+    marks.appendChild(tick);
+
+    // How far over (or under) the line this subscriber sits, in percentage
+    // points - the number a retention team would actually act on.
+    const delta = (probability - threshold) * 100;
+    const gap = el("span", "gap");
+    const lo = Math.min(pos(probability), pos(threshold));
+    gap.style.left = lo + "%";
+    gap.style.width = Math.abs(pos(probability) - pos(threshold)) + "%";
+    gap.style.background = delta >= 0 ? "var(--high)" : "var(--low)";
+    gap.dataset.l = (delta >= 0 ? "+" : "") + delta.toFixed(1) + "pp " +
+      (delta >= 0 ? "over the line" : "under the line");
+    marks.appendChild(gap);
+
+    $("slabNote").textContent =
+      `decision threshold ${pct(threshold)} · 6,770,000 subscribers in the baseline`;
   }
 
   function renderImpacts(attributions) {
@@ -1373,10 +1302,9 @@
   function render(data) {
     $("error").classList.add("hidden");
     $("empty").classList.add("hidden");
-    $("result").classList.remove("hidden");
-    $("result").classList.remove("stale");
+    $("result").classList.remove("hidden", "stale");
 
-    renderGauge(data.dropout_probability, data.threshold);
+    renderSpectrum(data.dropout_probability, data.threshold);
     countUp(data.dropout_probability);
     renderImpacts(data.attributions);
 
@@ -1795,13 +1723,17 @@
 
   if (!REDUCED) {
     [document.querySelector("header"), document.querySelector(".tabs"),
-     ...document.querySelectorAll('.view[data-view="score"] .card')]
+     ...document.querySelectorAll('.view[data-view="score"] .panel')]
       .filter(Boolean)
       .forEach((node, i) => { node.style.setProperty("--i", i); node.classList.add("enter"); });
   }
 
   refreshStatus();
   setInterval(refreshStatus, 15000);
+
+  // Score immediately, so the first thing anyone sees is a populated result
+  // rather than half a screen of empty state.
+  $("form").requestSubmit();
   window.addEventListener("resize", moveInk);
   requestAnimationFrame(moveInk);
 </script>
