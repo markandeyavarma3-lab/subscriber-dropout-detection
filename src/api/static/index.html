@@ -4,34 +4,71 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Subscriber Dropout Detection</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&family=Instrument+Serif&family=JetBrains+Mono:wght@400;500&display=swap">
 <style>
+  /* ---------------------------------------------------------------------- *
+   * Tokens. Every colour is declared here first so both themes resolve as a
+   * set; the dark block below only ever redefines, never introduces.
+   * ---------------------------------------------------------------------- */
   :root {
-    --bg: #f6f7f9;
-    --panel: #ffffff;
-    --ink: #14181f;
-    --muted: #5c6673;
-    --line: #e2e6ec;
-    --field: #ffffff;
-    --accent: #3355d1;
-    --low: #1f9254;
-    --medium: #b8770b;
-    --high: #c3341f;
-    --shadow: 0 1px 2px rgba(20, 24, 31, .06), 0 8px 24px rgba(20, 24, 31, .06);
+    --paper:      #FAF9F7;
+    --surface:    #FFFFFF;
+    --sunk:       #F4F2EE;
+    --ink:        #1C1917;
+    --ink-soft:   #44403C;
+    --muted:      #78716C;
+    --line:       #E7E5E4;
+    --line-firm:  #D6D3D1;
+
+    --accent:      #0D6E6E;
+    --accent-soft: #E6F2F1;
+    --accent-ink:  #0A5555;
+
+    --low:         #15803D;
+    --low-soft:    #E8F5ED;
+    --medium:      #B45309;
+    --medium-soft: #FDF3E7;
+    --high:        #B91C1C;
+    --high-soft:   #FCEDEC;
+
+    --shadow-sm: 0 1px 2px rgba(28, 25, 23, .05);
+    --shadow-md: 0 1px 2px rgba(28, 25, 23, .05), 0 12px 28px -12px rgba(28, 25, 23, .16);
+
+    --font-display: "Instrument Serif", Georgia, "Times New Roman", serif;
+    --font-ui: "Instrument Sans", ui-sans-serif, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+    --r-sm: 7px;
+    --r-md: 12px;
+    --r-lg: 16px;
   }
 
   @media (prefers-color-scheme: dark) {
-    :root {
-      --bg: #0e1116;
-      --panel: #161b22;
-      --ink: #e8ecf2;
-      --muted: #9aa5b4;
-      --line: #262d38;
-      --field: #0f141a;
-      --accent: #7b95ff;
-      --low: #3fb97a;
-      --medium: #e0a032;
-      --high: #f2705a;
-      --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 8px 24px rgba(0, 0, 0, .3);
+    :root:not([data-theme="light"]) {
+      --paper:      #17161A;
+      --surface:    #1F1E24;
+      --sunk:       #26252C;
+      --ink:        #F0EEEA;
+      --ink-soft:   #CFCBC4;
+      --muted:      #948E85;
+      --line:       #302E36;
+      --line-firm:  #423F49;
+
+      --accent:      #4FB3A8;
+      --accent-soft: #14302D;
+      --accent-ink:  #7FD0C6;
+
+      --low:         #57BE7F;
+      --low-soft:    #16281D;
+      --medium:      #E0A040;
+      --medium-soft: #2B2317;
+      --high:        #F0736A;
+      --high-soft:   #301A19;
+
+      --shadow-sm: 0 1px 2px rgba(0, 0, 0, .4);
+      --shadow-md: 0 1px 2px rgba(0, 0, 0, .4), 0 12px 28px -12px rgba(0, 0, 0, .55);
     }
   }
 
@@ -39,413 +76,742 @@
 
   body {
     margin: 0;
-    background: var(--bg);
+    background: var(--paper);
     color: var(--ink);
-    font: 15px/1.55 ui-sans-serif, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    font-family: var(--font-ui);
+    font-size: 15px;
+    line-height: 1.55;
     -webkit-font-smoothing: antialiased;
   }
 
-  header {
-    border-bottom: 1px solid var(--line);
-    background: var(--panel);
-  }
+  .shell { max-width: 1140px; margin: 0 auto; padding: 0 22px 72px; }
 
-  .bar {
-    max-width: 1080px;
-    margin: 0 auto;
-    padding: 18px 24px;
+  /* ------------------------------ header ------------------------------- */
+
+  header {
     display: flex;
-    align-items: center;
-    gap: 14px;
     flex-wrap: wrap;
+    gap: 16px;
+    align-items: flex-end;
+    justify-content: space-between;
+    padding: 38px 0 22px;
   }
 
   h1 {
-    font-size: 17px;
-    font-weight: 650;
+    font-family: var(--font-display);
+    font-weight: 400;
+    font-size: clamp(30px, 4.4vw, 42px);
+    line-height: 1.05;
+    letter-spacing: -0.005em;
     margin: 0;
-    letter-spacing: -.01em;
   }
 
-  .sub { color: var(--muted); font-size: 13px; margin: 2px 0 0; }
+  .tagline { margin: 5px 0 0; color: var(--muted); font-size: 14.5px; }
 
   .status {
-    margin-left: auto;
     display: inline-flex;
     align-items: center;
-    gap: 7px;
-    font-size: 12.5px;
-    color: var(--muted);
+    gap: 9px;
+    background: var(--surface);
     border: 1px solid var(--line);
     border-radius: 999px;
-    padding: 5px 12px;
+    padding: 7px 15px 7px 12px;
+    font-size: 13px;
+    color: var(--ink-soft);
+    box-shadow: var(--shadow-sm);
+    white-space: nowrap;
   }
 
   .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex: none; }
   .dot.ok { background: var(--low); }
   .dot.bad { background: var(--high); }
 
-  main {
-    max-width: 1080px;
-    margin: 0 auto;
-    padding: 24px;
+  /* ------------------------------- tabs -------------------------------- */
+
+  .tabs {
+    display: flex;
+    gap: 4px;
+    border-bottom: 1px solid var(--line);
+    margin-bottom: 26px;
+    overflow-x: auto;
+  }
+
+  .tab {
+    appearance: none;
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+    padding: 11px 15px;
+    font-family: var(--font-ui);
+    font-size: 14.5px;
+    font-weight: 500;
+    color: var(--muted);
+    cursor: pointer;
+    white-space: nowrap;
+    transition: color .15s, border-color .15s;
+  }
+  .tab:hover { color: var(--ink); }
+  .tab.is-active { color: var(--accent-ink); border-bottom-color: var(--accent); }
+  .tab:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; border-radius: 4px; }
+
+  /* ------------------------------- views ------------------------------- */
+
+  .view { display: none; }
+  .view.is-active { display: block; }
+
+  .split {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    gap: 20px;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr);
+    gap: 22px;
     align-items: start;
   }
+  @media (max-width: 880px) { .split { grid-template-columns: minmax(0, 1fr); } }
 
-  @media (max-width: 860px) {
-    main { grid-template-columns: minmax(0, 1fr); }
-  }
-
-  .panel {
-    background: var(--panel);
+  .card {
+    background: var(--surface);
     border: 1px solid var(--line);
-    border-radius: 12px;
-    box-shadow: var(--shadow);
-    padding: 20px;
+    border-radius: var(--r-lg);
+    padding: 22px;
+    box-shadow: var(--shadow-sm);
   }
+  .card.lift { box-shadow: var(--shadow-md); }
 
-  h2 {
-    font-size: 13px;
-    text-transform: uppercase;
-    letter-spacing: .06em;
-    color: var(--muted);
+  .card-title {
+    font-family: var(--font-ui);
+    font-size: 15px;
     font-weight: 600;
-    margin: 0 0 16px;
+    margin: 0 0 3px;
+    letter-spacing: -0.005em;
   }
+  .card-sub { margin: 0 0 18px; color: var(--muted); font-size: 13.5px; }
 
-  .presets { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 18px; }
+  /* ------------------------------- form -------------------------------- */
+
+  .presets { display: flex; gap: 6px; margin-bottom: 20px; flex-wrap: wrap; }
 
   .preset {
-    font: inherit;
-    font-size: 12.5px;
-    padding: 6px 11px;
-    border-radius: 7px;
-    border: 1px solid var(--line);
-    background: var(--field);
-    color: var(--muted);
+    appearance: none;
+    background: var(--sunk);
+    border: 1px solid transparent;
+    border-radius: 999px;
+    padding: 6px 13px;
+    font-family: var(--font-ui);
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--ink-soft);
     cursor: pointer;
+    transition: background .15s, color .15s, border-color .15s;
+  }
+  .preset:hover { background: var(--accent-soft); color: var(--accent-ink); }
+  .preset:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .group + .group { margin-top: 20px; }
+
+  .group-label {
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    font-weight: 500;
+    letter-spacing: 0.13em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 10px;
   }
 
-  .preset:hover { color: var(--ink); border-color: var(--accent); }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  @media (max-width: 460px) { .grid { grid-template-columns: 1fr; } }
 
-  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 13px; }
-
+  .field { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
   .field.wide { grid-column: 1 / -1; }
 
-  label {
-    display: block;
-    font-size: 12.5px;
-    color: var(--muted);
-    margin-bottom: 5px;
-  }
+  .field label { font-size: 13px; font-weight: 500; color: var(--ink-soft); }
+  .field .hint { font-size: 11.5px; color: var(--muted); }
 
   input[type="number"], select {
-    width: 100%;
-    font: inherit;
-    font-size: 14px;
-    padding: 8px 10px;
-    border-radius: 8px;
-    border: 1px solid var(--line);
-    background: var(--field);
+    font-family: var(--font-mono);
+    font-size: 13.5px;
     color: var(--ink);
-  }
-
-  input:focus, select:focus {
-    outline: 2px solid var(--accent);
-    outline-offset: -1px;
-    border-color: transparent;
-  }
-
-  .check {
-    display: flex;
-    align-items: center;
-    gap: 9px;
-    padding: 9px 0 2px;
-  }
-
-  .check input { width: 16px; height: 16px; accent-color: var(--accent); }
-  .check label { margin: 0; color: var(--ink); font-size: 14px; }
-
-  button.submit {
-    margin-top: 18px;
+    background: var(--surface);
+    border: 1px solid var(--line-firm);
+    border-radius: var(--r-sm);
+    padding: 8px 10px;
     width: 100%;
-    font: inherit;
-    font-weight: 600;
-    font-size: 14.5px;
-    padding: 11px;
-    border: 0;
-    border-radius: 9px;
+    transition: border-color .15s, box-shadow .15s;
+  }
+  select { font-family: var(--font-ui); }
+  input[type="number"]:focus, select:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-soft);
+  }
+
+  .check { flex-direction: row; align-items: center; gap: 9px; }
+  .check input { width: auto; accent-color: var(--accent); }
+  .check label { font-size: 13.5px; }
+
+  .submit {
+    appearance: none;
+    width: 100%;
+    margin-top: 22px;
     background: var(--accent);
     color: #fff;
+    border: none;
+    border-radius: var(--r-sm);
+    padding: 12px 18px;
+    font-family: var(--font-ui);
+    font-size: 14.5px;
+    font-weight: 600;
     cursor: pointer;
+    transition: background .15s, opacity .15s;
+  }
+  .submit:hover:not(:disabled) { background: var(--accent-ink); }
+  .submit:disabled { opacity: .55; cursor: default; }
+  .submit:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* ------------------------------ result ------------------------------- */
+
+  .empty {
+    color: var(--muted);
+    font-size: 14px;
+    text-align: center;
+    padding: 54px 20px;
+    border: 1px dashed var(--line-firm);
+    border-radius: var(--r-md);
   }
 
-  button.submit:hover { filter: brightness(1.08); }
-  button.submit:disabled { opacity: .55; cursor: progress; }
+  .hidden { display: none !important; }
 
-  /* ---- result ---- */
-  .empty { color: var(--muted); font-size: 14px; padding: 28px 0; text-align: center; }
+  .gauge-wrap { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+  .gauge { width: 100%; max-width: 260px; height: auto; display: block; }
 
-  .headline { display: flex; align-items: baseline; gap: 12px; margin-bottom: 4px; }
-
-  .pct { font-size: 44px; font-weight: 680; letter-spacing: -.03em; line-height: 1; }
+  .pct {
+    font-family: var(--font-display);
+    font-size: 46px;
+    line-height: 1;
+    letter-spacing: -0.01em;
+    font-variant-numeric: tabular-nums;
+  }
 
   .band {
+    display: inline-block;
+    border-radius: 999px;
+    padding: 3px 12px;
     font-size: 12px;
-    font-weight: 700;
-    letter-spacing: .08em;
-    text-transform: uppercase;
-    padding: 4px 10px;
-    border-radius: 999px;
-    border: 1px solid currentColor;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    margin-top: 8px;
   }
+  .band.low    { background: var(--low-soft);    color: var(--low); }
+  .band.medium { background: var(--medium-soft); color: var(--medium); }
+  .band.high   { background: var(--high-soft);   color: var(--high); }
 
-  .band[data-level="low"], .pct[data-level="low"] { color: var(--low); }
-  .band[data-level="medium"], .pct[data-level="medium"] { color: var(--medium); }
-  .band[data-level="high"], .pct[data-level="high"] { color: var(--high); }
-
-  .caption { color: var(--muted); font-size: 13px; margin: 0 0 18px; }
-
-  /* probability track with a marker at the model's decision threshold */
-  .track {
-    position: relative;
-    height: 12px;
-    border-radius: 999px;
-    background: var(--field);
-    border: 1px solid var(--line);
-    overflow: visible;
-  }
-
-  .fill {
-    height: 100%;
-    border-radius: 999px;
-    transition: width .35s ease;
-  }
-
-  .fill[data-level="low"] { background: var(--low); }
-  .fill[data-level="medium"] { background: var(--medium); }
-  .fill[data-level="high"] { background: var(--high); }
-
-  .marker {
-    position: absolute;
-    top: -5px;
-    bottom: -5px;
-    width: 2px;
-    background: var(--ink);
-    opacity: .75;
-  }
-
-  .scale {
-    position: relative;
-    height: 17px;
-    margin-top: 7px;
+  .gauge-note {
+    font-family: var(--font-mono);
     font-size: 11.5px;
     color: var(--muted);
+    margin-top: 10px;
+    text-align: center;
   }
-
-  .scale .thr { position: absolute; transform: translateX(-50%); white-space: nowrap; }
 
   .verdict {
     margin: 20px 0 0;
-    padding: 13px 15px;
-    border-radius: 9px;
-    background: var(--field);
-    border: 1px solid var(--line);
-    font-size: 14px;
+    padding-top: 18px;
+    border-top: 1px solid var(--line);
+    font-size: 14.5px;
+    color: var(--ink-soft);
   }
 
-  .factors { list-style: none; padding: 0; margin: 16px 0 0; display: grid; gap: 8px; }
+  /* --------------------------- shap bars ------------------------------- */
 
-  .factors li {
+  .drivers { margin-top: 20px; }
+
+  .driver { margin-bottom: 13px; }
+  .driver:last-child { margin-bottom: 0; }
+
+  .driver-top {
     display: flex;
-    gap: 9px;
-    align-items: flex-start;
-    font-size: 13.5px;
-    color: var(--ink);
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 12px;
+    margin-bottom: 5px;
   }
-
-  .factors li::before {
-    content: "";
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background: var(--high);
-    margin-top: 7px;
-    flex: none;
-  }
-
-  /* A driver that pushes risk *down* is not a warning, and must not be dotted
-     in the same alarm colour as one that pushes it up. */
-  .factors li[data-direction="decreases_risk"]::before { background: var(--low); }
-
-  .factors .weight {
-    margin-left: auto;
-    font-variant-numeric: tabular-nums;
+  .driver-label { font-size: 13.5px; color: var(--ink-soft); min-width: 0; }
+  .driver-val {
+    font-family: var(--font-mono);
     font-size: 12px;
-    color: var(--muted);
+    font-variant-numeric: tabular-nums;
     flex: none;
   }
+  .driver-val.up { color: var(--high); }
+  .driver-val.down { color: var(--low); }
+
+  /* Diverging bar: a centre line with the bar growing left (lowers risk) or
+     right (raises risk), so direction is readable without reading the number. */
+  .diverge { position: relative; height: 9px; background: var(--sunk); border-radius: 999px; }
+  .diverge::before {
+    content: "";
+    position: absolute;
+    left: 50%; top: -2px; bottom: -2px;
+    width: 1px;
+    background: var(--line-firm);
+  }
+  .diverge span {
+    position: absolute;
+    top: 0; bottom: 0;
+    border-radius: 999px;
+    transition: width .3s ease, left .3s ease;
+  }
+  .diverge span.up { background: var(--high); left: 50%; }
+  .diverge span.down { background: var(--low); }
 
   .method {
-    margin-top: 14px;
-    font-size: 11.5px;
-    letter-spacing: 0.02em;
+    margin-top: 18px;
+    font-family: var(--font-mono);
+    font-size: 11px;
     color: var(--muted);
   }
-
-  .clean { font-size: 13.5px; color: var(--low); margin-top: 16px; }
 
   .error {
     margin-top: 16px;
-    padding: 12px 14px;
-    border-radius: 9px;
+    background: var(--high-soft);
+    border: 1px solid var(--high);
+    border-radius: var(--r-sm);
+    padding: 11px 14px;
     font-size: 13.5px;
     color: var(--high);
-    border: 1px solid var(--high);
-    background: var(--field);
   }
+
+  /* ------------------------------ tiles -------------------------------- */
+
+  .tiles {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(158px, 1fr));
+    gap: 12px;
+    margin-bottom: 22px;
+  }
+
+  .tile {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--r-md);
+    padding: 15px 17px;
+  }
+  .tile-l {
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    letter-spacing: 0.11em;
+    text-transform: uppercase;
+    color: var(--muted);
+    display: block;
+    margin-bottom: 7px;
+  }
+  .tile-v {
+    font-family: var(--font-display);
+    font-size: 27px;
+    line-height: 1.1;
+    font-variant-numeric: tabular-nums;
+    display: block;
+  }
+  .tile-s { font-size: 12.5px; color: var(--muted); display: block; margin-top: 3px; }
+
+  /* stacked proportion bar for the risk-band mix */
+  .stack { display: flex; height: 30px; border-radius: var(--r-sm); overflow: hidden; background: var(--sunk); }
+  .stack i { display: block; transition: width .35s ease; }
+  .stack i.low { background: var(--low); }
+  .stack i.medium { background: var(--medium); }
+  .stack i.high { background: var(--high); }
+
+  .legend { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 12px; font-size: 13px; color: var(--ink-soft); }
+  .legend span { display: inline-flex; align-items: center; gap: 7px; }
+  .legend b { width: 9px; height: 9px; border-radius: 2px; display: inline-block; }
+  .legend .n { font-family: var(--font-mono); font-variant-numeric: tabular-nums; color: var(--muted); }
+
+  /* percentile track */
+  .track { position: relative; height: 8px; background: var(--sunk); border-radius: 999px; margin: 26px 0 8px; }
+  .track i { position: absolute; top: -5px; width: 2px; height: 18px; background: var(--accent); border-radius: 1px; }
+  .track i::after {
+    content: attr(data-l);
+    position: absolute;
+    top: -19px; left: 50%;
+    transform: translateX(-50%);
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--muted);
+    white-space: nowrap;
+  }
+
+  /* ---------------------------- key/value ------------------------------ */
+
+  .kv { display: grid; grid-template-columns: minmax(150px, auto) 1fr; gap: 10px 20px; }
+  @media (max-width: 560px) { .kv { grid-template-columns: 1fr; gap: 3px 0; } }
+  .kv dt { font-size: 13px; color: var(--muted); }
+  .kv dd {
+    margin: 0;
+    font-family: var(--font-mono);
+    font-size: 13px;
+    color: var(--ink-soft);
+    word-break: break-word;
+  }
+  @media (max-width: 560px) { .kv dd { margin-bottom: 9px; } }
+
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip {
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    background: var(--sunk);
+    border-radius: var(--r-sm);
+    padding: 3px 8px;
+    color: var(--ink-soft);
+  }
+
+  /* ------------------------------ drift -------------------------------- */
+
+  .row-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 18px; }
+
+  .ghost {
+    appearance: none;
+    background: var(--surface);
+    border: 1px solid var(--line-firm);
+    border-radius: var(--r-sm);
+    padding: 8px 14px;
+    font-family: var(--font-ui);
+    font-size: 13.5px;
+    font-weight: 500;
+    color: var(--ink-soft);
+    cursor: pointer;
+    transition: border-color .15s, color .15s;
+  }
+  .ghost:hover:not(:disabled) { border-color: var(--accent); color: var(--accent-ink); }
+  .ghost:disabled { opacity: .55; cursor: default; }
+  .ghost:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .psi { margin-bottom: 11px; }
+  .psi:last-child { margin-bottom: 0; }
+  .psi-top { display: flex; justify-content: space-between; gap: 12px; font-size: 13px; margin-bottom: 4px; }
+  .psi-name { color: var(--ink-soft); font-family: var(--font-mono); font-size: 12.5px; }
+  .psi-val { font-family: var(--font-mono); font-size: 12px; font-variant-numeric: tabular-nums; flex: none; }
+  .psi-bar { height: 7px; background: var(--sunk); border-radius: 999px; overflow: hidden; }
+  .psi-bar i { display: block; height: 100%; border-radius: 999px; transition: width .3s ease; }
+  .psi-bar i.stable { background: var(--low); }
+  .psi-bar i.moderate { background: var(--medium); }
+  .psi-bar i.significant { background: var(--high); }
+
+  .verdict-pill {
+    display: inline-block;
+    border-radius: 999px;
+    padding: 3px 12px;
+    font-size: 12px;
+    font-weight: 600;
+    margin-bottom: 16px;
+  }
+  .verdict-pill.stable { background: var(--low-soft); color: var(--low); }
+  .verdict-pill.moderate { background: var(--medium-soft); color: var(--medium); }
+  .verdict-pill.significant { background: var(--high-soft); color: var(--high); }
 
   footer {
-    max-width: 1080px;
-    margin: 0 auto;
-    padding: 4px 24px 32px;
+    margin-top: 40px;
+    padding-top: 20px;
+    border-top: 1px solid var(--line);
+    font-size: 13px;
     color: var(--muted);
-    font-size: 12.5px;
   }
+  footer a { color: var(--accent-ink); }
 
-  footer a { color: var(--accent); }
-  code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
-  .hidden { display: none; }
+  @media (prefers-reduced-motion: reduce) {
+    * { animation-duration: .001ms !important; transition-duration: .001ms !important; }
+  }
 </style>
 </head>
 <body>
+<div class="shell">
 
-<header>
-  <div class="bar">
+  <header>
     <div>
       <h1>Subscriber Dropout Detection</h1>
-      <p class="sub">Score a subscriber's risk of cancelling, with the drivers behind it.</p>
+      <p class="tagline">Churn risk scoring, explained — with the model's own diagnostics.</p>
     </div>
-    <span class="status"><span class="dot" id="dot"></span><span id="status-text">checking…</span></span>
-  </div>
-</header>
-
-<main>
-  <section class="panel">
-    <h2>Subscriber</h2>
-
-    <div class="presets">
-      <button type="button" class="preset" data-preset="at_risk">At-risk example</button>
-      <button type="button" class="preset" data-preset="healthy">Healthy example</button>
-      <button type="button" class="preset" data-preset="borderline">Borderline</button>
+    <div class="status" id="status">
+      <span class="dot" id="statusDot"></span>
+      <span id="statusText">checking…</span>
     </div>
+  </header>
 
-    <form id="form">
-      <div class="grid">
-        <div class="field">
-          <label for="tenure_days">Tenure (days)</label>
-          <input type="number" id="tenure_days" min="0" max="20000" step="1" required>
+  <nav class="tabs">
+    <button type="button" class="tab is-active" data-view="score">Score</button>
+    <button type="button" class="tab" data-view="live">Live traffic</button>
+    <button type="button" class="tab" data-view="model">Model</button>
+    <button type="button" class="tab" data-view="monitoring">Monitoring</button>
+  </nav>
+
+  <!-- =========================== SCORE =========================== -->
+  <section class="view is-active" data-view="score">
+    <div class="split">
+
+      <div class="card">
+        <p class="card-title">Subscriber</p>
+        <p class="card-sub">Describe someone, or start from an example.</p>
+
+        <div class="presets">
+          <button type="button" class="preset" data-preset="at_risk">At-risk</button>
+          <button type="button" class="preset" data-preset="healthy">Healthy</button>
+          <button type="button" class="preset" data-preset="borderline">Borderline</button>
         </div>
-        <div class="field">
-          <label for="plan_type">Plan</label>
-          <select id="plan_type">
-            <option value="basic">basic</option>
-            <option value="standard">standard</option>
-            <option value="premium">premium</option>
-          </select>
-        </div>
-        <div class="field">
-          <label for="monthly_fee">Monthly fee</label>
-          <input type="number" id="monthly_fee" min="0" max="10000" step="0.01" required>
-        </div>
-        <div class="field">
-          <label for="avg_session_count_last_30d">Sessions (last 30d)</label>
-          <input type="number" id="avg_session_count_last_30d" min="0" max="10000" step="0.1" required>
-        </div>
-        <div class="field">
-          <label for="last_activity_days_ago">Last active (days ago)</label>
-          <input type="number" id="last_activity_days_ago" min="0" max="20000" step="1" required>
-        </div>
-        <div class="field">
-          <label for="support_tickets_last_90d">Support tickets (90d)</label>
-          <input type="number" id="support_tickets_last_90d" min="0" max="1000" step="1" required>
-        </div>
-        <div class="field">
-          <label for="payment_failures_last_6m">Payment failures (6m)</label>
-          <input type="number" id="payment_failures_last_6m" min="0" max="1000" step="1" required>
-        </div>
-        <div class="field">
-          <label for="discounts_used_last_6m">Discounts used (6m)</label>
-          <input type="number" id="discounts_used_last_6m" min="0" max="1000" step="1" required>
-        </div>
-        <div class="field wide check">
-          <input type="checkbox" id="is_auto_renew_enabled">
-          <label for="is_auto_renew_enabled">Auto-renew enabled</label>
-        </div>
+
+        <form id="form">
+          <div class="group">
+            <div class="group-label">Account</div>
+            <div class="grid">
+              <div class="field">
+                <label for="tenure_days">Tenure</label>
+                <input type="number" id="tenure_days" min="0" max="20000" step="1" required>
+                <span class="hint">days since signup</span>
+              </div>
+              <div class="field">
+                <label for="plan_type">Plan</label>
+                <select id="plan_type">
+                  <option value="basic">basic</option>
+                  <option value="standard">standard</option>
+                  <option value="premium">premium</option>
+                </select>
+                <span class="hint">subscription tier</span>
+              </div>
+              <div class="field">
+                <label for="monthly_fee">Monthly fee</label>
+                <input type="number" id="monthly_fee" min="0" max="10000" step="0.01" required>
+                <span class="hint">per month</span>
+              </div>
+              <div class="field check wide">
+                <input type="checkbox" id="is_auto_renew_enabled">
+                <label for="is_auto_renew_enabled">Auto-renew enabled</label>
+              </div>
+            </div>
+          </div>
+
+          <div class="group">
+            <div class="group-label">Engagement</div>
+            <div class="grid">
+              <div class="field">
+                <label for="avg_session_count_last_30d">Sessions</label>
+                <input type="number" id="avg_session_count_last_30d" min="0" max="10000" step="0.1" required>
+                <span class="hint">in the last 30 days</span>
+              </div>
+              <div class="field">
+                <label for="last_activity_days_ago">Last active</label>
+                <input type="number" id="last_activity_days_ago" min="0" max="20000" step="1" required>
+                <span class="hint">days ago</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="group">
+            <div class="group-label">Friction</div>
+            <div class="grid">
+              <div class="field">
+                <label for="support_tickets_last_90d">Support tickets</label>
+                <input type="number" id="support_tickets_last_90d" min="0" max="1000" step="1" required>
+                <span class="hint">last 90 days</span>
+              </div>
+              <div class="field">
+                <label for="payment_failures_last_6m">Payment failures</label>
+                <input type="number" id="payment_failures_last_6m" min="0" max="1000" step="1" required>
+                <span class="hint">last 6 months</span>
+              </div>
+              <div class="field wide">
+                <label for="discounts_used_last_6m">Discounts used</label>
+                <input type="number" id="discounts_used_last_6m" min="0" max="1000" step="1" required>
+                <span class="hint">last 6 months</span>
+              </div>
+            </div>
+          </div>
+
+          <button type="submit" class="submit" id="submit">Score subscriber</button>
+        </form>
       </div>
 
-      <button type="submit" class="submit" id="submit">Score subscriber</button>
-    </form>
+      <div class="card lift">
+        <p class="card-title">Prediction</p>
+        <p class="card-sub">Probability, risk band, and what drove it.</p>
+
+        <div id="empty" class="empty">Score a subscriber to see their risk.</div>
+
+        <div id="result" class="hidden">
+          <div class="gauge-wrap">
+            <svg class="gauge" viewBox="0 0 240 150" role="img" aria-labelledby="gaugeTitle">
+              <title id="gaugeTitle">Dropout probability against the decision threshold</title>
+              <path id="arcLow"    d="M 20 120 A 100 100 0 0 1 220 120" fill="none" stroke-width="14" stroke-linecap="round"></path>
+              <path id="arcMedium" d="M 20 120 A 100 100 0 0 1 220 120" fill="none" stroke-width="14" stroke-linecap="butt"></path>
+              <path id="arcHigh"   d="M 20 120 A 100 100 0 0 1 220 120" fill="none" stroke-width="14" stroke-linecap="round"></path>
+              <line id="thrTick" x1="0" y1="0" x2="0" y2="0" stroke-width="2"></line>
+              <circle id="marker" cx="0" cy="0" r="7" stroke-width="3"></circle>
+              <text id="pctText" x="120" y="112" text-anchor="middle" class="pct" fill="currentColor">—</text>
+            </svg>
+            <span id="band" class="band low">—</span>
+            <div class="gauge-note" id="gaugeNote"></div>
+          </div>
+
+          <p class="verdict" id="verdict"></p>
+
+          <div class="drivers" id="drivers"></div>
+          <div class="method" id="method"></div>
+        </div>
+
+        <div id="error" class="error hidden"></div>
+      </div>
+
+    </div>
   </section>
 
-  <section class="panel">
-    <h2>Prediction</h2>
-
-    <div id="empty" class="empty">Fill in the form and score a subscriber to see their risk.</div>
-
-    <div id="result" class="hidden">
-      <div class="headline">
-        <span class="pct" id="pct">—</span>
-        <span class="band" id="band">—</span>
+  <!-- =========================== LIVE =========================== -->
+  <section class="view" data-view="live">
+    <div class="tiles">
+      <div class="tile">
+        <span class="tile-l">Scored</span>
+        <span class="tile-v" id="mServed">—</span>
+        <span class="tile-s">predictions served</span>
       </div>
-      <p class="caption" id="caption"></p>
-
-      <div class="track">
-        <div class="fill" id="fill" style="width:0"></div>
-        <div class="marker" id="marker" style="left:0"></div>
+      <div class="tile">
+        <span class="tile-l">Flagged</span>
+        <span class="tile-v" id="mFlagged">—</span>
+        <span class="tile-s" id="mFlaggedSub">at or above threshold</span>
       </div>
-      <div class="scale"><span class="thr" id="thr-label"></span></div>
-
-      <p class="verdict" id="verdict"></p>
-
-      <ul class="factors" id="factors"></ul>
-      <p class="clean hidden" id="clean">No risk signals fired for this subscriber.</p>
-      <p class="method hidden" id="method"></p>
+      <div class="tile">
+        <span class="tile-l">Mean score</span>
+        <span class="tile-v" id="mMean">—</span>
+        <span class="tile-s">across the window</span>
+      </div>
+      <div class="tile">
+        <span class="tile-l">Shift</span>
+        <span class="tile-v" id="mShift">—</span>
+        <span class="tile-s">vs the training mean</span>
+      </div>
     </div>
 
-    <div id="error" class="error hidden"></div>
-  </section>
-</main>
+    <div class="card">
+      <p class="card-title">Risk mix</p>
+      <p class="card-sub">How the scored population splits across the three bands.</p>
+      <div class="stack">
+        <i class="low" id="sLow" style="width:0%"></i>
+        <i class="medium" id="sMedium" style="width:0%"></i>
+        <i class="high" id="sHigh" style="width:0%"></i>
+      </div>
+      <div class="legend">
+        <span><b style="background:var(--low)"></b> Low <span class="n" id="nLow">0</span></span>
+        <span><b style="background:var(--medium)"></b> Medium <span class="n" id="nMedium">0</span></span>
+        <span><b style="background:var(--high)"></b> High <span class="n" id="nHigh">0</span></span>
+      </div>
+    </div>
 
-<footer>
-  Model output is served by this app's <code>POST /predict</code> endpoint &mdash;
-  see the <a href="/docs">API docs</a>. Explanations are rule-based, not SHAP.
-</footer>
+    <div class="card" style="margin-top:22px">
+      <p class="card-title">Score spread</p>
+      <p class="card-sub">Where the recent predictions actually landed, 0 to 1.</p>
+      <div class="track" id="spread"></div>
+      <div class="gauge-note" id="spreadNote" style="text-align:left"></div>
+    </div>
+  </section>
+
+  <!-- =========================== MODEL =========================== -->
+  <section class="view" data-view="model">
+    <div class="card">
+      <p class="card-title">Provenance</p>
+      <p class="card-sub">Which artifact is answering requests, and where it came from.</p>
+      <dl class="kv" id="modelKv"></dl>
+    </div>
+
+    <div class="card" style="margin-top:22px">
+      <p class="card-title">Required inputs</p>
+      <p class="card-sub">Every column the pipeline expects on a request.</p>
+      <div class="chips" id="modelCols"></div>
+    </div>
+
+    <div class="card" style="margin-top:22px">
+      <p class="card-title">Reading the drivers</p>
+      <p class="card-sub">Two things about this model surprise people. Both are real.</p>
+      <dl class="kv">
+        <dt>Auto-renew reads backwards</dt>
+        <dd>
+          Enabling it raises predicted risk sharply — 0.0024 to 0.6037 on an otherwise
+          identical subscriber. On KKBox's data an active auto-renew accompanies the
+          short prepaid plans that churn most, so the model learned the association the
+          data actually contains rather than the one intuition expects.
+        </dd>
+        <dt>Two inputs do nothing</dt>
+        <dd>
+          support_tickets_last_90d and payment_failures_last_6m move the prediction by
+          exactly zero across their whole range. KKBox publishes no customer-service data
+          and records a transaction only when money moved, so both columns are constant in
+          training. They are kept on the form because the request schema requires them.
+        </dd>
+      </dl>
+    </div>
+
+    <div class="card" style="margin-top:22px">
+      <p class="card-title">Library versions</p>
+      <p class="card-sub">Pinned at training time — a mismatch here is how artifacts silently break.</p>
+      <dl class="kv" id="modelLibs"></dl>
+    </div>
+  </section>
+
+  <!-- ========================= MONITORING ========================= -->
+  <section class="view" data-view="monitoring">
+    <div class="card">
+      <p class="card-title">Champion vs challenger</p>
+      <p class="card-sub">Shadow scoring runs both models on live traffic and serves only the champion.</p>
+      <div id="shadowBody"><div class="empty">Loading…</div></div>
+    </div>
+
+    <div class="card" style="margin-top:22px">
+      <p class="card-title">Input drift</p>
+      <p class="card-sub">
+        Population Stability Index per feature, against the training distribution.
+        The sample is synthetic — 400 subscribers jittered from the three presets — so it
+        differs from the real training population by construction and absolute PSI runs
+        high. What is worth watching is the <em>comparison</em>: shift engagement and
+        recency, and see which features climb.
+      </p>
+      <div class="row-actions">
+        <button type="button" class="ghost" id="driftNormal">Send baseline sample</button>
+        <button type="button" class="ghost" id="driftShifted">Send disengaged sample</button>
+      </div>
+      <div id="driftBody"><div class="empty">No sample sent yet.</div></div>
+    </div>
+  </section>
+
+  <footer>
+    Full API reference at <a href="/docs">/docs</a>. Every number on this page comes from
+    the running service, not a fixture.
+  </footer>
+
+</div>
 
 <script>
+  // Retuned for the model trained on real KKBox data. The previous values were
+  // set against the simulator and had gone quietly wrong: "at-risk" scored
+  // 1.93% and read LOW, while "borderline" scored 60% and read HIGH. The test
+  // suite only asserts at_risk > healthy, which held by 0.0066, so nothing
+  // failed - the demo just said the opposite of what the buttons promised.
+  //
+  // Scored against the live service: 0.6037 high / 0.0501 medium / 0.0005 low.
+  // One of each band, so the risk mix on the Live tab shows all three.
   const PRESETS = {
     at_risk: {
-      tenure_days: 95, plan_type: "standard", monthly_fee: 19.99,
-      avg_session_count_last_30d: 2.0, last_activity_days_ago: 34,
-      support_tickets_last_90d: 3, payment_failures_last_6m: 2,
-      discounts_used_last_6m: 1, is_auto_renew_enabled: false,
-    },
-    healthy: {
-      tenure_days: 820, plan_type: "premium", monthly_fee: 29.99,
-      avg_session_count_last_30d: 24.0, last_activity_days_ago: 1,
-      support_tickets_last_90d: 0, payment_failures_last_6m: 0,
-      discounts_used_last_6m: 0, is_auto_renew_enabled: true,
-    },
-    // Deliberately lands within a hair of the decision threshold, so the
-    // marker on the track sits right where the label flips.
-    borderline: {
       tenure_days: 120, plan_type: "basic", monthly_fee: 9.99,
       avg_session_count_last_30d: 8.0, last_activity_days_ago: 18,
       support_tickets_last_90d: 1, payment_failures_last_6m: 1,
       discounts_used_last_6m: 2, is_auto_renew_enabled: true,
+    },
+    healthy: {
+      tenure_days: 1800, plan_type: "premium", monthly_fee: 149.0,
+      avg_session_count_last_30d: 22.0, last_activity_days_ago: 2,
+      support_tickets_last_90d: 0, payment_failures_last_6m: 0,
+      discounts_used_last_6m: 0, is_auto_renew_enabled: false,
+    },
+    // Lands at 0.0501 against a threshold of 0.05 - a hair over the line, so
+    // the marker sits exactly where the label flips.
+    borderline: {
+      tenure_days: 200, plan_type: "basic", monthly_fee: 180.0,
+      avg_session_count_last_30d: 4.0, last_activity_days_ago: 1,
+      support_tickets_last_90d: 0, payment_failures_last_6m: 0,
+      discounts_used_last_6m: 0, is_auto_renew_enabled: true,
     },
   };
 
@@ -457,41 +823,180 @@
 
   const $ = (id) => document.getElementById(id);
 
+  // Matches HIGH_RISK_SPAN in src/api/service.py: "high" begins halfway from
+  // the decision threshold to certainty, so the bands move when it is retuned.
+  const HIGH_RISK_SPAN = 0.5;
+  const ARC_LEN = Math.PI * 100;
+
+  /* ----------------------------- formatting ---------------------------- */
+
+  function pct(value) {
+    const p = value * 100;
+    if (p > 0 && p < 1) return p.toFixed(2) + "%";
+    if (p < 10) return p.toFixed(1) + "%";
+    return Math.round(p) + "%";
+  }
+
+  function signed(value, digits) {
+    const n = Number(value);
+    return (n >= 0 ? "+" : "") + n.toFixed(digits === undefined ? 3 : digits);
+  }
+
+  function arcPoint(fraction) {
+    const angle = Math.PI - Math.max(0, Math.min(1, fraction)) * Math.PI;
+    return { x: 120 + 100 * Math.cos(angle), y: 120 - 100 * Math.sin(angle) };
+  }
+
+  /* -------------------------------- tabs ------------------------------- */
+
+  let liveTimer = null;
+
+  function showView(name) {
+    document.querySelectorAll(".tab").forEach((t) => {
+      t.classList.toggle("is-active", t.dataset.view === name);
+    });
+    document.querySelectorAll(".view").forEach((v) => {
+      v.classList.toggle("is-active", v.dataset.view === name);
+    });
+
+    // Only poll while the live tab is actually visible.
+    if (liveTimer) { clearInterval(liveTimer); liveTimer = null; }
+    if (name === "live") {
+      refreshMetrics();
+      liveTimer = setInterval(refreshMetrics, 5000);
+    }
+    if (name === "model") refreshModel();
+    if (name === "monitoring") refreshShadow();
+  }
+
+  /* ------------------------------- form -------------------------------- */
+
   function applyPreset(name) {
     const preset = PRESETS[name];
-    for (const [key, value] of Object.entries(preset)) {
+    if (!preset) return;
+    Object.keys(preset).forEach((key) => {
       const el = $(key);
-      if (el.type === "checkbox") el.checked = value;
-      else el.value = value;
-    }
+      if (!el) return;
+      if (el.type === "checkbox") el.checked = preset[key];
+      else el.value = preset[key];
+    });
   }
 
   function readForm() {
-    const payload = {
-      plan_type: $("plan_type").value,
-      is_auto_renew_enabled: $("is_auto_renew_enabled").checked,
-    };
-    for (const key of NUMERIC_INT) payload[key] = parseInt($(key).value, 10);
-    for (const key of NUMERIC_FLOAT) payload[key] = parseFloat($(key).value);
+    const payload = { plan_type: $("plan_type").value };
+    NUMERIC_INT.forEach((k) => { payload[k] = parseInt($(k).value, 10); });
+    NUMERIC_FLOAT.forEach((k) => { payload[k] = parseFloat($(k).value); });
+    payload.is_auto_renew_enabled = $("is_auto_renew_enabled").checked;
     return payload;
   }
 
-  /** Turn FastAPI's 422 detail array into one readable sentence. */
   function formatValidationError(detail) {
-    if (!Array.isArray(detail)) return String(detail);
+    if (!Array.isArray(detail)) return String(detail || "Request failed.");
     return detail
-      .map((d) => {
-        const field = (d.loc || []).filter((p) => p !== "body").join(".");
-        return field ? `${field}: ${d.msg}` : d.msg;
-      })
-      .join(" · ");
+      .map((d) => `${(d.loc || []).slice(-1)[0] || "field"}: ${d.msg}`)
+      .join("; ");
   }
 
   function showError(message) {
     $("error").textContent = message;
     $("error").classList.remove("hidden");
-    $("result").classList.add("hidden");
-    $("empty").classList.add("hidden");
+  }
+
+  /* ------------------------------ rendering ---------------------------- */
+
+  function renderGauge(probability, threshold) {
+    const highStart = threshold + (1 - threshold) * HIGH_RISK_SPAN;
+
+    const segment = (el, from, to, color) => {
+      const len = Math.max(0, to - from) * ARC_LEN;
+      el.setAttribute("stroke", color);
+      el.setAttribute("stroke-dasharray", `${len} ${ARC_LEN}`);
+      el.setAttribute("stroke-dashoffset", `${-from * ARC_LEN}`);
+    };
+
+    const css = getComputedStyle(document.body);
+    segment($("arcLow"), 0, threshold, css.getPropertyValue("--low").trim());
+    segment($("arcMedium"), threshold, highStart, css.getPropertyValue("--medium").trim());
+    segment($("arcHigh"), highStart, 1, css.getPropertyValue("--high").trim());
+
+    const t = arcPoint(threshold);
+    const inner = { x: 120 + 84 * Math.cos(Math.PI - threshold * Math.PI),
+                    y: 120 - 84 * Math.sin(Math.PI - threshold * Math.PI) };
+    const outer = { x: 120 + 116 * Math.cos(Math.PI - threshold * Math.PI),
+                    y: 120 - 116 * Math.sin(Math.PI - threshold * Math.PI) };
+    const tick = $("thrTick");
+    tick.setAttribute("x1", inner.x); tick.setAttribute("y1", inner.y);
+    tick.setAttribute("x2", outer.x); tick.setAttribute("y2", outer.y);
+    tick.setAttribute("stroke", css.getPropertyValue("--ink").trim());
+
+    const m = arcPoint(probability);
+    const marker = $("marker");
+    marker.setAttribute("cx", m.x);
+    marker.setAttribute("cy", m.y);
+    marker.setAttribute("fill", css.getPropertyValue("--ink").trim());
+    marker.setAttribute("stroke", css.getPropertyValue("--surface").trim());
+
+    $("pctText").textContent = pct(probability);
+    $("gaugeNote").textContent =
+      `decision threshold ${pct(threshold)} · marked on the arc`;
+    void t;
+  }
+
+  function renderDrivers(attributions, factors) {
+    const host = $("drivers");
+    host.replaceChildren();
+
+    if (!attributions || !attributions.length) {
+      (factors || []).forEach((text) => {
+        const row = document.createElement("div");
+        row.className = "driver";
+        const top = document.createElement("div");
+        top.className = "driver-top";
+        const label = document.createElement("span");
+        label.className = "driver-label";
+        label.textContent = text;
+        top.appendChild(label);
+        row.appendChild(top);
+        host.appendChild(row);
+      });
+      return;
+    }
+
+    // Scale every bar against the strongest contributor in this response, so
+    // the shape is always readable regardless of absolute magnitude.
+    const peak = Math.max(...attributions.map((a) => Math.abs(a.contribution)), 1e-9);
+
+    attributions.forEach((a) => {
+      const raises = a.direction === "increases_risk";
+      const share = (Math.abs(a.contribution) / peak) * 50;
+
+      const row = document.createElement("div");
+      row.className = "driver";
+
+      const top = document.createElement("div");
+      top.className = "driver-top";
+
+      const label = document.createElement("span");
+      label.className = "driver-label";
+      label.textContent = a.description;
+
+      const val = document.createElement("span");
+      val.className = "driver-val " + (raises ? "up" : "down");
+      val.textContent = signed(a.contribution);
+
+      top.append(label, val);
+
+      const bar = document.createElement("div");
+      bar.className = "diverge";
+      const fill = document.createElement("span");
+      fill.className = raises ? "up" : "down";
+      fill.style.width = share + "%";
+      if (!raises) fill.style.left = (50 - share) + "%";
+      bar.appendChild(fill);
+
+      row.append(top, bar);
+      host.appendChild(row);
+    });
   }
 
   function render(data) {
@@ -499,76 +1004,21 @@
     $("empty").classList.add("hidden");
     $("result").classList.remove("hidden");
 
-    const pct = Math.round(data.dropout_probability * 1000) / 10;
-    const level = data.risk_level;
+    renderGauge(data.dropout_probability, data.threshold);
 
-    $("pct").textContent = `${pct}%`;
-    $("pct").dataset.level = level;
-    $("band").textContent = `${level} risk`;
-    $("band").dataset.level = level;
-
-    $("caption").textContent =
-      `Predicted label ${data.predicted_label} ` +
-      `(${data.predicted_label === 1 ? "flagged as likely to drop out" : "expected to stay"}) ` +
-      `at a decision threshold of ${data.threshold}.`;
-
-    $("fill").style.width = `${Math.min(100, data.dropout_probability * 100)}%`;
-    $("fill").dataset.level = level;
-
-    const thresholdPct = Math.min(100, data.threshold * 100);
-    $("marker").style.left = `${thresholdPct}%`;
-    $("thr-label").style.left = `${thresholdPct}%`;
-    $("thr-label").textContent = `threshold ${data.threshold}`;
+    const band = $("band");
+    band.className = "band " + data.risk_level;
+    band.textContent = data.risk_level + " risk";
 
     $("verdict").textContent = data.explanation;
+    renderDrivers(data.attributions, data.top_risk_factors);
 
-    // Prefer the signed attributions when the API returned them: they say
-    // which way each driver pushed, so a subscriber who is clearly staying
-    // gets reasons they are staying rather than an empty list and a shrug.
-    // Falls back to top_risk_factors, which is what /predict returns when
-    // attribution is unavailable.
-    const attributions = data.attributions || null;
-    const items = attributions
-      ? attributions.map((a) => ({
-          text: a.description,
-          direction: a.direction,
-          // Log-odds. Shown to rank, not to be read as a probability - the
-          // sign and the relative size are the whole message.
-          weight: a.contribution,
-        }))
-      : (data.top_risk_factors || []).map((text) => ({
-          text,
-          direction: "increases_risk",
-          weight: null,
-        }));
-
-    const list = $("factors");
-    list.replaceChildren();
-    for (const item of items) {
-      const li = document.createElement("li");
-      li.dataset.direction = item.direction;
-
-      const label = document.createElement("span");
-      label.textContent = item.text;
-      li.appendChild(label);
-
-      if (item.weight !== null) {
-        const weight = document.createElement("span");
-        weight.className = "weight";
-        weight.textContent = `${item.weight > 0 ? "+" : "−"}${Math.abs(item.weight).toFixed(2)}`;
-        li.appendChild(weight);
-      }
-      list.appendChild(li);
-    }
-    $("clean").classList.toggle("hidden", items.length > 0);
-
-    const method = $("method");
-    method.textContent =
-      data.explanation_method === "shap"
-        ? "Drivers attributed with SHAP — signed contributions in log-odds."
-        : "Rule-based explanation — describes the inputs, not the model's decision.";
-    method.classList.remove("hidden");
+    $("method").textContent = data.explanation_method === "shap"
+      ? "Drivers attributed with SHAP · values are log-odds contributions"
+      : "Rule-based explanation · describes the inputs, not the model's decision";
   }
+
+  /* ------------------------------ scoring ------------------------------ */
 
   async function score(event) {
     event.preventDefault();
@@ -595,31 +1045,278 @@
     }
   }
 
-  /** Reflect whether the artifact is loaded, so a degraded service is visible. */
+  /* ------------------------------- status ------------------------------ */
+
   async function refreshStatus() {
     try {
       const info = await fetch("/ready").then((r) => r.json());
+      $("statusDot").className = "dot " + (info.model_loaded ? "ok" : "bad");
       if (info.model_loaded) {
         const meta = await fetch("/model-info").then((r) => r.json());
-        $("dot").className = "dot ok";
-        $("status-text").textContent = `${meta.model_name} · threshold ${meta.decision_threshold}`;
+        $("statusText").textContent =
+          `${meta.model_name} · threshold ${meta.decision_threshold}`;
       } else {
-        $("dot").className = "dot bad";
-        $("status-text").textContent = "no model loaded — run training";
+        $("statusText").textContent = info.detail || "no model loaded";
       }
-    } catch {
-      $("dot").className = "dot bad";
-      $("status-text").textContent = "API unreachable";
+    } catch (err) {
+      $("statusDot").className = "dot bad";
+      $("statusText").textContent = "API unreachable";
     }
   }
 
-  document.querySelectorAll(".preset").forEach((button) =>
-    button.addEventListener("click", () => applyPreset(button.dataset.preset))
-  );
+  /* -------------------------------- live ------------------------------- */
+
+  async function refreshMetrics() {
+    let m;
+    try {
+      m = await fetch("/metrics").then((r) => r.json());
+    } catch (err) {
+      return;
+    }
+
+    $("mServed").textContent = m.served_total.toLocaleString();
+    $("mFlagged").textContent = pct(m.flagged_rate);
+    $("mFlaggedSub").textContent = `at or above ${m.threshold}`;
+    $("mMean").textContent = m.probability.mean === null ? "—" : pct(m.probability.mean);
+    $("mShift").textContent =
+      m.probability_mean_shift === null ? "—" : signed(m.probability_mean_shift, 4);
+
+    const levels = m.risk_levels || {};
+    const low = levels.low || 0, medium = levels.medium || 0, high = levels.high || 0;
+    const total = low + medium + high;
+
+    $("nLow").textContent = low.toLocaleString();
+    $("nMedium").textContent = medium.toLocaleString();
+    $("nHigh").textContent = high.toLocaleString();
+
+    const share = (n) => (total ? (n / total) * 100 : 0);
+    $("sLow").style.width = share(low) + "%";
+    $("sMedium").style.width = share(medium) + "%";
+    $("sHigh").style.width = share(high) + "%";
+
+    const spread = $("spread");
+    spread.replaceChildren();
+    const p = m.probability || {};
+    [["min", p.min], ["p50", p.p50], ["p90", p.p90], ["max", p.max]].forEach(([name, v]) => {
+      if (v === null || v === undefined) return;
+      const tick = document.createElement("i");
+      tick.style.left = Math.max(0, Math.min(100, v * 100)) + "%";
+      tick.dataset.l = name;
+      spread.appendChild(tick);
+    });
+    $("spreadNote").textContent = total
+      ? `${m.window_size} of ${m.window_capacity} slots in the rolling window`
+      : "nothing scored yet — score a subscriber and come back";
+  }
+
+  /* -------------------------------- model ------------------------------ */
+
+  async function refreshModel() {
+    let meta;
+    try {
+      meta = await fetch("/model-info").then((r) => r.json());
+    } catch (err) {
+      return;
+    }
+
+    const rows = [
+      ["Model", meta.model_name],
+      ["Trained at", meta.trained_at || "unknown"],
+      ["Decision threshold", meta.decision_threshold],
+      ["Served from", meta.served_from],
+      ["Registry version", meta.registry_version || "not registered"],
+    ];
+    const kv = $("modelKv");
+    kv.replaceChildren();
+    rows.forEach(([k, v]) => {
+      const dt = document.createElement("dt");
+      dt.textContent = k;
+      const dd = document.createElement("dd");
+      dd.textContent = String(v);
+      kv.append(dt, dd);
+    });
+
+    const cols = $("modelCols");
+    cols.replaceChildren();
+    (meta.required_input_columns || []).forEach((c) => {
+      const chip = document.createElement("span");
+      chip.className = "chip";
+      chip.textContent = c;
+      cols.appendChild(chip);
+    });
+
+    const libs = $("modelLibs");
+    libs.replaceChildren();
+    Object.entries(meta.library_versions || {}).forEach(([k, v]) => {
+      const dt = document.createElement("dt");
+      dt.textContent = k;
+      const dd = document.createElement("dd");
+      dd.textContent = v;
+      libs.append(dt, dd);
+    });
+  }
+
+  /* ------------------------------- shadow ------------------------------ */
+
+  async function refreshShadow() {
+    const host = $("shadowBody");
+    let s;
+    try {
+      s = await fetch("/monitoring/shadow").then((r) => r.json());
+    } catch (err) {
+      host.replaceChildren(el("div", "empty", "Could not load shadow report."));
+      return;
+    }
+
+    host.replaceChildren();
+
+    if (!s.enabled || !s.active) {
+      host.appendChild(el("div", "empty", s.detail || "No challenger is registered."));
+      return;
+    }
+
+    const tiles = document.createElement("div");
+    tiles.className = "tiles";
+    const add = (label, value, sub) => {
+      const t = document.createElement("div");
+      t.className = "tile";
+      t.append(
+        el("span", "tile-l", label),
+        el("span", "tile-v", value),
+        el("span", "tile-s", sub)
+      );
+      tiles.appendChild(t);
+    };
+
+    add("Agreement", s.agreement_rate === null ? "—" : pct(s.agreement_rate),
+        `${s.compared_total} comparisons`);
+    add("Outreach delta", s.flagged_rate_delta === null ? "—" : signed(s.flagged_rate_delta, 4),
+        "challenger minus champion");
+    add("Divergence", s.mean_absolute_divergence === null ? "—" : s.mean_absolute_divergence.toFixed(4),
+        "mean absolute");
+    add("Errors", String(s.errors_total), "challenger failures");
+
+    host.appendChild(tiles);
+
+    const note = el("div", "gauge-note",
+      s.sufficient_evidence
+        ? `champion ${s.champion_version || "?"} vs challenger ${s.challenger_version || "?"}`
+        : `not enough evidence yet — ${s.compared_total} of ${s.required} comparisons`);
+    note.style.textAlign = "left";
+    host.appendChild(note);
+  }
+
+  function el(tag, cls, text) {
+    const node = document.createElement(tag);
+    if (cls) node.className = cls;
+    if (text !== undefined) node.textContent = text;
+    return node;
+  }
+
+  /* -------------------------------- drift ------------------------------ */
+
+  // Drift needs a population, and a browser has none — so build one by
+  // jittering the presets. The shifted variant deliberately pushes the two
+  // features churn is most sensitive to, which is what makes PSI move.
+  function sampleSubscribers(count, shifted) {
+    const base = [PRESETS.healthy, PRESETS.borderline, PRESETS.at_risk];
+    const out = [];
+    for (let i = 0; i < count; i += 1) {
+      const seed = { ...base[i % base.length] };
+      const jitter = (v, spread) => Math.max(0, v + (Math.random() - 0.5) * spread);
+
+      seed.tenure_days = Math.round(jitter(seed.tenure_days, 120));
+      seed.monthly_fee = Number(jitter(seed.monthly_fee, 6).toFixed(2));
+      seed.avg_session_count_last_30d = Number(
+        jitter(shifted ? seed.avg_session_count_last_30d * 0.35 : seed.avg_session_count_last_30d, 6).toFixed(1)
+      );
+      // Clamped to tenure: the request schema rejects anyone inactive for
+      // longer than they have existed, and jittering both independently
+      // produces exactly that often enough to fail the whole batch.
+      seed.last_activity_days_ago = Math.min(
+        seed.tenure_days,
+        Math.round(jitter(shifted ? seed.last_activity_days_ago + 45 : seed.last_activity_days_ago, 10))
+      );
+      seed.support_tickets_last_90d = Math.round(jitter(seed.support_tickets_last_90d, 2));
+      seed.payment_failures_last_6m = Math.round(jitter(seed.payment_failures_last_6m, 2));
+      seed.discounts_used_last_6m = Math.round(jitter(seed.discounts_used_last_6m, 2));
+      out.push(seed);
+    }
+    return out;
+  }
+
+  async function runDrift(shifted) {
+    const host = $("driftBody");
+    const buttons = [$("driftNormal"), $("driftShifted")];
+    buttons.forEach((b) => { b.disabled = true; });
+    host.replaceChildren(el("div", "empty", "Scoring a sample…"));
+
+    try {
+      const response = await fetch("/monitoring/drift", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ subscribers: sampleSubscribers(400, shifted) }),
+      });
+      const d = await response.json();
+
+      if (!response.ok) {
+        host.replaceChildren(el("div", "empty", d.detail || "Drift check failed."));
+        return;
+      }
+      renderDrift(d, shifted);
+    } catch (err) {
+      host.replaceChildren(el("div", "empty", `Could not reach the API: ${err.message}`));
+    } finally {
+      buttons.forEach((b) => { b.disabled = false; });
+    }
+  }
+
+  function renderDrift(d, shifted) {
+    const host = $("driftBody");
+    host.replaceChildren();
+
+    const pill = el("span", "verdict-pill " + d.overall_verdict, d.overall_verdict);
+    host.appendChild(pill);
+
+    const caption = el("div", "gauge-note",
+      `${d.n_samples} ${shifted ? "disengaged" : "baseline"} subscribers · ` +
+      (d.sufficient_sample ? "sample large enough to trust" : "sample too small to trust"));
+    caption.style.textAlign = "left";
+    caption.style.marginBottom = "16px";
+    host.appendChild(caption);
+
+    const worst = Math.max(...(d.features || []).map((f) => f.psi), 0.25);
+    (d.features || []).slice(0, 10).forEach((f) => {
+      const row = el("div", "psi");
+      const top = el("div", "psi-top");
+      top.append(
+        el("span", "psi-name", f.feature),
+        el("span", "psi-val", f.psi.toFixed(3))
+      );
+      const bar = el("div", "psi-bar");
+      const fill = el("i", f.verdict);
+      fill.style.width = Math.min(100, (f.psi / worst) * 100) + "%";
+      bar.appendChild(fill);
+      row.append(top, bar);
+      host.appendChild(row);
+    });
+  }
+
+  /* -------------------------------- wiring ----------------------------- */
+
+  document.querySelectorAll(".tab").forEach((tab) => {
+    tab.addEventListener("click", () => showView(tab.dataset.view));
+  });
+  document.querySelectorAll(".preset").forEach((button) => {
+    button.addEventListener("click", () => applyPreset(button.dataset.preset));
+  });
   $("form").addEventListener("submit", score);
+  $("driftNormal").addEventListener("click", () => runDrift(false));
+  $("driftShifted").addEventListener("click", () => runDrift(true));
 
   applyPreset("at_risk");
   refreshStatus();
+  setInterval(refreshStatus, 15000);
 </script>
 </body>
 </html>
