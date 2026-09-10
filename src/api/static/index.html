@@ -234,10 +234,14 @@
   .slab-grid {
     position: relative;
     display: grid;
-    grid-template-columns: 320px 1fr 360px;
-    gap: 30px;
-    align-items: center;
+    grid-template-columns: 300px minmax(0, 1fr) 360px;
+    gap: 34px;
+    align-items: stretch;
   }
+  /* Every cell opens with an eyebrow on the same baseline, which is what makes
+     three differently-shaped things read as one row instead of three. */
+  .slab-cell { display: flex; flex-direction: column; }
+  .slab-cell .eyebrow { margin-bottom: 14px; }
   @media (max-width: 1100px) { .slab-grid { grid-template-columns: 1fr; gap: 22px; } }
   .slab-cell + .slab-cell { border-left: 1px solid var(--line); padding-left: 30px; }
   @media (max-width: 1100px) {
@@ -257,10 +261,18 @@
     text-align: center;
   }
   .hero .d.sep { width: .22em; }
-  .hero .unit { font-family: var(--font-display); font-size: 38px; color: var(--muted); margin-left: 2px; }
+  .hero .unit {
+    font-family: var(--font-display);
+    font-size: 46px;
+    line-height: .85;
+    color: var(--bone);
+    opacity: .5;
+    margin-left: 2px;
+  }
 
   .band {
     display: inline-block;
+    align-self: flex-start;
     border-radius: 999px;
     padding: 4px 14px;
     font-size: 13px;
@@ -272,89 +284,199 @@
   .band.medium { background: var(--medium-soft); color: var(--medium); }
   .band.high   { background: var(--high-soft);   color: var(--high); }
 
-  .slab-note { font-family: var(--font-mono); font-size: 11.5px; color: var(--muted); margin-top: 10px; }
+  .slab-note { font-family: var(--font-mono); font-size: 11.5px; color: var(--muted); margin-top: 12px; }
 
   .verdict { font-size: 19px; line-height: 1.5; color: var(--ink-soft); margin: 0; }
-  .method { margin-top: 14px; font-family: var(--font-mono); font-size: 11.5px; color: var(--muted); }
+  .method { margin-top: auto; padding-top: 14px; font-family: var(--font-mono); font-size: 11.5px; color: var(--muted); }
 
-  /* ------------------- population ribbon + threshold rule -------------- */
+  /* ---------------------- the threshold scale --------------------------- */
 
-  /* 6.77M training subscribers, binned by score. The envelope is masked to the
-     real shape of the distribution - heavy left mass, thin right tail - so it
-     reads as a waveform without a single note glyph. */
-  .ribbon {
-    position: relative;
-    height: 58px;
-    background: repeating-linear-gradient(90deg, var(--line-firm) 0 1px, transparent 1px 6px);
-    -webkit-mask-image: var(--envelope);
-    mask-image: var(--envelope);
-    --envelope: linear-gradient(90deg,
-      rgba(0,0,0,.18) 0%, rgba(0,0,0,1) 4%, rgba(0,0,0,.62) 12%,
-      rgba(0,0,0,.34) 26%, rgba(0,0,0,.2) 44%, rgba(0,0,0,.13) 64%,
-      rgba(0,0,0,.09) 82%, rgba(0,0,0,.06) 100%);
-  }
-  .ribbon .plumb {
+  /* Three rows on one axis: the callout above the needle, the banded rule,
+     and the ticks below. Everything is positioned as a percentage of the same
+     0-1 axis, so the callout can never drift off the value it describes. */
+  .scale { margin-top: auto; margin-bottom: auto; }
+
+  .scale-callout { position: relative; height: 26px; }
+  .scale-callout .tag {
     position: absolute;
-    top: -4px; bottom: -4px;
-    width: 2px;
-    background: var(--bone);
-    box-shadow: 0 0 6px rgba(232, 223, 206, .9), 0 0 18px var(--accent-glow);
+    bottom: 4px;
+    transform: translateX(-50%);
+    white-space: nowrap;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 500;
+    padding: 3px 9px;
+    border-radius: 999px;
     transition: left var(--dur-3) var(--ease-out);
   }
+  .scale-callout .tag.over  { background: var(--high-soft);   color: var(--high); }
+  .scale-callout .tag.under { background: var(--low-soft);    color: var(--low); }
 
   .rule {
     position: relative;
-    height: 10px;
-    margin-top: 12px;
+    height: 16px;
     border-radius: 999px;
     background: var(--sunk);
-    box-shadow: inset 0 1px 2px rgba(0, 0, 0, .7);
+    box-shadow: inset 0 1px 3px rgba(0, 0, 0, .8);
     overflow: hidden;
   }
   .rule i { position: absolute; top: 0; bottom: 0; }
-  .rule i.low { background: rgba(70, 200, 138, .32); }
-  .rule i.medium { background: rgba(240, 169, 74, .28); }
-  .rule i.high { background: rgba(255, 106, 90, .28); }
+  .rule i.low    { background: rgba(70, 200, 138, .22); }
+  .rule i.medium { background: rgba(240, 169, 74, .20); }
+  .rule i.high   { background: rgba(255, 106, 90, .20); }
 
-  .rule-marks { position: relative; height: 20px; }
+  /* The distance between the threshold and the score, drawn solid. That gap
+     is the part of the reading a retention team acts on. */
+  .rule .gapfill {
+    position: absolute;
+    top: 0; bottom: 0;
+    transition: left var(--dur-3) var(--ease-out), width var(--dur-3) var(--ease-out);
+  }
+  .rule .gapfill.over  { background: rgba(255, 106, 90, .85); }
+  .rule .gapfill.under { background: rgba(70, 200, 138, .85); }
+
+  .rule .plumb {
+    position: absolute;
+    top: -3px; bottom: -3px;
+    width: 3px;
+    margin-left: -1.5px;
+    border-radius: 2px;
+    background: var(--bone);
+    box-shadow: 0 0 8px rgba(232, 223, 206, .95);
+    transition: left var(--dur-3) var(--ease-out);
+  }
+
+  .rule-marks { position: relative; height: 30px; }
   .rule-marks .tick {
     position: absolute;
-    top: -14px;
-    width: 2px; height: 20px;
-    background: var(--bone);
+    top: 0;
+    width: 1px; height: 6px;
+    background: var(--line-firm);
   }
   .rule-marks .tick::after {
     content: attr(data-l);
     position: absolute;
-    top: 22px; left: 50%;
+    top: 9px;
+    left: 50%;
     transform: translateX(-50%);
     font-family: var(--font-mono);
     font-size: 11px;
     color: var(--muted);
     white-space: nowrap;
   }
-  .rule-marks .gap {
-    position: absolute;
-    top: -6px;
-    height: 2px;
-    background: var(--high);
-  }
-  .rule-marks .gap::after {
-    content: attr(data-l);
-    position: absolute;
-    top: -20px; right: 0;
-    font-family: var(--font-mono);
-    font-size: 11px;
-    color: var(--high);
-    white-space: nowrap;
-  }
+  /* The end ticks would otherwise hang off both edges of the card. */
+  .rule-marks .tick.first::after { left: 0; transform: none; }
+  .rule-marks .tick.last::after  { left: auto; right: 0; transform: none; }
 
   /* ------------------------------ layout ------------------------------- */
 
   .row2 { display: grid; grid-template-columns: minmax(0, 1.24fr) minmax(0, 1fr); gap: 24px; align-items: start; }
   @media (max-width: 1000px) { .row2 { grid-template-columns: minmax(0, 1fr); } }
 
-  .two-col { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 22px; align-items: start; }
+  /* Stretch, not start: a pair of cards at different heights reads as one of
+     them having failed to load. */
+  .two-col { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 22px; align-items: stretch; }
+
+  .col-stack { display: grid; gap: 24px; align-content: start; }
+
+  /* ---------------------------- score spread ---------------------------- */
+
+  .spread { padding: 6px 0 2px; }
+  .spread-track {
+    position: relative;
+    height: 18px;
+    border-radius: 999px;
+    background: var(--sunk);
+    box-shadow: inset 0 1px 3px rgba(0, 0, 0, .8);
+    overflow: hidden;
+  }
+  .spread-track i { position: absolute; transition: left var(--dur-3) var(--ease-out), width var(--dur-3) var(--ease-out); }
+  .spread-track .zone { top: 0; bottom: 0; }
+  .spread-track .zone.low    { background: rgba(70, 200, 138, .16); }
+  .spread-track .zone.medium { background: rgba(240, 169, 74, .14); }
+  .spread-track .zone.high   { background: rgba(255, 106, 90, .14); }
+  /* min to max, then the p50-p90 body drawn solid on top of it. */
+  .spread-track .range { top: 7px; height: 4px; border-radius: 999px; background: var(--line-firm); }
+  .spread-track .iqr   { top: 3px; height: 12px; border-radius: 999px; background: var(--accent); opacity: .55; }
+  .spread-track .median {
+    top: 0; bottom: 0;
+    width: 3px;
+    margin-left: -1.5px;
+    background: var(--bone);
+    box-shadow: 0 0 6px rgba(232, 223, 206, .8);
+  }
+
+  .spread-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 20px;
+    margin-top: 14px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--muted);
+  }
+  .spread-legend b { font-weight: 500; color: var(--bone); margin-left: 6px; }
+
+  /* --------------------------- live vs reference ------------------------ */
+
+  .compare { display: grid; gap: 16px; margin-top: 6px; }
+  .compare-row { display: grid; grid-template-columns: 178px minmax(0, 1fr) 92px; gap: 16px; align-items: center; }
+  @media (max-width: 640px) { .compare-row { grid-template-columns: minmax(0, 1fr); } }
+  .compare-label { font-size: 14.5px; color: var(--ink); }
+  .compare-bar { position: relative; height: 12px; border-radius: 999px; background: var(--sunk); box-shadow: inset 0 1px 2px rgba(0,0,0,.6); overflow: hidden; }
+  .compare-bar i { position: absolute; top: 0; bottom: 0; left: 0; border-radius: 999px; transition: width var(--dur-3) var(--ease-out); }
+  .compare-bar i.ref  { background: var(--line-firm); }
+  .compare-bar i.live { background: var(--accent); opacity: .8; }
+  .compare-value { font-family: var(--font-mono); font-size: 13px; color: var(--bone); text-align: right; }
+  .compare-sub { font-family: var(--font-mono); font-size: 11.5px; color: var(--muted); }
+
+  /* ------------------------------- levers ------------------------------ */
+
+  .levers { display: grid; gap: 2px; }
+  .lever {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 10px 14px;
+    padding: 11px 0;
+  }
+  .lever + .lever { border-top: 1px solid var(--line); }
+  .lever-label { font-size: 14.5px; color: var(--ink); min-width: 0; }
+  .lever-move {
+    display: flex;
+    align-items: baseline;
+    gap: 7px;
+    font-family: var(--font-mono);
+    font-size: 13px;
+    white-space: nowrap;
+  }
+  .lever-from { color: var(--muted); }
+  .lever-arrow { color: var(--line-firm); }
+  .lever-to { font-weight: 500; }
+  .lever-to.down { color: var(--low); }
+  .lever-to.up { color: var(--high); }
+  .lever-to.flat { color: var(--muted); }
+
+  /* A shared axis, so the bars are comparable to each other rather than each
+     one being scaled to itself. Zero sits at the current score. */
+  .lever-track {
+    grid-column: 1 / -1;
+    position: relative;
+    height: 5px;
+    border-radius: 999px;
+    background: var(--sunk);
+    box-shadow: inset 0 1px 2px rgba(0, 0, 0, .6);
+    overflow: hidden;
+  }
+  .lever-track i {
+    position: absolute;
+    top: 0; bottom: 0;
+    border-radius: 999px;
+    transition: left var(--dur-3) var(--ease-out), width var(--dur-3) var(--ease-out);
+  }
+  .lever-track i.down { background: var(--low); }
+  .lever-track i.up { background: var(--high); }
+  .lever-note { font-family: var(--font-mono); font-size: 11.5px; color: var(--muted); }
 
   /* ------------------------------- form -------------------------------- */
 
@@ -666,23 +788,34 @@
     <div class="slab" id="result">
       <div class="slab-grid">
         <div class="slab-cell">
+          <div class="eyebrow">Dropout probability</div>
           <div class="hero" id="hero"></div>
           <span id="band" class="band low">—</span>
           <div class="slab-note" id="slabNote"></div>
         </div>
 
+        <!-- The scale, not a distribution. An earlier version drew a
+             population envelope here and labelled it with a subscriber count
+             it did not actually have; what the service can honestly show is
+             where this score falls against the decision threshold and the
+             band edges, so that is all this draws. -->
         <div class="slab-cell">
-          <div class="eyebrow" style="margin-bottom:12px">Where this subscriber sits</div>
-          <div class="ribbon"><span class="plumb" id="plumb" style="left:0%"></span></div>
-          <div class="rule">
-            <i class="low" id="ruleLow"></i>
-            <i class="medium" id="ruleMedium"></i>
-            <i class="high" id="ruleHigh"></i>
+          <div class="eyebrow">Against the decision threshold</div>
+          <div class="scale">
+            <div class="scale-callout" id="scaleCallout"></div>
+            <div class="rule">
+              <i class="low" id="ruleLow"></i>
+              <i class="medium" id="ruleMedium"></i>
+              <i class="high" id="ruleHigh"></i>
+              <span class="gapfill" id="gapfill"></span>
+              <span class="plumb" id="plumb" style="left:0%"></span>
+            </div>
+            <div class="rule-marks" id="ruleMarks"></div>
           </div>
-          <div class="rule-marks" id="ruleMarks"></div>
         </div>
 
         <div class="slab-cell">
+          <div class="eyebrow">Verdict</div>
           <p class="verdict" id="verdict"></p>
           <div class="method" id="method"></div>
         </div>
@@ -818,10 +951,23 @@
         </form>
       </div>
 
-      <div class="panel">
-        <p class="panel-title">What drove it</p>
-        <p class="panel-sub">SHAP attributions, strongest first.</p>
-        <div class="drivers" id="drivers"></div>
+      <div class="col-stack">
+        <div class="panel">
+          <p class="panel-title">What drove it</p>
+          <p class="panel-sub">SHAP attributions, strongest first.</p>
+          <div class="drivers" id="drivers"></div>
+        </div>
+
+        <!-- The counterfactual panel. SHAP says which inputs the model leaned
+             on; it does not say what a retention team could actually do. Each
+             lever here is a real second request with exactly one field
+             changed, so the arrow is the model's answer rather than an
+             inference drawn from the attribution. -->
+        <div class="panel">
+          <p class="panel-title">What would change it</p>
+          <p class="panel-sub">Each lever re-scored through the model, one field at a time.</p>
+          <div class="levers" id="levers"></div>
+        </div>
       </div>
     </div>
   </section>
@@ -851,35 +997,70 @@
       </div>
     </div>
 
-    <div class="panel">
-      <p class="panel-title">Risk mix</p>
-      <p class="panel-sub">How the scored population splits across the three bands.</p>
-      <div class="stack">
-        <i class="low" id="sLow" style="width:0%"></i>
-        <i class="medium" id="sMedium" style="width:0%"></i>
-        <i class="high" id="sHigh" style="width:0%"></i>
+    <div class="two-col">
+      <div class="panel">
+        <p class="panel-title">Risk mix</p>
+        <p class="panel-sub">How the scored population splits across the three bands.</p>
+        <div class="stack">
+          <i class="low" id="sLow" style="width:0%"></i>
+          <i class="medium" id="sMedium" style="width:0%"></i>
+          <i class="high" id="sHigh" style="width:0%"></i>
+        </div>
+        <div class="legend">
+          <span><b style="background:var(--low)"></b> Low <span class="n" id="nLow">0</span></span>
+          <span><b style="background:var(--medium)"></b> Medium <span class="n" id="nMedium">0</span></span>
+          <span><b style="background:var(--high)"></b> High <span class="n" id="nHigh">0</span></span>
+        </div>
       </div>
-      <div class="legend">
-        <span><b style="background:var(--low)"></b> Low <span class="n" id="nLow">0</span></span>
-        <span><b style="background:var(--medium)"></b> Medium <span class="n" id="nMedium">0</span></span>
-        <span><b style="background:var(--high)"></b> High <span class="n" id="nHigh">0</span></span>
+
+      <!-- Four order statistics on one axis. An earlier version dropped a
+           labelled tick at each of them, and p90 and max are frequently the
+           same number, so the two labels landed on top of each other and read
+           as corruption. The figures moved to a legend underneath. -->
+      <div class="panel">
+        <p class="panel-title">Score spread</p>
+        <p class="panel-sub">Where the recent predictions actually landed, 0 to 1.</p>
+        <div class="spread">
+          <div class="spread-track">
+            <i class="zone low" id="zLow"></i>
+            <i class="zone medium" id="zMedium"></i>
+            <i class="zone high" id="zHigh"></i>
+            <i class="range" id="spreadRange"></i>
+            <i class="iqr" id="spreadIqr"></i>
+            <i class="median" id="spreadMedian"></i>
+          </div>
+        </div>
+        <div class="spread-legend" id="spreadLegend"></div>
+        <div class="method" id="spreadNote"></div>
       </div>
     </div>
 
+    <!-- The Shift tile reports a number without its two halves. This is the
+         comparison that number comes from. -->
     <div class="panel" style="margin-top:22px">
-      <p class="panel-title">Score spread</p>
-      <p class="panel-sub">Where the recent predictions actually landed, 0 to 1.</p>
-      <div class="track" id="spread"></div>
-      <div class="gauge-note" id="spreadNote" style="text-align:left"></div>
+      <p class="panel-title">Live traffic against the training reference</p>
+      <p class="panel-sub">The drift signal, with both sides of it shown rather than only the delta.</p>
+      <div class="compare" id="compare"></div>
     </div>
   </section>
 
   <!-- =========================== MODEL =========================== -->
   <section class="view" data-view="model">
-    <div class="panel">
-      <p class="panel-title">Provenance</p>
-      <p class="panel-sub">Which artifact is answering requests, and where it came from.</p>
-      <dl class="kv" id="modelKv"></dl>
+    <!-- Paired, because both are key-value lists with a short right-hand
+         column. Stacked full width they left most of the card empty. -->
+    <div class="two-col">
+      <div class="panel">
+        <p class="panel-title">Provenance</p>
+        <p class="panel-sub">Which artifact is answering requests, and where it came from.</p>
+        <dl class="kv" id="modelKv"></dl>
+      </div>
+
+      <div class="panel">
+        <p class="panel-title">Library versions</p>
+        <p class="panel-sub">Pinned at training time — a mismatch here is how artifacts silently break.</p>
+        <dl class="kv" id="modelLibs"></dl>
+        <div class="method" id="modelLibsNote"></div>
+      </div>
     </div>
 
     <div class="panel" style="margin-top:22px">
@@ -909,11 +1090,6 @@
       </dl>
     </div>
 
-    <div class="panel" style="margin-top:22px">
-      <p class="panel-title">Library versions</p>
-      <p class="panel-sub">Pinned at training time — a mismatch here is how artifacts silently break.</p>
-      <dl class="kv" id="modelLibs"></dl>
-    </div>
   </section>
 
   <!-- ========================= MONITORING ========================= -->
@@ -1027,7 +1203,13 @@
     ink.style.transform = `translateX(${active.offsetLeft}px)`;
   }
 
+  const VIEWS = ["score", "live", "model", "monitoring"];
+
   function showView(name) {
+    if (!VIEWS.includes(name)) name = "score";
+    // Deep-linkable: the tab lives in the hash, so a view can be shared,
+    // reloaded, or opened directly rather than only reached by clicking.
+    if (location.hash.slice(1) !== name) history.replaceState(null, "", "#" + name);
     document.querySelectorAll(".tab").forEach((t) => {
       t.classList.toggle("is-active", t.dataset.view === name);
     });
@@ -1055,7 +1237,13 @@
       liveTimer = setInterval(refreshMetrics, 5000);
     }
     if (name === "model") refreshModel();
-    if (name === "monitoring") refreshShadow();
+    if (name === "monitoring") {
+      refreshShadow();
+      // The comparison is the whole point of this view, so run it on arrival
+      // rather than leaving the tab empty behind a button. Once only: it is
+      // 800 predictions, and re-running on every tab switch would be rude.
+      if (!driftHasRun) { driftHasRun = true; runDrift(); }
+    }
   }
 
   /* ------------------------------- form -------------------------------- */
@@ -1091,6 +1279,27 @@
   // The request schema rejects last_activity_days_ago > tenure_days with a 422.
   // Enforce it while dragging rather than letting someone build an invalid
   // subscriber and only find out on submit.
+  // Only fields the model actually responds to. support_tickets_last_90d and
+  // payment_failures_last_6m are constant in KKBox training data and move the
+  // prediction by exactly zero, so offering them as levers would promise a
+  // retention action that does nothing.
+  const LEVERS = [
+    { field: "is_auto_renew_enabled", label: "Turn auto-renew off", value: false,
+      only: (p) => p.is_auto_renew_enabled === true },
+    { field: "is_auto_renew_enabled", label: "Turn auto-renew on", value: true,
+      only: (p) => p.is_auto_renew_enabled !== true },
+    { field: "discounts_used_last_6m", label: "Stop discounting", value: 0,
+      only: (p) => Number(p.discounts_used_last_6m) > 0 },
+    { field: "last_activity_days_ago", label: "Bring them back this week", value: 2,
+      only: (p) => Number(p.last_activity_days_ago) > 2 },
+    { field: "avg_session_count_last_30d", label: "Double their listening", value: null,
+      derive: (p) => Math.min(30, Math.max(1, Number(p.avg_session_count_last_30d) * 2)),
+      only: (p) => Number(p.avg_session_count_last_30d) < 15 },
+    { field: "monthly_fee", label: "Halve the price", value: null,
+      derive: (p) => Math.round(Number(p.monthly_fee) * 50) / 100,
+      only: (p) => Number(p.monthly_fee) >= 2 },
+  ];
+
   function clampRecency() {
     const tenure = parseFloat($("tenure_days").value);
     const recency = parseFloat($("last_activity_days_ago").value);
@@ -1185,9 +1394,10 @@
     requestAnimationFrame(step);
   }
 
-  // The population ribbon and the threshold rule replace the arc gauge. The
-  // distance between the marker and the threshold is the story of the
-  // prediction, and a linear rule shows it where an arc could not.
+  // What this draws is the decision, not a population: the three bands, the
+  // threshold, and the distance between the threshold and this score. That
+  // distance is the number a retention team acts on, and a linear axis shows
+  // it where the arc gauge this replaced could not.
   function renderSpectrum(probability, threshold) {
     const highStart = threshold + (1 - threshold) * HIGH_RISK_SPAN;
     const pos = (v) => Math.max(0, Math.min(100, v * 100));
@@ -1197,27 +1407,39 @@
     $("ruleHigh").style.cssText = `left:${pos(highStart)}%;width:${100 - pos(highStart)}%`;
     $("plumb").style.left = pos(probability) + "%";
 
+    const over = probability >= threshold;
+    const lo = Math.min(pos(probability), pos(threshold));
+    const span = Math.abs(pos(probability) - pos(threshold));
+
+    const fill = $("gapfill");
+    fill.className = "gapfill " + (over ? "over" : "under");
+    fill.style.left = lo + "%";
+    fill.style.width = span + "%";
+
+    // The callout is centred over the middle of the gap it measures, and
+    // clamped away from both edges so it never runs off the card.
+    const delta = (probability - threshold) * 100;
+    const tag = el("span", "tag " + (over ? "over" : "under"),
+      (over ? "+" : "") + delta.toFixed(1) + "pp " + (over ? "over the line" : "under the line"));
+    tag.style.left = Math.max(16, Math.min(84, lo + span / 2)) + "%";
+    $("scaleCallout").replaceChildren(tag);
+
     const marks = $("ruleMarks");
     marks.replaceChildren();
-    const tick = el("span", "tick");
-    tick.style.left = pos(threshold) + "%";
-    tick.dataset.l = "threshold " + pct(threshold);
-    marks.appendChild(tick);
-
-    // How far over (or under) the line this subscriber sits, in percentage
-    // points - the number a retention team would actually act on.
-    const delta = (probability - threshold) * 100;
-    const gap = el("span", "gap");
-    const lo = Math.min(pos(probability), pos(threshold));
-    gap.style.left = lo + "%";
-    gap.style.width = Math.abs(pos(probability) - pos(threshold)) + "%";
-    gap.style.background = delta >= 0 ? "var(--high)" : "var(--low)";
-    gap.dataset.l = (delta >= 0 ? "+" : "") + delta.toFixed(1) + "pp " +
-      (delta >= 0 ? "over the line" : "under the line");
-    marks.appendChild(gap);
+    const ticks = [{ at: threshold, label: "threshold " + pct(threshold), cls: "" },
+                   { at: 1, label: "100%", cls: " last" }];
+    // At a 5% threshold the zero tick's label would sit underneath the
+    // threshold's. Zero is the obvious end of the axis; the threshold is not.
+    if (threshold > 0.14) ticks.unshift({ at: 0, label: "0%", cls: " first" });
+    ticks.forEach(({ at, label, cls }) => {
+      const tick = el("span", "tick" + cls);
+      tick.style.left = pos(at) + "%";
+      tick.dataset.l = label;
+      marks.appendChild(tick);
+    });
 
     $("slabNote").textContent =
-      `decision threshold ${pct(threshold)} · 6,770,000 subscribers in the baseline`;
+      `flagged at or above ${pct(threshold)} · high band starts at ${pct(highStart)}`;
   }
 
   function renderImpacts(attributions) {
@@ -1320,6 +1542,82 @@
       : "Rule-based explanation · describes the inputs, not the model's decision";
   }
 
+  /* ---------------------------- counterfactuals ------------------------ */
+
+  // Fired after a score, not on every keystroke: each lever is a real request,
+  // and re-running six of them per character typed would be rude to the API
+  // and useless to read.
+  let leverRun = 0;
+
+  async function renderLevers(base, baseProbability) {
+    const host = $("levers");
+    const run = ++leverRun;
+
+    const chosen = LEVERS.filter((l) => l.only(base)).slice(0, 4);
+    if (!chosen.length) {
+      host.replaceChildren(el("p", "lever-note", "No single field moves this one much."));
+      return;
+    }
+
+    host.replaceChildren(el("p", "lever-note", "Re-scoring…"));
+
+    let results;
+    try {
+      results = await Promise.all(chosen.map(async (lever) => {
+        const payload = { ...base };
+        payload[lever.field] = lever.derive ? lever.derive(base) : lever.value;
+        const response = await fetch("/predict", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        if (!response.ok) throw new Error("lever request failed");
+        const data = await response.json();
+        return { lever, probability: data.dropout_probability };
+      }));
+    } catch (err) {
+      if (run === leverRun) {
+        host.replaceChildren(el("p", "lever-note", "Could not re-score the levers."));
+      }
+      return;
+    }
+
+    // A later score has landed while these were in flight; its results win.
+    if (run !== leverRun) return;
+
+    // One shared axis across every lever, so a big arrow really is a bigger
+    // move than a small one rather than each bar being scaled to itself.
+    const peak = Math.max(...results.map((r) => Math.abs(r.probability - baseProbability)), 0.01);
+
+    host.replaceChildren();
+    results
+      .sort((a, b) => Math.abs(b.probability - baseProbability) - Math.abs(a.probability - baseProbability))
+      .forEach(({ lever, probability }) => {
+        const delta = probability - baseProbability;
+        const dir = Math.abs(delta) < 0.001 ? "flat" : (delta < 0 ? "down" : "up");
+
+        const row = el("div", "lever");
+        row.appendChild(el("span", "lever-label", lever.label));
+
+        const move = el("span", "lever-move");
+        move.appendChild(el("span", "lever-from", pct(baseProbability)));
+        move.appendChild(el("span", "lever-arrow", "→"));
+        move.appendChild(el("span", "lever-to " + dir, pct(probability)));
+        row.appendChild(move);
+
+        const track = el("div", "lever-track");
+        if (dir !== "flat") {
+          const bar = el("i", dir);
+          const width = (Math.abs(delta) / peak) * 50;
+          bar.style.left = (delta < 0 ? 50 - width : 50) + "%";
+          bar.style.width = width + "%";
+          track.appendChild(bar);
+        }
+        row.appendChild(track);
+        host.appendChild(row);
+      });
+  }
+
   /* ------------------------------ scoring ------------------------------ */
 
   async function score(event) {
@@ -1331,16 +1629,17 @@
     if (!$("result").classList.contains("hidden")) $("result").classList.add("stale");
 
     try {
+      const payload = readForm();
       const response = await fetch("/predict", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(readForm()),
+        body: JSON.stringify(payload),
       });
       const data = await response.json();
 
       if (response.status === 422) showError(formatValidationError(data.detail));
       else if (!response.ok) showError(data.detail || `Request failed (${response.status}).`);
-      else render(data);
+      else { render(data); renderLevers(payload, data.dropout_probability); }
     } catch (err) {
       showError(`Could not reach the API: ${err.message}`);
     } finally {
@@ -1399,19 +1698,85 @@
     $("sMedium").style.width = share(medium) + "%";
     $("sHigh").style.width = share(high) + "%";
 
-    const spread = $("spread");
-    spread.replaceChildren();
     const p = m.probability || {};
-    [["min", p.min], ["p50", p.p50], ["p90", p.p90], ["max", p.max]].forEach(([name, v]) => {
-      if (v === null || v === undefined) return;
-      const tick = document.createElement("i");
-      tick.style.left = Math.max(0, Math.min(100, v * 100)) + "%";
-      tick.dataset.l = name;
-      spread.appendChild(tick);
+    const clamp = (v) => Math.max(0, Math.min(100, v * 100));
+    const has = (v) => v !== null && v !== undefined;
+
+    // The band zones behind the spread, so the shape can be read against the
+    // same thresholds the Score view uses.
+    const highStart = m.threshold + (1 - m.threshold) * HIGH_RISK_SPAN;
+    $("zLow").style.cssText = `left:0%;width:${clamp(m.threshold)}%`;
+    $("zMedium").style.cssText = `left:${clamp(m.threshold)}%;width:${clamp(highStart) - clamp(m.threshold)}%`;
+    $("zHigh").style.cssText = `left:${clamp(highStart)}%;width:${100 - clamp(highStart)}%`;
+
+    if (has(p.min) && has(p.max)) {
+      $("spreadRange").style.cssText =
+        `left:${clamp(p.min)}%;width:${Math.max(0.4, clamp(p.max) - clamp(p.min))}%`;
+      $("spreadIqr").style.cssText =
+        `left:${clamp(p.p50)}%;width:${Math.max(0.4, clamp(p.p90) - clamp(p.p50))}%`;
+      $("spreadMedian").style.left = clamp(p.p50) + "%";
+    }
+
+    const legend = $("spreadLegend");
+    legend.replaceChildren();
+    [["min", p.min], ["median", p.p50], ["p90", p.p90], ["max", p.max]].forEach(([name, v]) => {
+      if (!has(v)) return;
+      const item = el("span", "", name);
+      item.appendChild(el("b", "", pct(v)));
+      legend.appendChild(item);
     });
+
     $("spreadNote").textContent = total
       ? `${m.window_size} of ${m.window_capacity} slots in the rolling window`
       : "nothing scored yet — score a subscriber and come back";
+
+    renderCompare(m);
+  }
+
+  // The Shift tile gives a delta with neither of the numbers it came from.
+  // Drawing both against a shared axis is what makes the delta mean anything.
+  function renderCompare(m) {
+    const host = $("compare");
+    host.replaceChildren();
+    const ref = m.reference || {};
+    const live = m.probability || {};
+
+    if (ref.probability_mean === null || ref.probability_mean === undefined) {
+      host.appendChild(el("div", "empty", "No training reference is recorded for this model."));
+      return;
+    }
+
+    const peak = Math.max(ref.probability_mean, live.mean || 0, 0.01);
+    const rows = [
+      ["Training reference", ref.probability_mean, "ref",
+       `${(ref.rows || 0).toLocaleString()} rows · ${(ref.created_at || "").slice(0, 10)}`],
+      ["Live window", live.mean, "live",
+       `${m.window_size} predictions served`],
+    ];
+
+    rows.forEach(([label, value, cls, sub]) => {
+      const row = el("div", "compare-row");
+      const left = el("div", "");
+      left.append(el("div", "compare-label", label), el("div", "compare-sub", sub));
+      row.appendChild(left);
+
+      const bar = el("div", "compare-bar");
+      const fill = el("i", cls);
+      fill.style.width = ((value || 0) / peak) * 100 + "%";
+      bar.appendChild(fill);
+      row.appendChild(bar);
+
+      row.appendChild(el("div", "compare-value", value === null || value === undefined ? "—" : pct(value)));
+      host.appendChild(row);
+    });
+
+    const shift = m.probability_mean_shift;
+    if (shift !== null && shift !== undefined) {
+      host.appendChild(el("div", "method",
+        `Mean predicted risk is running ${signed(shift, 4)} against the reference. ` +
+        `A gap this size is expected here: the reference is the full training population, ` +
+        `and the live window is whatever has been scored since the service started.`));
+    }
   }
 
   /* -------------------------------- model ------------------------------ */
@@ -1452,13 +1817,20 @@
 
     const libs = $("modelLibs");
     libs.replaceChildren();
-    Object.entries(meta.library_versions || {}).forEach(([k, v]) => {
+    const versions = Object.entries(meta.library_versions || {});
+    versions.forEach(([k, v]) => {
       const dt = document.createElement("dt");
       dt.textContent = k;
       const dd = document.createElement("dd");
       dd.textContent = v;
       libs.append(dt, dd);
     });
+    // The endpoint returns {} for an artifact trained before versions were
+    // recorded. An empty card looked like a rendering failure; this says which
+    // it is, because the two need different fixes.
+    $("modelLibsNote").textContent = versions.length
+      ? ""
+      : "This artifact recorded no library versions at training time.";
   }
 
   /* ------------------------------- shadow ------------------------------ */
@@ -1476,7 +1848,25 @@
     host.replaceChildren();
 
     if (!s.enabled || !s.active) {
-      host.appendChild(el("div", "empty", s.detail || "No challenger is registered."));
+      // An idle comparison is still a state worth reporting: which alias is
+      // live, and what shadow scoring would do if a challenger appeared.
+      const idle = document.createElement("div");
+      idle.className = "tiles";
+      [["Champion", s.champion_version ? "@champion v" + s.champion_version : "@champion",
+        "serving every request"],
+       ["Challenger", "none", "@challenger unset or equal"],
+       ["Comparisons", String(s.compared_total || 0), "since the service started"],
+       ["Promotion gate", "PR-AUC", "with margin, never ROC-AUC"]].forEach(([l, v, sub]) => {
+        const t = document.createElement("div");
+        t.className = "tile";
+        t.append(el("span", "tile-l", l), el("span", "tile-v", v), el("span", "tile-s", sub));
+        idle.appendChild(t);
+      });
+      host.appendChild(idle);
+      const why = el("div", "method",
+        s.detail || "Shadow scoring stays idle while @challenger is unset.");
+      why.style.marginTop = "16px";
+      host.appendChild(why);
       return;
     }
 
@@ -1569,6 +1959,8 @@
   // nearly every feature - a 400-row synthetic cohort is far from 6.77M real
   // subscribers however it is jittered - so a single run tells you nothing.
   // The comparison does: only the features we actually moved should climb.
+  let driftHasRun = false;
+
   async function runDrift() {
     const host = $("driftBody");
     const button = $("driftRun");
@@ -1693,6 +2085,7 @@
   document.querySelectorAll(".tab").forEach((tab) => {
     tab.addEventListener("click", () => showView(tab.dataset.view));
   });
+  window.addEventListener("hashchange", () => showView(location.hash.slice(1)));
   document.querySelectorAll(".preset").forEach((button) => {
     button.addEventListener("click", () => applyPreset(button.dataset.preset));
   });
@@ -1730,6 +2123,8 @@
 
   refreshStatus();
   setInterval(refreshStatus, 15000);
+
+  if (location.hash.slice(1)) showView(location.hash.slice(1));
 
   // Score immediately, so the first thing anyone sees is a populated result
   // rather than half a screen of empty state.

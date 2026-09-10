@@ -386,3 +386,32 @@ def test_dashboard_at_risk_preset_outranks_the_healthy_one(client: TestClient) -
         for name in ("at_risk", "healthy")
     }
     assert scored["at_risk"] > scored["healthy"]
+
+
+def test_no_class_is_given_two_conflicting_display_rules() -> None:
+    """A second rule for an existing class name silently rewrites the layout.
+
+    The bug this catches: a `.stack` grid container was added for the score
+    view's right-hand column, and `.stack` was already the live view's risk-mix
+    flex bar. The later rule won, the two panels collapsed into a clipped row,
+    and nothing failed - every id was present, the script parsed, and the
+    fetches were unchanged. Only rendering the page showed it.
+
+    Restricted to `display` because that is the property that relocates
+    content rather than restyling it, and to single-class selectors because a
+    contextual override like `.tiles .tile` is a deliberate narrowing.
+    """
+    style = re.search(r"<style>(.*?)</style>", _dashboard_html(), re.DOTALL)
+    assert style, "the dashboard has no <style> block"
+
+    declares_display: dict[str, int] = {}
+    for selector, body in re.findall(r"([^{}]+)\{([^{}]*)\}", style.group(1)):
+        if not re.search(r"(^|;)\s*display\s*:", body):
+            continue
+        for part in selector.split(","):
+            part = part.strip()
+            if re.fullmatch(r"\.[A-Za-z][\w-]*", part):
+                declares_display[part] = declares_display.get(part, 0) + 1
+
+    clashing = sorted(name for name, count in declares_display.items() if count > 1)
+    assert not clashing, f"class names with two conflicting display rules: {clashing}"
