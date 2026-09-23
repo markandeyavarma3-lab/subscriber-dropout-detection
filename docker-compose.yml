@@ -81,6 +81,10 @@ services:
       # SDD_DECISION_THRESHOLD: "0.35"
       # Serve the mounted artifact below, never the image's own. See there.
       SDD_MODEL_SOURCE: local
+      # Read by the dashboard's Overview page, for the warehouse's row counts.
+      # Nothing else in the API touches the database; if it's down, the
+      # Overview says so and every other endpoint carries on.
+      SDD_DATABASE_URL: postgresql+psycopg://subscriber:subscriber@postgres:5432/warehouse
     healthcheck:
       test:
         - CMD

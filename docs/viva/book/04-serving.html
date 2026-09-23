@@ -11,6 +11,7 @@
   <tr><td><code>GET /model-info</code></td><td>Which model is serving: name, training date, threshold, required inputs, library versions, source</td></tr>
   <tr><td><code>POST /predict</code></td><td>Score one subscriber, with an explanation</td></tr>
   <tr><td><code>POST /predict/batch</code></td><td>Score 1 to 1,000 subscribers in one call</td></tr>
+  <tr><td><code>GET /overview</code></td><td>Everything the dashboard's Overview page shows, from the live system: warehouse row counts, the model's own test results, the last drift check. A part that can't be read says so rather than failing</td></tr>
   <tr><td><code>GET /metrics</code></td><td>A JSON summary of recent traffic: counts, flagged rate, score percentiles, shift from training</td></tr>
   <tr><td><code>GET /metrics/prometheus</code></td><td>The same, in Prometheus's text format, for scraping</td></tr>
   <tr><td><code>POST /monitoring/drift</code></td><td>Compare a sample (up to 50,000 rows) against the training distribution with PSI</td></tr>
@@ -50,9 +51,10 @@
 <p>If SHAP isn't available or fails, the prediction is still returned, with a rule-based explanation and <code>"explanation_method": "rules"</code>, so a client always knows which kind it got. <strong>An explanation is a feature of a prediction, never a precondition for one.</strong></p>
 
 <h2>The dashboard</h2>
-<p>A single self-contained page (<code>src/api/static/index.html</code>, no build step) with four tabs, each reachable by link (<code>#score</code>, <code>#live</code>, <code>#model</code>, <code>#monitoring</code>):</p>
+<p>A single self-contained page (<code>src/api/static/index.html</code>, no build step) in a light, colour-coded theme, with five tabs, each reachable by link (<code>#overview</code>, <code>#score</code>, <code>#live</code>, <code>#model</code>, <code>#monitoring</code>):</p>
 <table>
   <thead><tr><th>Tab</th><th>What it shows</th></tr></thead>
+  <tr><td>Overview</td><td>Opens first and explains the whole project to someone who has never seen it: the problem, the journey of a prediction in six stages, the warehouse's live row counts, the time-based split, how good the model is, the architecture and tech stack, honest limits, and links to every tool. Every figure marked with a green dot is read live from <code>/overview</code> and <code>/metrics</code>, so it can't go stale when the model is retrained</td></tr>
   <tr><td>Score</td><td>A form (sliders and inputs, with three presets), the probability, risk band, distance from the threshold, the SHAP drivers, and "What would change it"</td></tr>
   <tr><td>Live traffic</td><td>Predictions served, flagged rate, risk mix, score spread, and live traffic against the training reference</td></tr>
   <tr><td>Model</td><td>Provenance, library versions, required inputs, and notes on the two surprising behaviours</td></tr>
@@ -60,8 +62,13 @@
 </table>
 
 <figure>
+  <img src="/docs/viva/screenshots/dashboard-overview.png" alt="Dashboard overview tab" style="width:92%">
+  <figcaption>Figure 9.1: The Overview, the first thing anyone sees. Every number with a green dot is read live from the running system.</figcaption>
+</figure>
+
+<figure>
   <img src="/docs/viva/screenshots/dashboard-score.png" alt="Dashboard score tab" style="width:88%">
-  <figcaption>Figure 9.1: The Score tab, on the "at-risk" preset: 60%, high risk, with SHAP drivers and counterfactual levers.</figcaption>
+  <figcaption>Figure 9.2: The Score tab, on the "at-risk" preset: 60%, high risk, with SHAP drivers and counterfactual levers.</figcaption>
 </figure>
 
 <h3>The three presets</h3>

@@ -33,7 +33,7 @@ COVER = """
   <div class="stats">
     <div><b>82.8M</b><span>events in a Postgres warehouse</span></div>
     <div><b>8</b><span>services, one command</span></div>
-    <div><b>434</b><span>tests &middot; 7 CI/CD jobs</span></div>
+    <div><b>441</b><span>tests &middot; 7 CI/CD jobs</span></div>
   </div>
   <div class="foot">github.com/markandeyavarma3-lab/subscriber-dropout-detection</div>
 </section>

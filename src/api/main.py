@@ -17,7 +17,7 @@ from fastapi import FastAPI, HTTPException, status
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
-from src.api import service
+from src.api import overview, service
 from src.api.schemas import (
     BatchPredictionRequest,
     BatchPredictionResponse,
@@ -160,6 +160,17 @@ def metrics() -> MetricsResponse:
     when the thing it monitors is unhealthy is worse than useless.
     """
     return MetricsResponse(**service.live_metrics())
+
+
+@app.get("/overview", tags=["monitoring"])
+def project_overview() -> dict:
+    """Everything the dashboard's Overview page shows, from the live system.
+
+    Warehouse row counts, the served model's own evaluation report, and the
+    last drift check. Always 200: a section that can't be read says so with
+    ``available: false`` rather than failing the page.
+    """
+    return overview.build_overview()
 
 
 @app.get("/monitoring/shadow", response_model=ShadowResponse, tags=["monitoring"])

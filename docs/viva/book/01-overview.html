@@ -55,7 +55,7 @@
 <div class="stats">
   <div><b>8</b><span>Docker services, started by <code>make demo</code></span></div>
   <div><b>15</b><span>Prometheus alert rules</span></div>
-  <div><b>434</b><span>automated tests</span></div>
+  <div><b>441</b><span>automated tests</span></div>
   <div><b>7</b><span>CI/CD jobs on every push</span></div>
 </div>
 
@@ -137,7 +137,7 @@
   <tr><td>Orchestrated deployment</td><td>Kubernetes manifests</td><td>Deployments with health probes, an autoscaler and a disruption budget: the step after Compose.</td></tr>
   <tr><td>CI/CD</td><td>GitHub Actions + GitHub Container Registry</td><td>Free for public repos; seven jobs test the system, and the image is published on every merge to <code>main</code>.</td></tr>
   <tr><td>Database browser</td><td>TablePlus (free version)</td><td>A clear window into the Postgres warehouse for the demo.</td></tr>
-  <tr><td>Quality</td><td>pytest, ruff</td><td>434 tests; ruff for linting and consistent style.</td></tr>
+  <tr><td>Quality</td><td>pytest, ruff</td><td>441 tests; ruff for linting and consistent style.</td></tr>
 </table>
 
 <div class="callout">
@@ -170,7 +170,7 @@
 │   │                             prometheus.py (metrics), tracker.py (rolling window)
 │   ├── orchestration/            pipeline.py (steps), flows.py (Prefect flows)
 │   └── demo.py                   make demo / demo-check / demo-down
-├── tests/                        434 tests in 15 files
+├── tests/                        441 tests in 15 files
 ├── deploy/
 │   ├── prometheus/               prometheus.yml (scrape targets), alerts.yml (15 rules)
 │   ├── alertmanager/             alertmanager.yml (routing, inhibition)

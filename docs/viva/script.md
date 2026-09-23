@@ -73,7 +73,12 @@ Then `make demo-down`.
 
 ## The talk
 
-### 0:00 – 1:30 · The problem (architecture diagram)
+### 0:00 – 1:30 · The problem (dashboard → Overview tab)
+
+Open **http://127.0.0.1:8000**. It opens on the **Overview**, which tells the whole story on
+one page, with live numbers (the green dots). Scroll slowly while you talk: the problem, the
+six-stage journey, the architecture. Everything the rest of the demo shows in detail is
+summarised here first.
 
 > "Subscription businesses lose revenue when people cancel. If you can spot who's *about* to
 > cancel, you can act while they're still a customer. I built a system that predicts that

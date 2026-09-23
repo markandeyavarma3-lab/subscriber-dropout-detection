@@ -9,47 +9,55 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&family=Instrument+Serif&family=JetBrains+Mono:wght@400;500&display=swap">
 <style>
   /* ---------------------------------------------------------------------- *
-   * A dark theme by design, not by inversion. Single theme on purpose: two
-   * tuned to this standard would double the surface for no benefit.
+   * A light theme with a real palette. Teal is the working accent; indigo
+   * carries every human-facing figure; green / amber / rose are the three
+   * risk bands, and nothing else uses them. The Overview adds a colour per
+   * stage of the project, so each part of the story is recognisable at a
+   * glance - on a projector in a bright room as much as on a laptop.
    * ---------------------------------------------------------------------- */
   :root {
-    --void:       #08090B;
-    --paper:      #0E1014;
-    --paper-lift: #171B22;
-    --sunk:       #0A0C0F;
-    --surface:    #14171C;
-    --raised:     #1A1E25;
+    --void:       #F4F6FB;
+    --paper:      #F8F9FD;
+    --paper-lift: #FFFFFF;
+    --sunk:       #EEF1F7;
+    --surface:    #FFFFFF;
+    --raised:     #FFFFFF;
 
-    --line:      #232831;
-    --line-firm: #343B46;
-    --edge:      rgba(255, 255, 255, .055);
+    --line:      #E2E7F0;
+    --line-firm: #C9D1DE;
+    --edge:      rgba(255, 255, 255, .9);
 
-    --ink:      #F4F6F8;
-    --ink-soft: #A9B2BE;
-    --muted:    #6B7480;
+    --ink:      #0F172A;
+    --ink-soft: #334155;
+    --muted:    #64748B;
 
-    --accent:      #3ED6C0;
-    --accent-dim:  #123F3A;
-    --accent-glow: rgba(62, 214, 192, .22);
+    --accent:      #0D9488;
+    --accent-dim:  #CCFBF1;
+    --accent-glow: rgba(13, 148, 136, .20);
 
     /* Every human-facing display figure is set in this, in the serif. Machine
        figures - log-odds, PSI, versions - stay mono and muted. One rule,
        applied without exception, is most of what reads as "designed". */
-    --bone: #E8DFCE;
+    --bone: #4338CA;
 
-    --low:         #46C88A;
-    --low-soft:    #16302A;
-    --medium:      #F0A94A;
-    --medium-soft: #33270F;
-    --high:        #FF6A5A;
-    --high-soft:   #35191A;
+    --low:         #16A34A;
+    --low-soft:    #DCFCE7;
+    --medium:      #D97706;
+    --medium-soft: #FEF3C7;
+    --high:        #E11D48;
+    --high-soft:   #FFE4E6;
 
-    /* All three cues together are what separate a card from the page. The
-       previous version used one, and the cards vanished. */
+    /* One colour per stage of the project, used on the Overview. */
+    --c-data:    #0284C7;  --c-data-soft:    #E0F2FE;
+    --c-model:   #7C3AED;  --c-model-soft:   #EDE9FE;
+    --c-serve:   #0D9488;  --c-serve-soft:   #CCFBF1;
+    --c-watch:   #EA580C;  --c-watch-soft:   #FFEDD5;
+    --c-auto:    #DB2777;  --c-auto-soft:    #FCE7F3;
+    --c-results: #4338CA;  --c-results-soft: #E0E7FF;
+
     --panel-shadow:
-      inset 0 1px 0 var(--edge),
-      0 1px 2px rgba(0, 0, 0, .6),
-      0 24px 48px -28px rgba(0, 0, 0, .95);
+      0 1px 2px rgba(15, 23, 42, .05),
+      0 12px 28px -14px rgba(15, 23, 42, .18);
 
     --font-display: "Instrument Serif", Georgia, "Times New Roman", serif;
     --font-ui: "Instrument Sans", ui-sans-serif, -apple-system, "Segoe UI", Roboto, sans-serif;
@@ -73,8 +81,10 @@
   body {
     margin: 0;
     background:
-      radial-gradient(1300px 760px at 50% -12%, var(--paper-lift), var(--paper) 55%, var(--void) 100%)
-      fixed;
+      radial-gradient(900px 520px at 8% -8%, rgba(2, 132, 199, .10), transparent 70%),
+      radial-gradient(900px 520px at 92% -6%, rgba(124, 58, 237, .09), transparent 70%),
+      radial-gradient(1100px 700px at 50% 110%, rgba(13, 148, 136, .07), transparent 70%),
+      var(--void) fixed;
     color: var(--ink);
     font-family: var(--font-ui);
     font-size: 16px;
@@ -83,15 +93,14 @@
     min-height: 100vh;
   }
 
-  /* Grain. A flat #0E1014 bands visibly across 900px of gradient; this stops
-     it, and costs one inline SVG. */
+  /* Grain, very faint: it stops the colour washes banding. */
   body::before {
     content: "";
     position: fixed;
     inset: 0;
     pointer-events: none;
     z-index: 0;
-    opacity: .035;
+    opacity: .02;
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23n)'/%3E%3C/svg%3E");
   }
 
@@ -136,8 +145,8 @@
   }
 
   .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex: none; }
-  .dot.ok { background: var(--low); box-shadow: 0 0 10px rgba(70, 200, 138, .6); }
-  .dot.bad { background: var(--high); box-shadow: 0 0 10px rgba(255, 106, 90, .6); }
+  .dot.ok { background: var(--low); box-shadow: 0 0 10px rgba(22, 163, 74, .6); }
+  .dot.bad { background: var(--high); box-shadow: 0 0 10px rgba(225, 29, 72, .6); }
 
   /* ------------------------------- tabs -------------------------------- */
 
@@ -217,7 +226,7 @@
     overflow: hidden;
     background: var(--raised);
     border: 1px solid var(--line);
-    border-top-color: rgba(62, 214, 192, .4);
+    border-top-color: rgba(13, 148, 136, .45);
     border-radius: var(--r-hero);
     padding: 20px 30px;
     box-shadow: var(--panel-shadow);
@@ -317,13 +326,13 @@
     height: 16px;
     border-radius: 999px;
     background: var(--sunk);
-    box-shadow: inset 0 1px 3px rgba(0, 0, 0, .8);
+    box-shadow: inset 0 1px 3px rgba(15, 23, 42, .10);
     overflow: hidden;
   }
   .rule i { position: absolute; top: 0; bottom: 0; }
-  .rule i.low    { background: rgba(70, 200, 138, .22); }
-  .rule i.medium { background: rgba(240, 169, 74, .20); }
-  .rule i.high   { background: rgba(255, 106, 90, .20); }
+  .rule i.low    { background: rgba(22, 163, 74, .22); }
+  .rule i.medium { background: rgba(217, 119, 6, .20); }
+  .rule i.high   { background: rgba(225, 29, 72, .20); }
 
   /* The distance between the threshold and the score, drawn solid. That gap
      is the part of the reading a retention team acts on. */
@@ -332,8 +341,8 @@
     top: 0; bottom: 0;
     transition: left var(--dur-3) var(--ease-out), width var(--dur-3) var(--ease-out);
   }
-  .rule .gapfill.over  { background: rgba(255, 106, 90, .85); }
-  .rule .gapfill.under { background: rgba(70, 200, 138, .85); }
+  .rule .gapfill.over  { background: rgba(225, 29, 72, .85); }
+  .rule .gapfill.under { background: rgba(22, 163, 74, .85); }
 
   .rule .plumb {
     position: absolute;
@@ -342,7 +351,7 @@
     margin-left: -1.5px;
     border-radius: 2px;
     background: var(--bone);
-    box-shadow: 0 0 8px rgba(232, 223, 206, .95);
+    box-shadow: 0 0 8px rgba(67, 56, 202, .45);
     transition: left var(--dur-3) var(--ease-out);
   }
 
@@ -387,14 +396,14 @@
     height: 18px;
     border-radius: 999px;
     background: var(--sunk);
-    box-shadow: inset 0 1px 3px rgba(0, 0, 0, .8);
+    box-shadow: inset 0 1px 3px rgba(15, 23, 42, .10);
     overflow: hidden;
   }
   .spread-track i { position: absolute; transition: left var(--dur-3) var(--ease-out), width var(--dur-3) var(--ease-out); }
   .spread-track .zone { top: 0; bottom: 0; }
-  .spread-track .zone.low    { background: rgba(70, 200, 138, .16); }
-  .spread-track .zone.medium { background: rgba(240, 169, 74, .14); }
-  .spread-track .zone.high   { background: rgba(255, 106, 90, .14); }
+  .spread-track .zone.low    { background: rgba(22, 163, 74, .16); }
+  .spread-track .zone.medium { background: rgba(217, 119, 6, .14); }
+  .spread-track .zone.high   { background: rgba(225, 29, 72, .14); }
   /* min to max, then the p50-p90 body drawn solid on top of it. */
   .spread-track .range { top: 7px; height: 4px; border-radius: 999px; background: var(--line-firm); }
   .spread-track .iqr   { top: 3px; height: 12px; border-radius: 999px; background: var(--accent); opacity: .55; }
@@ -403,7 +412,7 @@
     width: 3px;
     margin-left: -1.5px;
     background: var(--bone);
-    box-shadow: 0 0 6px rgba(232, 223, 206, .8);
+    box-shadow: 0 0 6px rgba(67, 56, 202, .40);
   }
 
   .spread-legend {
@@ -423,7 +432,7 @@
   .compare-row { display: grid; grid-template-columns: 178px minmax(0, 1fr) 92px; gap: 16px; align-items: center; }
   @media (max-width: 640px) { .compare-row { grid-template-columns: minmax(0, 1fr); } }
   .compare-label { font-size: 14.5px; color: var(--ink); }
-  .compare-bar { position: relative; height: 12px; border-radius: 999px; background: var(--sunk); box-shadow: inset 0 1px 2px rgba(0,0,0,.6); overflow: hidden; }
+  .compare-bar { position: relative; height: 12px; border-radius: 999px; background: var(--sunk); box-shadow: inset 0 1px 2px rgba(15, 23, 42, .10); overflow: hidden; }
   .compare-bar i { position: absolute; top: 0; bottom: 0; left: 0; border-radius: 999px; transition: width var(--dur-3) var(--ease-out); }
   .compare-bar i.ref  { background: var(--line-firm); }
   .compare-bar i.live { background: var(--accent); opacity: .8; }
@@ -465,7 +474,7 @@
     height: 5px;
     border-radius: 999px;
     background: var(--sunk);
-    box-shadow: inset 0 1px 2px rgba(0, 0, 0, .6);
+    box-shadow: inset 0 1px 2px rgba(15, 23, 42, .10);
     overflow: hidden;
   }
   .lever-track i {
@@ -544,7 +553,7 @@
     width: 100%;
     margin-top: 16px;
     background: var(--accent);
-    color: #06231F;
+    color: #FFFFFF;
     border: none;
     border-radius: var(--r-input);
     padding: 13px 18px;
@@ -566,7 +575,7 @@
     height: 6px;
     border-radius: 999px;
     background: var(--sunk);
-    box-shadow: inset 0 1px 2px rgba(0, 0, 0, .7);
+    box-shadow: inset 0 1px 2px rgba(15, 23, 42, .10);
     outline: none;
     cursor: pointer;
   }
@@ -612,7 +621,7 @@
   .driver-val.up { color: var(--high); }
   .driver-val.down { color: var(--low); }
 
-  .diverge { position: relative; height: 10px; background: var(--sunk); border-radius: 999px; box-shadow: inset 0 1px 2px rgba(0,0,0,.7); }
+  .diverge { position: relative; height: 10px; background: var(--sunk); border-radius: 999px; box-shadow: inset 0 1px 2px rgba(15, 23, 42, .10); }
   .diverge::before { content: ""; position: absolute; left: 50%; top: -3px; bottom: -3px; width: 1px; background: var(--line-firm); }
   .diverge span { position: absolute; top: 0; bottom: 0; border-radius: 999px; transition: width var(--dur-3) var(--ease-out); }
   .diverge span.up { background: var(--high); left: 50%; }
@@ -646,7 +655,7 @@
   .tile-v { font-family: var(--font-display); font-size: 40px; line-height: 1; color: var(--bone); display: block; }
   .tile-s { font-size: 13px; color: var(--muted); display: block; margin-top: 6px; }
 
-  .stack { display: flex; height: 34px; border-radius: var(--r-input); overflow: hidden; background: var(--sunk); box-shadow: inset 0 1px 2px rgba(0,0,0,.7); }
+  .stack { display: flex; height: 34px; border-radius: var(--r-input); overflow: hidden; background: var(--sunk); box-shadow: inset 0 1px 2px rgba(15, 23, 42, .10); }
   .stack i { display: block; transition: width var(--dur-3) var(--ease-out); }
   .stack i.low { background: var(--low); }
   .stack i.medium { background: var(--medium); }
@@ -657,7 +666,7 @@
   .legend b { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
   .legend .n { font-family: var(--font-mono); color: var(--muted); }
 
-  .track { position: relative; height: 10px; background: var(--sunk); border-radius: 999px; margin: 30px 0 10px; box-shadow: inset 0 1px 2px rgba(0,0,0,.7); }
+  .track { position: relative; height: 10px; background: var(--sunk); border-radius: 999px; margin: 30px 0 10px; box-shadow: inset 0 1px 2px rgba(15, 23, 42, .10); }
   .track i { position: absolute; top: -6px; width: 2px; height: 22px; background: var(--accent); border-radius: 1px; }
   .track i::after { content: attr(data-l); position: absolute; top: -20px; left: 50%; transform: translateX(-50%); font-family: var(--font-mono); font-size: 11px; color: var(--muted); white-space: nowrap; }
 
@@ -719,6 +728,291 @@
   footer { margin-top: 44px; padding-top: 22px; border-top: 1px solid var(--line); font-size: 14px; color: var(--muted); }
   footer a { color: var(--accent); }
 
+  /* ----------------------------- overview ------------------------------ */
+  /* Every Overview class is prefixed ov- so none can collide with a class the
+     working tabs already use (the .stack clash taught that lesson). Colour is
+     passed in per element through --tone / --tint, so one rule serves every
+     stage of the project in its own colour. */
+
+  .ov-live {
+    display: inline-block;
+    width: 7px; height: 7px;
+    margin-right: 6px;
+    border-radius: 50%;
+    background: var(--low);
+    box-shadow: 0 0 0 3px var(--low-soft);
+    vertical-align: 1px;
+  }
+
+  .ov-hero {
+    display: grid;
+    grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+    gap: 28px;
+    align-items: stretch;
+    padding: 30px;
+    border-radius: var(--r-hero);
+    background:
+      radial-gradient(520px 260px at 0% 0%, var(--c-data-soft), transparent 70%),
+      radial-gradient(520px 300px at 100% 100%, var(--c-model-soft), transparent 70%),
+      var(--surface);
+    border: 1px solid var(--line);
+    box-shadow: var(--panel-shadow);
+    margin-bottom: 34px;
+  }
+  @media (max-width: 1000px) { .ov-hero { grid-template-columns: minmax(0, 1fr); } }
+  .ov-kicker {
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    letter-spacing: .16em;
+    text-transform: uppercase;
+    color: var(--c-model);
+    font-weight: 500;
+  }
+  .ov-statement {
+    font-family: var(--font-display);
+    font-size: clamp(26px, 2.6vw, 34px);
+    line-height: 1.22;
+    margin: 12px 0 14px;
+    color: var(--ink);
+  }
+  .ov-statement em { font-style: italic; color: var(--c-model); }
+  .ov-lede { color: var(--ink-soft); margin: 0 0 20px; font-size: 15.5px; }
+  .ov-live-note { display: block; margin-top: 8px; font-size: 13px; color: var(--muted); }
+  .ov-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+  .ov-btn {
+    display: inline-block;
+    padding: 10px 18px;
+    border-radius: 999px;
+    border: 1px solid var(--line-firm);
+    background: var(--surface);
+    color: var(--ink);
+    font-weight: 600;
+    font-size: 14.5px;
+    text-decoration: none;
+    transition: transform var(--dur-1), box-shadow var(--dur-1);
+  }
+  .ov-btn:hover { transform: translateY(-1px); box-shadow: var(--panel-shadow); }
+  .ov-btn-primary { background: var(--accent); border-color: var(--accent); color: #FFFFFF; }
+
+  .ov-stat-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+  .ov-stat {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 4px;
+    padding: 16px 18px;
+    border-radius: 14px;
+    background: var(--tint);
+    border: 1px solid color-mix(in srgb, var(--tone) 18%, transparent);
+  }
+  .ov-stat-label { font-size: 12.5px; font-weight: 600; color: var(--ink-soft); }
+  .ov-stat b {
+    font-family: var(--font-display);
+    font-weight: 400;
+    font-size: clamp(30px, 3vw, 40px);
+    line-height: 1.05;
+    color: var(--tone);
+  }
+  .ov-stat-sub { font-size: 12.5px; color: var(--muted); }
+
+  .ov-section { margin: 0 0 38px; }
+  .ov-head { display: flex; gap: 14px; align-items: flex-start; margin-bottom: 16px; }
+  .ov-num {
+    flex: none;
+    display: grid;
+    place-items: center;
+    width: 34px; height: 34px;
+    border-radius: 50%;
+    background: var(--tone);
+    color: #FFFFFF;
+    font-weight: 700;
+    font-size: 15px;
+    margin-top: 2px;
+  }
+  .ov-title { font-size: 23px; font-weight: 600; letter-spacing: -0.01em; margin: 0; color: var(--ink); }
+  .ov-sub { margin: 2px 0 0; color: var(--muted); font-size: 14.5px; }
+
+  .ov-cards3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+  @media (max-width: 900px) { .ov-cards3 { grid-template-columns: minmax(0, 1fr); } }
+  .ov-card {
+    padding: 20px 22px;
+    border-radius: var(--r-panel);
+    background: var(--tint, var(--surface));
+    border: 1px solid color-mix(in srgb, var(--tone, var(--line)) 20%, var(--line));
+    box-shadow: var(--panel-shadow);
+  }
+  .ov-card p { margin: 6px 0 0; color: var(--ink-soft); font-size: 14.5px; }
+  .ov-plain { background: var(--surface); }
+  .ov-big {
+    font-family: var(--font-display);
+    font-weight: 400;
+    font-size: 42px;
+    line-height: 1;
+    color: var(--tone);
+  }
+  .ov-card-title { font-weight: 600; font-size: 14px; color: var(--ink); margin-bottom: 12px; }
+  .ov-muted { color: var(--muted); font-size: 14px; margin: 0; }
+  .ov-note { color: var(--muted); font-size: 13.5px; margin: 12px 0 0; }
+
+  .ov-flow {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: grid;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    gap: 12px;
+    counter-reset: none;
+  }
+  @media (max-width: 1100px) { .ov-flow { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+  @media (max-width: 640px) { .ov-flow { grid-template-columns: minmax(0, 1fr); } }
+  .ov-flow li {
+    position: relative;
+    padding: 16px 16px 14px;
+    border-radius: 14px;
+    background: var(--tint);
+    border-top: 4px solid var(--tone);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .ov-flow h3 { margin: 0; font-size: 15.5px; color: var(--ink); }
+  .ov-flow p { margin: 0; font-size: 13.5px; color: var(--ink-soft); flex: 1; }
+  .ov-step {
+    display: grid;
+    place-items: center;
+    width: 24px; height: 24px;
+    border-radius: 50%;
+    background: var(--tone);
+    color: #FFFFFF;
+    font-size: 12px;
+    font-weight: 700;
+  }
+  .ov-fact {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--tone);
+    background: var(--surface);
+    border-radius: 999px;
+    padding: 3px 10px;
+    align-self: flex-start;
+  }
+  .ov-auto {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    margin-top: 12px;
+    padding: 12px 14px;
+    border-radius: 14px;
+    background: var(--c-auto-soft);
+  }
+  .ov-auto-label { font-size: 13px; font-weight: 700; color: var(--c-auto); margin-right: 4px; }
+  .ov-chip {
+    font-size: 13px;
+    padding: 4px 11px;
+    border-radius: 999px;
+    background: var(--surface);
+    color: var(--ink-soft);
+    border: 1px solid color-mix(in srgb, var(--c-auto) 20%, transparent);
+  }
+
+  .ov-split { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; align-items: stretch; }
+  @media (max-width: 900px) { .ov-split { grid-template-columns: minmax(0, 1fr); } }
+
+  .ov-bars { display: grid; gap: 12px; }
+  .ov-bar-row { display: grid; grid-template-columns: 150px minmax(0, 1fr) 96px; gap: 12px; align-items: center; }
+  .ov-bar-name { font-size: 14px; color: var(--ink); }
+  .ov-bar-name small { display: block; font-size: 12px; color: var(--muted); }
+  .ov-bar-track { height: 12px; border-radius: 999px; background: var(--sunk); overflow: hidden; }
+  .ov-bar-track i {
+    display: block;
+    height: 100%;
+    width: 0;
+    border-radius: 999px;
+    background: var(--tone);
+    transition: width var(--dur-3) var(--ease-out);
+  }
+  .ov-bar-value { font-family: var(--font-mono); font-size: 13px; color: var(--ink); text-align: right; }
+
+  .ov-list { margin: 0; padding-left: 18px; color: var(--ink-soft); font-size: 14.5px; }
+  .ov-list li { margin-bottom: 8px; }
+  .ov-list b { color: var(--ink); }
+
+  .ov-timeline { display: grid; grid-template-columns: minmax(0, 1fr) 70px minmax(0, 1fr); align-items: center; gap: 0; }
+  .ov-window {
+    padding: 16px 18px;
+    border-radius: 12px;
+    font-size: 14.5px;
+    text-align: center;
+  }
+  .ov-before { background: var(--c-serve-soft); color: var(--c-serve); }
+  .ov-after { background: var(--high-soft); color: var(--high); }
+  .ov-cut { position: relative; height: 84px; }
+  .ov-cut::before { content: ""; position: absolute; left: 50%; top: 0; bottom: 22px; width: 3px; margin-left: -1.5px; background: var(--ink); border-radius: 2px; }
+  .ov-cut span { position: absolute; bottom: 0; left: 0; right: 0; text-align: center; font-family: var(--font-mono); font-size: 12px; font-weight: 500; }
+  .ov-splits { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+  @media (max-width: 700px) { .ov-splits { grid-template-columns: minmax(0, 1fr); } }
+  .ov-splits > div { padding: 12px 14px; border-radius: 12px; background: var(--tint); border-left: 4px solid var(--tone); }
+  .ov-splits span { display: block; font-size: 12.5px; font-weight: 600; color: var(--tone); text-transform: uppercase; letter-spacing: .06em; }
+  .ov-splits b { display: block; font-size: 15px; color: var(--ink); margin-top: 2px; }
+  .ov-splits em { font-style: normal; font-size: 12.5px; color: var(--muted); }
+
+  .ov-compare { display: grid; gap: 12px; margin-bottom: 18px; }
+  .ov-cmp-row { display: grid; grid-template-columns: 130px minmax(0, 1fr) 64px; gap: 12px; align-items: center; font-size: 14px; }
+  .ov-cmp-track { height: 16px; border-radius: 999px; background: var(--sunk); overflow: hidden; }
+  .ov-cmp-track i { display: block; height: 100%; width: 0; border-radius: 999px; background: var(--tone); transition: width var(--dur-3) var(--ease-out); }
+  .ov-cmp-row b { font-family: var(--font-mono); font-weight: 500; text-align: right; }
+  .ov-minis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+  @media (max-width: 700px) { .ov-minis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  .ov-minis > div { padding: 10px 12px; border-radius: 12px; background: var(--c-results-soft); }
+  .ov-minis b { display: block; font-family: var(--font-display); font-weight: 400; font-size: 26px; color: var(--c-results); line-height: 1.1; }
+  .ov-minis span { font-size: 12px; color: var(--ink-soft); }
+  .ov-finding { margin-top: 16px; background: var(--c-results-soft); border-color: color-mix(in srgb, var(--c-results) 25%, var(--line)); }
+  .ov-finding .ov-card-title { color: var(--c-results); margin-bottom: 4px; }
+  .ov-finding p { color: var(--ink); }
+
+  .ov-arch { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; }
+  @media (max-width: 1000px) { .ov-arch { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  .ov-arch > div {
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+    padding: 16px;
+    border-radius: 14px;
+    background: var(--tint);
+    border-top: 4px solid var(--tone);
+  }
+  .ov-arch h3 { margin: 0 0 4px; font-size: 16px; color: var(--tone); }
+  .ov-arch span {
+    font-size: 13.5px;
+    padding: 5px 10px;
+    border-radius: 8px;
+    background: var(--surface);
+    color: var(--ink);
+  }
+
+  .ov-limits { background: var(--medium-soft); border-color: color-mix(in srgb, var(--medium) 30%, var(--line)); }
+
+  .ov-links { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+  @media (max-width: 1000px) { .ov-links { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  .ov-links a {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 16px 18px;
+    border-radius: 14px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-left: 4px solid var(--tone);
+    text-decoration: none;
+    box-shadow: var(--panel-shadow);
+    transition: transform var(--dur-1);
+  }
+  .ov-links a:hover { transform: translateY(-2px); }
+  .ov-links b { color: var(--tone); font-size: 15.5px; }
+  .ov-links span { color: var(--muted); font-size: 13.5px; }
+
   /* ------------------------------ motion ------------------------------- */
 
   @keyframes rise { from { opacity: 0; transform: translateY(10px); } }
@@ -737,7 +1031,7 @@
     position: absolute;
     left: 0; right: 0; bottom: 0;
     height: 2px;
-    background: rgba(6, 35, 31, .5);
+    background: rgba(255, 255, 255, .6);
     transform: translateX(-100%);
     opacity: 0;
   }
@@ -764,7 +1058,7 @@
   <header>
     <div>
       <h1>Subscriber Dropout Detection</h1>
-      <p class="tagline">Churn risk scoring, explained — with the model's own diagnostics.</p>
+      <p class="tagline">Predicting who will cancel a music subscription — and running it like a production system.</p>
     </div>
     <div class="status" id="status">
       <span class="dot" id="statusDot"></span>
@@ -773,15 +1067,245 @@
   </header>
 
   <nav class="tabs">
-    <button type="button" class="tab is-active" data-view="score">Score</button>
+    <button type="button" class="tab is-active" data-view="overview">Overview</button>
+    <button type="button" class="tab" data-view="score">Score</button>
     <button type="button" class="tab" data-view="live">Live traffic</button>
     <button type="button" class="tab" data-view="model">Model</button>
     <button type="button" class="tab" data-view="monitoring">Monitoring</button>
     <span class="tab-ink" aria-hidden="true"></span>
   </nav>
 
+  <!-- ========================== OVERVIEW ========================== -->
+  <!-- The page someone sees first, and the one that answers "what is this
+       project?" without the person who built it standing beside them. Every
+       figure marked live is read from /overview and /metrics at load time. -->
+  <section class="view is-active" data-view="overview">
+
+    <div class="ov-hero">
+      <div class="ov-hero-text">
+        <div class="ov-kicker">The project on one page</div>
+        <p class="ov-statement">A music-streaming service loses money every time a subscriber cancels.
+          This system predicts <em>who is about to</em>, explains <em>why</em>, and keeps that prediction
+          trustworthy after it ships.</p>
+        <p class="ov-lede">Built on real data from KKBox (a Taiwanese music-streaming service), as a
+          complete MLOps system: warehouse, training, registry, serving, streaming, monitoring and CI/CD.
+          <span class="ov-live-note"><i class="ov-live"></i> marks a number read live from the running system.</span></p>
+        <div class="ov-actions">
+          <a class="ov-btn ov-btn-primary" href="#score">Score a subscriber →</a>
+          <a class="ov-btn" href="#live">See live traffic</a>
+        </div>
+      </div>
+      <div class="ov-stat-grid">
+        <div class="ov-stat" style="--tone: var(--c-data); --tint: var(--c-data-soft)">
+          <span class="ov-stat-label"><i class="ov-live"></i>Rows in the warehouse</span>
+          <b id="ovRows">—</b><span class="ov-stat-sub" id="ovRowsSub">Postgres</span>
+        </div>
+        <div class="ov-stat" style="--tone: var(--c-model); --tint: var(--c-model-soft)">
+          <span class="ov-stat-label"><i class="ov-live"></i>Model quality (PR-AUC)</span>
+          <b id="ovPrauc">—</b><span class="ov-stat-sub" id="ovPraucSub">vs random</span>
+        </div>
+        <div class="ov-stat" style="--tone: var(--c-serve); --tint: var(--c-serve-soft)">
+          <span class="ov-stat-label"><i class="ov-live"></i>Predictions served</span>
+          <b id="ovServed">—</b><span class="ov-stat-sub" id="ovServedSub">since the service started</span>
+        </div>
+        <div class="ov-stat" style="--tone: var(--c-watch); --tint: var(--c-watch-soft)">
+          <span class="ov-stat-label"><i class="ov-live"></i>Data drift</span>
+          <b id="ovDrift">—</b><span class="ov-stat-sub" id="ovDriftSub">last check</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 1 · The problem -->
+    <div class="ov-section">
+      <div class="ov-head"><span class="ov-num" style="--tone: var(--high)">1</span>
+        <div><h2 class="ov-title">The problem: churn is rare, so it's hard</h2>
+        <p class="ov-sub">Why this isn't a simple classification exercise.</p></div></div>
+      <div class="ov-cards3">
+        <div class="ov-card" style="--tone: var(--high); --tint: var(--high-soft)">
+          <b class="ov-big" id="ovRate">—</b>
+          <p><i class="ov-live"></i><strong>of subscribers cancel</strong> in any 30-day window. Churners are needles in a haystack.</p>
+        </div>
+        <div class="ov-card" style="--tone: var(--medium); --tint: var(--medium-soft)">
+          <b class="ov-big" id="ovTrap">—</b>
+          <p><strong>accuracy</strong> from a "model" that predicts nobody ever cancels. It's useless, which is why this project never judges a model by accuracy.</p>
+        </div>
+        <div class="ov-card" style="--tone: var(--c-serve); --tint: var(--c-serve-soft)">
+          <b class="ov-big">3 jobs</b>
+          <p><strong>Predict</strong> who will cancel in the next 30 days, <strong>explain</strong> why for each person, and <strong>operate</strong> it safely: serve, monitor, retrain.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- 2 · The journey -->
+    <div class="ov-section">
+      <div class="ov-head"><span class="ov-num" style="--tone: var(--c-results)">2</span>
+        <div><h2 class="ov-title">How it works: the journey of a prediction</h2>
+        <p class="ov-sub">Six stages, left to right. The coloured bands match the architecture below.</p></div></div>
+      <ol class="ov-flow">
+        <li style="--tone: var(--c-data); --tint: var(--c-data-soft)">
+          <span class="ov-step">1</span><h3>Raw data</h3>
+          <p>KKBox export from Kaggle: members, transactions, daily listening logs.</p>
+          <span class="ov-fact">31.3 GB of CSV</span></li>
+        <li style="--tone: var(--c-data); --tint: var(--c-data-soft)">
+          <span class="ov-step">2</span><h3>Clean &amp; load</h3>
+          <p>Validated, cleaned, and stored as timestamped events in Postgres.</p>
+          <span class="ov-fact"><i class="ov-live"></i><span id="ovFlowRows">—</span> rows</span></li>
+        <li style="--tone: var(--c-model); --tint: var(--c-model-soft)">
+          <span class="ov-step">3</span><h3>Leak-free features</h3>
+          <p>Built only from the 30 days <em>before</em> a date; the answer comes from the 30 days <em>after</em>.</p>
+          <span class="ov-fact">9 inputs → 21 model columns</span></li>
+        <li style="--tone: var(--c-model); --tint: var(--c-model-soft)">
+          <span class="ov-step">4</span><h3>Train &amp; gate</h3>
+          <p>Gradient boosting, tested on a later month. Goes live only if it beats the current model.</p>
+          <span class="ov-fact"><i class="ov-live"></i>trained <span id="ovTrained">—</span></span></li>
+        <li style="--tone: var(--c-serve); --tint: var(--c-serve-soft)">
+          <span class="ov-step">5</span><h3>Serve &amp; explain</h3>
+          <p>An API and a Kafka stream scorer. Every answer comes with its reasons (SHAP).</p>
+          <span class="ov-fact">threshold <span id="ovThreshold">—</span></span></li>
+        <li style="--tone: var(--c-watch); --tint: var(--c-watch-soft)">
+          <span class="ov-step">6</span><h3>Watch</h3>
+          <p>Prometheus, 15 alert rules, Grafana, and drift checks against the training data.</p>
+          <span class="ov-fact"><i class="ov-live"></i>drift <span id="ovFlowDrift">—</span></span></li>
+      </ol>
+      <div class="ov-auto">
+        <span class="ov-auto-label">Automated underneath</span>
+        <span class="ov-chip">Prefect · nightly retrain</span>
+        <span class="ov-chip">DVC · versioned pipeline</span>
+        <span class="ov-chip">GitHub Actions · 7 CI/CD jobs</span>
+        <span class="ov-chip">Docker · 8 services, one command</span>
+      </div>
+    </div>
+
+    <!-- 3 · The data -->
+    <div class="ov-section">
+      <div class="ov-head"><span class="ov-num" style="--tone: var(--c-data)">3</span>
+        <div><h2 class="ov-title">The data: a real warehouse</h2>
+        <p class="ov-sub">Events with timestamps, not running totals, so any subscriber can be rebuilt exactly as they were on any past date.</p></div></div>
+      <div class="ov-split">
+        <div class="ov-card ov-plain">
+          <div class="ov-card-title"><i class="ov-live"></i>Rows per table, in Postgres</div>
+          <div class="ov-bars" id="ovTables"><p class="ov-muted">Loading…</p></div>
+        </div>
+        <div class="ov-card ov-plain">
+          <div class="ov-card-title">What cleaning the real data took</div>
+          <ul class="ov-list">
+            <li><b>2.66M orphan rows dropped:</b> payments for 432,623 people missing from the members file. Dropped, not invented: a made-up signup date would make loyal customers look new.</li>
+            <li><b>IDs widened 32 → 64 characters:</b> real IDs are 44. SQLite ignored it; Postgres would have rejected every row.</li>
+            <li><b>Prices normalised to monthly:</b> plans run 7 to 410 days.</li>
+            <li><b>Listening log bounded:</b> 392M rows → the 38.2M the features actually use.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- 4 · No peeking -->
+    <div class="ov-section">
+      <div class="ov-head"><span class="ov-num" style="--tone: var(--c-model)">4</span>
+        <div><h2 class="ov-title">No peeking at the future</h2>
+        <p class="ov-sub">The most common way churn models cheat, and how this one can't.</p></div></div>
+      <div class="ov-card ov-plain">
+        <div class="ov-timeline">
+          <div class="ov-window ov-before">Features: the 30 days <b>before</b> date T</div>
+          <div class="ov-cut"><span>date T</span></div>
+          <div class="ov-window ov-after">Answer: did they cancel in the 30 days <b>after</b>?</div>
+        </div>
+        <p class="ov-note">The two windows never overlap, so nothing after T can reach a feature. A test adds future events and checks no feature changes.</p>
+        <div class="ov-card-title" style="margin-top:18px"><i class="ov-live"></i>Split by time, never randomly</div>
+        <div class="ov-splits">
+          <div style="--tone: var(--c-serve); --tint: var(--c-serve-soft)"><span>Train on</span><b id="ovTrain">—</b><em id="ovTrainRows"></em></div>
+          <div style="--tone: var(--medium); --tint: var(--medium-soft)"><span>Tune on</span><b id="ovVal">—</b><em id="ovValRows"></em></div>
+          <div style="--tone: var(--high); --tint: var(--high-soft)"><span>Test on</span><b id="ovTest">—</b><em id="ovTestRows"></em></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 5 · Results -->
+    <div class="ov-section">
+      <div class="ov-head"><span class="ov-num" style="--tone: var(--c-results)">5</span>
+        <div><h2 class="ov-title">How good is the model?</h2>
+        <p class="ov-sub">Measured on a month it never saw. Compared with guessing, not with perfection.</p></div></div>
+      <div class="ov-split">
+        <div class="ov-card ov-plain">
+          <div class="ov-card-title"><i class="ov-live"></i>Finding churners (PR-AUC)</div>
+          <div class="ov-compare">
+            <div class="ov-cmp-row"><span>This model</span><div class="ov-cmp-track"><i id="ovCmpModel" style="--tone: var(--c-model)"></i></div><b id="ovCmpModelV">—</b></div>
+            <div class="ov-cmp-row"><span>Random guessing</span><div class="ov-cmp-track"><i id="ovCmpRandom" style="--tone: var(--muted)"></i></div><b id="ovCmpRandomV">—</b></div>
+          </div>
+          <div class="ov-minis">
+            <div><b id="ovRoc">—</b><span>ROC-AUC</span></div>
+            <div><b id="ovRecall">—</b><span>of churners caught</span></div>
+            <div><b id="ovPrecision">—</b><span>of flags correct</span></div>
+            <div><b id="ovEce">—</b><span>calibration error</span></div>
+          </div>
+        </div>
+        <div class="ov-card ov-plain">
+          <div class="ov-card-title"><i class="ov-live"></i>What drives the predictions</div>
+          <div class="ov-bars" id="ovFeatures"><p class="ov-muted">Loading…</p></div>
+        </div>
+      </div>
+      <div class="ov-card ov-finding">
+        <div class="ov-card-title">The finding that shaped the project</div>
+        <p>Moving from synthetic to real data, <b>ROC-AUC went up</b> (0.674 → 0.835) while
+          <b>PR-AUC fell</b> (0.345 → 0.073). ROC-AUC barely notices how rare churn is; PR-AUC does.
+          A gate built on ROC-AUC would have reported an improvement just as the model became harder to act on,
+          so <b>the promotion gate uses PR-AUC</b>.</p>
+      </div>
+    </div>
+
+    <!-- 6 · Architecture & stack -->
+    <div class="ov-section">
+      <div class="ov-head"><span class="ov-num" style="--tone: var(--c-auto)">6</span>
+        <div><h2 class="ov-title">Architecture and tech stack</h2>
+        <p class="ov-sub">Every tool is free and open source, and each has one job.</p></div></div>
+      <div class="ov-arch">
+        <div style="--tone: var(--c-data); --tint: var(--c-data-soft)"><h3>Data</h3>
+          <span>PostgreSQL 16</span><span>SQLAlchemy</span><span>pandas</span><span>Data contract</span><span>SQLite (dev)</span></div>
+        <div style="--tone: var(--c-model); --tint: var(--c-model-soft)"><h3>Model</h3>
+          <span>scikit-learn</span><span>Gradient boosting</span><span>MLflow registry</span><span>PR-AUC gate</span><span>Fairness &amp; cost audit</span></div>
+        <div style="--tone: var(--c-serve); --tint: var(--c-serve-soft)"><h3>Serve</h3>
+          <span>FastAPI</span><span>SHAP</span><span>Redpanda (Kafka)</span><span>Dead-letter queue</span><span>This dashboard</span></div>
+        <div style="--tone: var(--c-watch); --tint: var(--c-watch-soft)"><h3>Watch</h3>
+          <span>Prometheus</span><span>Alertmanager</span><span>Grafana</span><span>PSI drift</span><span>Shadow scoring</span></div>
+        <div style="--tone: var(--c-auto); --tint: var(--c-auto-soft)"><h3>Automate</h3>
+          <span>Prefect</span><span>DVC</span><span>GitHub Actions</span><span>Docker Compose</span><span>Kubernetes manifests</span></div>
+      </div>
+    </div>
+
+    <!-- 7 · Honest limits -->
+    <div class="ov-section">
+      <div class="ov-head"><span class="ov-num" style="--tone: var(--medium)">7</span>
+        <div><h2 class="ov-title">Honest limits</h2>
+        <p class="ov-sub">What this system doesn't do well, stated plainly.</p></div></div>
+      <div class="ov-card ov-limits">
+        <ul class="ov-list">
+          <li><b>The model is modest.</b> <span id="ovLimitModel">It beats guessing but misses most churners</span>: the data has few strong signals.</li>
+          <li><b>The fairness audit fails.</b> <span id="ovLimitFair">It is weaker for one plan type.</span> Reported and alerted on, not hidden.</li>
+          <li><b>Costs are placeholders.</b> <span id="ovLimitCost">The cost audit prefers a stricter threshold</span> under assumed costs; real figures would decide.</li>
+          <li><b>Runs locally, not in the cloud.</b> A 15 GB warehouse fits no free tier; Kubernetes manifests are written but not deployed.</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- 8 · Explore -->
+    <div class="ov-section">
+      <div class="ov-head"><span class="ov-num" style="--tone: var(--c-serve)">8</span>
+        <div><h2 class="ov-title">Explore it yourself</h2>
+        <p class="ov-sub">Every part of the running system, one click away.</p></div></div>
+      <div class="ov-links">
+        <a href="#score" style="--tone: var(--c-serve)"><b>Score a subscriber</b><span>Change inputs, see the risk and the reasons</span></a>
+        <a href="#live" style="--tone: var(--c-data)"><b>Live traffic</b><span>What the model is seeing right now</span></a>
+        <a href="#model" style="--tone: var(--c-model)"><b>The model</b><span>Which version is serving, and how it was built</span></a>
+        <a href="#monitoring" style="--tone: var(--c-watch)"><b>Monitoring</b><span>Champion vs challenger, and a live drift test</span></a>
+        <a href="/docs" style="--tone: var(--c-results)"><b>API docs</b><span>Every endpoint, try it in the browser</span></a>
+        <a data-port="3000" href="#" style="--tone: var(--c-watch)"><b>Grafana</b><span>Dashboards and alerts over time</span></a>
+        <a data-port="5050" href="#" style="--tone: var(--c-model)"><b>MLflow</b><span>Every training run and the model registry</span></a>
+        <a data-port="9090" data-path="/alerts" href="#" style="--tone: var(--high)"><b>Alerts</b><span>Prometheus alert rules and what's firing</span></a>
+      </div>
+    </div>
+  </section>
+
   <!-- =========================== SCORE =========================== -->
-  <section class="view is-active" data-view="score">
+  <section class="view" data-view="score">
 
     <!-- Row 1: the verdict, full width. The result is the hero here, not the
          form - which is the opposite of how this page used to be arranged. -->
@@ -1203,10 +1727,10 @@
     ink.style.transform = `translateX(${active.offsetLeft}px)`;
   }
 
-  const VIEWS = ["score", "live", "model", "monitoring"];
+  const VIEWS = ["overview", "score", "live", "model", "monitoring"];
 
   function showView(name) {
-    if (!VIEWS.includes(name)) name = "score";
+    if (!VIEWS.includes(name)) name = "overview";
     // Deep-linkable: the tab lives in the hash, so a view can be shared,
     // reloaded, or opened directly rather than only reached by clicking.
     if (location.hash.slice(1) !== name) history.replaceState(null, "", "#" + name);
@@ -1236,6 +1760,7 @@
       refreshMetrics();
       liveTimer = setInterval(refreshMetrics, 5000);
     }
+    if (name === "overview") refreshOverview();
     if (name === "model") refreshModel();
     if (name === "monitoring") {
       refreshShadow();
@@ -1618,6 +2143,164 @@
       });
   }
 
+  /* ------------------------------ overview ----------------------------- */
+
+  // Big numbers are compact ("82.8M"); the exact figure goes in the title.
+  function compact(n) {
+    if (n >= 1e6) return (n / 1e6).toFixed(1) + "M";
+    if (n >= 1e4) return Math.round(n / 1e3) + "k";
+    return Number(n).toLocaleString();
+  }
+
+  // One decimal, always: these are the figures quoted in the talk (98.5%,
+  // 16.8%), and rounding them to 98% / 17% would contradict it.
+  const pct1 = (v) => (v * 100).toFixed(1) + "%";
+
+  function monthYear(iso) {
+    return new Date(iso + "T00:00:00").toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
+  }
+
+  function barRows(host, rows, tone) {
+    host.replaceChildren();
+    const peak = Math.max(...rows.map((r) => r.value), 1e-9);
+    rows.forEach((r) => {
+      const row = el("div", "ov-bar-row");
+      const name = el("div", "ov-bar-name", r.name);
+      if (r.note) name.appendChild(el("small", "", r.note));
+      const track = el("div", "ov-bar-track");
+      const fill = el("i", "");
+      fill.style.setProperty("--tone", tone);
+      track.appendChild(fill);
+      row.append(name, track, el("div", "ov-bar-value", r.label));
+      host.appendChild(row);
+      const width = (r.value / peak) * 100 + "%";
+      if (REDUCED) fill.style.width = width;
+      else requestAnimationFrame(() => requestAnimationFrame(() => { fill.style.width = width; }));
+    });
+  }
+
+  function setText(id, text, title) {
+    const node = $(id);
+    if (!node) return;
+    node.textContent = text;
+    if (title) node.title = title;
+  }
+
+  const TABLE_NOTES = {
+    subscribers: "one per person",
+    subscription_events: "signups, renewals, cancels",
+    payments: "one per payment",
+    sessions: "one per listening day",
+    support_tickets: "none in KKBox",
+  };
+
+  async function refreshOverview() {
+    let data, live;
+    try {
+      [data, live] = await Promise.all([
+        fetch("/overview").then((r) => r.json()),
+        fetch("/metrics").then((r) => r.json()),
+      ]);
+    } catch (err) {
+      return;
+    }
+
+    // Warehouse
+    const wh = data.warehouse || {};
+    if (wh.available) {
+      setText("ovRows", compact(wh.total_rows), wh.total_rows.toLocaleString() + " rows");
+      setText("ovRowsSub", `in ${wh.tables.length} tables · ${wh.backend === "postgresql" ? "PostgreSQL" : wh.backend}`);
+      setText("ovFlowRows", compact(wh.total_rows));
+      barRows($("ovTables"), wh.tables.map((t) => ({
+        name: t.name, note: TABLE_NOTES[t.name], value: t.rows, label: t.rows.toLocaleString(),
+      })), "var(--c-data)");
+    } else {
+      setText("ovRowsSub", "warehouse not connected");
+      $("ovTables").replaceChildren(el("p", "ov-muted",
+        "The warehouse isn't reachable from this API process, so its row counts can't be shown."));
+    }
+
+    // Model
+    const m = data.model || {};
+    if (m.available) {
+      const t = m.test, rate = t.positive_rate_actual;
+      const lift = t.pr_auc / rate;
+      setText("ovPrauc", t.pr_auc.toFixed(3));
+      setText("ovPraucSub", `${lift.toFixed(1)}× better than guessing (${rate.toFixed(3)})`);
+      setText("ovRate", pct1(rate));
+      setText("ovTrap", pct1(1 - rate));
+      setText("ovTrained", monthYear(m.trained_at.slice(0, 10)));
+      setText("ovThreshold", String(t.threshold));
+
+      const cut = (m.dataset || {}).cutoffs || {};
+      const fmt = (list) => (list || []).map(monthYear).join(" + ");
+      setText("ovTrain", fmt(cut.train));
+      setText("ovVal", fmt(cut.validation));
+      setText("ovTest", fmt(cut.test));
+      const ds = m.dataset || {};
+      if (ds.train_rows) setText("ovTrainRows", ds.train_rows.toLocaleString() + " subscriber-months");
+      if (ds.validation_rows) setText("ovValRows", ds.validation_rows.toLocaleString() + " subscribers");
+      if (ds.test_rows) setText("ovTestRows", ds.test_rows.toLocaleString() + " subscribers");
+
+      const scale = Math.max(t.pr_auc, rate) * 1.15;
+      const model = $("ovCmpModel"), random = $("ovCmpRandom");
+      const widths = [(t.pr_auc / scale) * 100 + "%", (rate / scale) * 100 + "%"];
+      if (REDUCED) { model.style.width = widths[0]; random.style.width = widths[1]; }
+      else requestAnimationFrame(() => requestAnimationFrame(() => {
+        model.style.width = widths[0]; random.style.width = widths[1];
+      }));
+      setText("ovCmpModelV", t.pr_auc.toFixed(3));
+      setText("ovCmpRandomV", rate.toFixed(3));
+      setText("ovRoc", t.roc_auc.toFixed(3));
+      setText("ovRecall", pct1(t.recall));
+      setText("ovPrecision", pct1(t.precision));
+      if (m.calibration_error !== null && m.calibration_error !== undefined) {
+        setText("ovEce", m.calibration_error.toFixed(3));
+      }
+
+      barRows($("ovFeatures"), (m.top_features || []).map((f) => ({
+        name: f.feature.replaceAll("_", " "), value: f.importance, label: (f.importance * 100).toFixed(1) + "%",
+      })), "var(--c-model)");
+
+      setText("ovLimitModel",
+        `It finds churners ${lift.toFixed(1)}× better than guessing but catches only ${pct1(t.recall)} of them`);
+      const fair = m.fairness || {};
+      if (fair.passes === false && fair.weakest_group) {
+        setText("ovLimitFair", `On the "${fair.weakest_group.group}" plan (${fair.weakest_group.n.toLocaleString()} people) it is close to random: ROC-AUC ${fair.weakest_group.roc_auc.toFixed(2)}.`);
+      }
+      if (m.cost_optimal_threshold) {
+        setText("ovLimitCost", `The cost audit prefers a threshold of ${m.cost_optimal_threshold} over the ${t.threshold} in use`);
+      }
+    } else {
+      setText("ovPraucSub", "no evaluation report found");
+    }
+
+    // Drift
+    const d = data.drift || {};
+    if (d.available) {
+      setText("ovDrift", d.verdict.charAt(0).toUpperCase() + d.verdict.slice(1));
+      setText("ovDriftSub", `${d.n_samples.toLocaleString()} subscribers as of ${monthYear(d.cutoff)}`);
+      setText("ovFlowDrift", d.verdict);
+    } else {
+      setText("ovDrift", "Not run");
+      setText("ovDriftSub", "no drift check has run yet");
+      setText("ovFlowDrift", "not run");
+    }
+
+    // Traffic
+    setText("ovServed", (live.served_total || 0).toLocaleString());
+    setText("ovServedSub", live.served_total
+      ? `${pct(live.flagged_rate || 0)} of them flagged as at risk`
+      : "score one on the next tab");
+  }
+
+  // Links to the other tools: same machine as this page, their own ports.
+  document.querySelectorAll("a[data-port]").forEach((a) => {
+    a.href = `${location.protocol}//${location.hostname}:${a.dataset.port}${a.dataset.path || "/"}`;
+    a.target = "_blank";
+    a.rel = "noopener";
+  });
+
   /* ------------------------------ scoring ------------------------------ */
 
   async function score(event) {
@@ -1793,8 +2476,12 @@
       ["Model", meta.model_name],
       ["Trained at", meta.trained_at || "unknown"],
       ["Decision threshold", meta.decision_threshold],
-      ["Served from", meta.served_from],
-      ["Registry version", meta.registry_version || "not registered"],
+      ["Loaded from", meta.served_from === "registry"
+        ? "the MLflow registry (@champion)"
+        : "the promoted model's file, mounted into the container"],
+      ["Registry version", meta.registry_version
+        ? meta.registry_version
+        : "not queried: this process loads the promoted file directly"],
     ];
     const kv = $("modelKv");
     kv.replaceChildren();
@@ -2116,7 +2803,7 @@
 
   if (!REDUCED) {
     [document.querySelector("header"), document.querySelector(".tabs"),
-     ...document.querySelectorAll('.view[data-view="score"] .panel')]
+     ...document.querySelectorAll('.view[data-view="overview"] .ov-hero, .view[data-view="overview"] .ov-section')]
       .filter(Boolean)
       .forEach((node, i) => { node.style.setProperty("--i", i); node.classList.add("enter"); });
   }
@@ -2124,7 +2811,8 @@
   refreshStatus();
   setInterval(refreshStatus, 15000);
 
-  if (location.hash.slice(1)) showView(location.hash.slice(1));
+  // Open on whatever the link names, or the Overview when it names nothing.
+  showView(location.hash.slice(1) || "overview");
 
   // Score immediately, so the first thing anyone sees is a populated result
   // rather than half a screen of empty state.
