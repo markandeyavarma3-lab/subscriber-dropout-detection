@@ -1,0 +1,138 @@
+<h1 id="ch-orchestration" data-toc="Orchestration and reproducibility" data-num="12"><span class="num">CHAPTER 12</span>Orchestration and reproducibility</h1>
+<p class="lede">Running the pipeline on a schedule, safely re-runnable, and making any result traceable back to the exact data, code and settings that produced it.</p>
+
+<h2>The retraining pipeline</h2>
+<p><code>src/orchestration/pipeline.py</code> holds the steps; <code>src/orchestration/flows.py</code> wraps them as <strong>Prefect</strong> tasks and flows.</p>
+<table>
+  <thead><tr><th>Step</th><th>What it does</th><th>Retries</th></tr></thead>
+  <tr><td>1 · Ingest</td><td>Bring new events into the warehouse (or leave a populated warehouse alone)</td><td class="num">2</td></tr>
+  <tr><td>2 · Assess drift</td><td>Compare recent data with the serving model's training distribution</td><td class="num">–</td></tr>
+  <tr><td>3 · Train and gate</td><td>Train a challenger, register it, promote only if it beats the champion</td><td class="num">1</td></tr>
+  <tr><td>4 · Report</td><td>Write <code>last_pipeline_run.json</code>, read by Prometheus and alerting</td><td class="num">–</td></tr>
+</table>
+
+<h3>Why drift is checked <em>before</em> training</h3>
+<p>Training writes a new reference profile from the latest data. If drift were checked <em>after</em> training, it would compare the latest data with a profile built from that same data, and report "stable" every single time. It would detect nothing, ever. Checked <em>before</em> training, it answers the useful question: <strong>has the world moved since the model that's serving now was fitted?</strong></p>
+
+<h3>The flows</h3>
+<table>
+  <thead><tr><th>Command</th><th>Flow</th></tr></thead>
+  <tr><td><code>python -m src.orchestration.flows run</code></td><td>The full pipeline once, now (<code>make pipeline</code>)</td></tr>
+  <tr><td><code>... run --drift</code></td><td>Same, after injecting a behavioural shift, to show the drift path end to end (<code>make pipeline-drift</code>)</td></tr>
+  <tr><td><code>... monitor --cutoff 2017-02-28</code></td><td>The drift step alone: check, report, never retrain (<code>make monitor</code>). Used on the real data, where retraining would replace the champion</td></tr>
+  <tr><td><code>... backfill</code></td><td>Train once per historical cutoff, oldest first</td></tr>
+  <tr><td><code>... serve --cron "0 3 * * *"</code></td><td>Serve the pipeline on a nightly schedule</td></tr>
+</table>
+<p>Prefect gives each step retries, structured logs and a run history. With no Prefect server configured, it starts a temporary local one automatically.</p>
+
+<h3>"Needs attention" is not failure</h3>
+<p>A run is flagged <code>needs_attention</code> when a challenger was rejected, drift is significant, or the fairness audit fails. None of these fails the pipeline. A rejected challenger means the gate worked; drift means the world moved. Failing the run would teach whoever is on call to ignore failures. Instead there's an <code>info</code> alert and a line in the report.</p>
+
+<h2>Idempotency</h2>
+<p>An operation is <strong>idempotent</strong> if running it twice gives the same result as running it once. For a nightly job this matters: when a run fails halfway and is re-run, it must not double every subscriber's history. The pipeline leaves a populated warehouse alone, and the loaders truncate before writing rather than appending. CI runs the pipeline twice and checks the second run changes nothing and <strong>rejects</strong> the identical model it trains.</p>
+
+<h2>Reproducibility: DVC and params.yaml</h2>
+<p><strong>DVC</strong> (Data Version Control) describes the pipeline as stages in <code>dvc.yaml</code>, each with its command, inputs, parameters and outputs:</p>
+<table>
+  <thead><tr><th>Stage</th><th>Depends on</th><th>Produces</th></tr></thead>
+  <tr><td><code>simulate</code></td><td>simulator code; <code>simulation</code> params</td><td><code>src/data/warehouse.db</code></td></tr>
+  <tr><td><code>train</code></td><td>the warehouse; feature, training, cost, calibration, fairness and profile code; features/split/model/threshold/costs/capacity/fairness params</td><td>model.joblib, metadata.json, reference_profile.json, metrics.json</td></tr>
+</table>
+<p><code>dvc repro</code> re-runs <strong>only the stages whose inputs changed</strong>, and <code>dvc.lock</code> records the exact hash of every input and output. <code>make metrics-diff</code> compares the current metrics with <code>main</code>. Every tunable number lives in <strong><code>params.yaml</code></strong> (windows, split, model hyperparameters, costs, drift thresholds, fairness rule, promotion margin), and any of them can be overridden with an <code>SDD_*</code> environment variable. Changing the model is a reviewable change to one file, not an edit buried in code.</p>
+<p>The model's own metadata records its training time, parameters, split sizes and <strong>library versions</strong>, and <code>constraints-model.txt</code> pins the serving image to those exact versions (Chapter 14).</p>
+
+<div class="callout say">
+  <div class="callout-title">Say this</div>
+  <p>"Prefect runs the pipeline as a flow (ingest, drift, train and gate, report) with retries and a nightly schedule. Drift is checked before training, because afterwards it would compare the data with itself. The pipeline is idempotent, and CI proves it by running it twice. DVC and params.yaml make every result reproducible: every setting is in one file, and only changed stages re-run."</p>
+</div>
+
+<!-- =================================================================== -->
+
+<h1 id="ch-cicd" data-toc="CI/CD: testing the system, not just the code" data-num="13"><span class="num">CHAPTER 13</span>CI/CD: testing the system, not just the code</h1>
+<p class="lede">Seven GitHub Actions jobs run on every push. Most CI proves the code compiles and the unit tests pass; this CI proves the system behaves.</p>
+
+<h2>The seven jobs</h2>
+<table>
+  <thead><tr><th>Job</th><th>What it proves</th></tr></thead>
+  <tr><td>1 · Lint and test</td><td>ruff finds no problems; all 434 tests pass; a model trains end to end; the decision-quality report is produced and honest</td></tr>
+  <tr><td>2 · Train via the warehouse (SQLite)</td><td>Simulate a warehouse, train on a temporal split, run the gate, serve the promoted model, smoke-test <code>/predict</code> and the Prometheus endpoint</td></tr>
+  <tr><td>3 · Train via the warehouse on Postgres</td><td>The same on a real Postgres service container, then all eight demo queries run against it</td></tr>
+  <tr><td>4 · The orchestrated pipeline</td><td>First run promotes; second run is idempotent and <strong>rejects an identical challenger</strong>; a distinct challenger shadow-scores; injected drift is <strong>detected</strong></td></tr>
+  <tr><td>5 · Streaming scorer</td><td>The consume–score–produce loop, including <strong>poison messages</strong> that must be dead-lettered</td></tr>
+  <tr><td>6 · Build Docker image</td><td>The image builds and serves: <code>/health</code>, the dashboard and <code>/predict</code> all answer</td></tr>
+  <tr><td>7 · Publish (CD)</td><td>On a push to <code>main</code>, once all six pass: build and push the image to the GitHub Container Registry</td></tr>
+</table>
+
+<h2>Continuous delivery</h2>
+<p>The publish job pushes <code>ghcr.io/markandeyavarma3-lab/subscriber-dropout-api</code> with two tags: <code>latest</code>, and the <strong>commit hash</strong>. The commit tag means any deployment can be traced back to exactly the code that built it, and rolled back by deploying the previous hash. An image that failed any test can never become <code>latest</code>. The image is public; it can be pulled without logging in. It isn't deployed to a cloud cluster automatically (see Chapter 16), so the honest description is <strong>continuous delivery of a tested image</strong>, not continuous deployment to production.</p>
+
+<h2>The seventeen days CI was red</h2>
+<p>Every push from 4 to 23 September failed CI, while every test passed on the development machine, and nobody noticed. The cause: a test asserted that every file a DVC stage depends on exists on disk. <code>train</code> depends on <code>warehouse.db</code>, which is git-ignored data. It exists on any machine that has built the warehouse, and never on a fresh checkout, which is exactly what CI is. Because the test job gates the others, the warehouse, pipeline, streaming and Docker jobs <strong>hadn't run at all</strong> in that time.</p>
+<p>It was found by running the suite on a <strong>fresh clone</strong> with CI's dependency versions, rather than in the working directory. The rule is now "exists in the repo, <em>or</em> is produced by a stage", which still catches the typos it was written for, and a new test proves that. Two lasting changes came out of it:</p>
+<ul>
+  <li><code>make demo-check</code> now checks the <strong>latest CI run on GitHub</strong> is green.</li>
+  <li>The lesson: a test that passes only on your machine is not a passing test.</li>
+</ul>
+
+<h2>The test suite</h2>
+<table>
+  <thead><tr><th>Area</th><th class="num">Tests</th><th>Covers</th></tr></thead>
+  <tr><td>Monitoring</td><td class="num">38</td><td>PSI, drift verdicts, profiles, rolling window</td></tr>
+  <tr><td>Evaluation</td><td class="num">38</td><td>Metrics, calibration, costs, fairness, capacity</td></tr>
+  <tr><td>Streaming</td><td class="num">37</td><td>Parsing, dead-lettering, commit ordering, producer</td></tr>
+  <tr><td>API</td><td class="num">37</td><td>Endpoints, validation, degradation, the dashboard's structure</td></tr>
+  <tr><td>Prometheus / alerting</td><td class="num">36</td><td>Metric names, alert rules, routing, dashboard queries scoped and non-overlapping, no credentials</td></tr>
+  <tr><td>External data</td><td class="num">28</td><td>KKBox mapping, contract, orphans, streaming large files</td></tr>
+  <tr><td>Point-in-time</td><td class="num">24</td><td><strong>Leakage</strong>: future events can't change features; same-day signups</td></tr>
+  <tr><td>Orchestration</td><td class="num">22</td><td>Pipeline steps, report, needs-attention logic</td></tr>
+  <tr><td>Training</td><td class="num">21</td><td>Training, threshold tuning, artifacts, CLI</td></tr>
+  <tr><td>Registry</td><td class="num">20</td><td>Logging, aliases, the gate's margin</td></tr>
+  <tr><td>Shadow, explain, features, DVC, Postgres copy</td><td class="num">67</td><td>Shadow never affects responses; SHAP additivity; feature building; DVC stage chain; bulk-copy slicing</td></tr>
+</table>
+<p>That's 368 test functions, 434 tests once parametrised cases are counted.</p>
+
+<div class="callout say">
+  <div class="callout-title">Say this</div>
+  <p>"Seven jobs on every push. Beyond unit tests, CI trains on SQLite and on Postgres, runs the pipeline twice to prove it's idempotent, checks an identical challenger is rejected, injects drift and checks it's caught, and sends poison messages to the stream scorer. On main it publishes the image, tagged with the commit. And honestly: CI was once red for 17 days without anyone noticing, so now the demo checklist checks it."</p>
+</div>
+
+<!-- =================================================================== -->
+
+<h1 id="ch-deployment" data-toc="Deployment: Docker, Compose and Kubernetes" data-num="14"><span class="num">CHAPTER 14</span>Deployment: Docker, Compose and Kubernetes</h1>
+<p class="lede">Eight services, one command, identical on every machine, and manifests for the step after that.</p>
+
+<h2>The Docker image</h2>
+<p>The <code>Dockerfile</code> is <strong>multi-stage</strong>. A builder stage installs dependencies and trains a model; a slim runtime stage copies only what's needed to serve. Smaller image, smaller attack surface. The service runs as a <strong>non-root user</strong> and has a built-in health check.</p>
+<p>The image trains its own model at build time on <em>synthetic</em> data, because the real model file is git-ignored and a build must work from a clean checkout. For the real stack, the promoted KKBox model is <strong>mounted over it, read-only</strong>, and the service is told to load it (<code>SDD_MODEL_SOURCE=local</code>). Before this was fixed, <code>docker compose up</code> silently served the synthetic model, so the dashboard and Grafana showed a different model from the one the registry promoted.</p>
+<h3>Pinning the model's libraries</h3>
+<p>A pickled scikit-learn model should be loaded by exactly the scikit-learn that trained it. <code>requirements.txt</code> gives version <em>ranges</em>, so each rebuild pulled whatever was newest; one rebuild quietly moved scikit-learn from 1.9.0 to 1.9.1. <code>constraints-model.txt</code> now pins scikit-learn, pandas and NumPy to the training versions, and the demo checklist compares the running container's versions with the model's metadata.</p>
+
+<h2>Docker Compose: the full stack</h2>
+<table>
+  <thead><tr><th>Service</th><th>Image</th><th class="num">Port</th><th>Role</th></tr></thead>
+  <tr><td>postgres</td><td>postgres:16-alpine</td><td class="num">5432</td><td>The event warehouse (and MLflow's own database)</td></tr>
+  <tr><td>subscriber-api</td><td>built from the Dockerfile</td><td class="num">8000</td><td>API and dashboard</td></tr>
+  <tr><td>stream-scorer</td><td>same image</td><td class="num">8001</td><td>Kafka consumer; metrics endpoint</td></tr>
+  <tr><td>redpanda</td><td>redpanda v24.2.7</td><td class="num">19092</td><td>Kafka-compatible broker</td></tr>
+  <tr><td>prometheus</td><td>prom/prometheus v2.54.1</td><td class="num">9090</td><td>Metrics and alert rules</td></tr>
+  <tr><td>alertmanager</td><td>prom/alertmanager v0.27.0</td><td class="num">9093</td><td>Alert routing</td></tr>
+  <tr><td>grafana</td><td>grafana 11.2.0</td><td class="num">3000</td><td>Dashboard (anonymous read-only viewing)</td></tr>
+  <tr><td>mlflow</td><td>mlflow v3.1.1</td><td class="num">5001</td><td>Tracking server for the containerised stack</td></tr>
+</table>
+<p>Images are pinned to exact versions, so the stack is the same next year. Data lives in named volumes, which survive restarts. For the demo, the MLflow UI is served from the real training history in <code>mlflow.db</code> on port <strong>5050</strong>; port 5000 is taken by macOS's AirPlay Receiver.</p>
+
+<h2>Kubernetes</h2>
+<p><code>deploy/kubernetes/</code> holds the step after Compose:</p>
+<ul>
+  <li><strong>Deployments</strong> for the API and the stream scorer, each with 2 replicas, CPU and memory requests and limits, and a non-root security context.</li>
+  <li><strong>Probes:</strong> liveness on <code>/health</code>, readiness on <code>/ready</code>, and a startup probe so a slow model load isn't mistaken for a crash.</li>
+  <li>A <strong>HorizontalPodAutoscaler</strong>: 2 to 10 API replicas, targeting 70% CPU.</li>
+  <li>A <strong>PodDisruptionBudget</strong>: at least one API pod stays up during node maintenance.</li>
+  <li>A <strong>ConfigMap</strong> for settings, so the same image runs everywhere and only configuration changes.</li>
+</ul>
+<p>These manifests are <strong>provided, not deployed</strong>: there's no free cluster large enough for the full stack. That's stated openly, and deploying to a managed cluster is listed as future work.</p>
+
+<div class="callout say">
+  <div class="callout-title">Say this</div>
+  <p>"Everything runs in Docker: eight services from one Compose file, images pinned to exact versions. The serving image runs as a non-root user, and the promoted model is mounted into it read-only, with its libraries pinned to the training versions. For the next step there are Kubernetes manifests with health probes, an autoscaler and a disruption budget; they're written but not deployed, because no free cluster fits the stack."</p>
+</div>

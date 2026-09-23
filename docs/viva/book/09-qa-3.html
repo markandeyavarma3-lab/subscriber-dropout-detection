@@ -1,0 +1,254 @@
+<!-- =========================== J ============================ -->
+<h1 id="qa-streaming" data-toc="J · Streaming"><span class="num">SECTION J</span>Streaming</h1>
+
+<div class="qa"><div class="qa-q">Why have streaming if you already have an API?<span class="tag core">core</span></div>
+<p>The API answers when asked. Subscriber events happen continuously, and the business wants a fresh risk score when something changes, not only when someone thinks to ask. A stream scorer reacts to events as they arrive and publishes scores for other systems to consume.</p></div>
+
+<div class="qa"><div class="qa-q">What is Kafka? What is Redpanda?<span class="tag core">core</span></div>
+<p>Kafka is a distributed log: producers append messages to <em>topics</em>, and consumers read them in order at their own pace, tracking their position with <em>offsets</em>. Redpanda is a Kafka-compatible broker: the same protocol, as a single binary without the JVM or ZooKeeper, which is light enough for a laptop and CI. The code uses a standard Kafka client and would run unchanged against Apache Kafka.</p></div>
+
+<div class="qa"><div class="qa-q">Walk me through the streaming loop.<span class="tag core">core</span></div>
+<p>Poll up to 200 messages from <code>subscriber-events</code>; validate each; score the valid ones in one batch with the same code as the API; write scores to <code>subscriber-scores</code>, keyed by subscriber; send invalid ones to <code>subscriber-scores-dlq</code> with a reason; wait for the broker to confirm the writes; only then commit the input offsets.</p></div>
+
+<div class="qa"><div class="qa-q">What delivery guarantee do you provide?<span class="tag core">core</span></div>
+<p><strong>At-least-once.</strong> Offsets are committed only after the scores are durably written (<code>acks=all</code>). If the scorer crashes after writing but before committing, it re-reads and re-scores those messages: a duplicate, never a loss. Auto-commit is off, because it could acknowledge a message whose score was never written.</p></div>
+
+<div class="qa"><div class="qa-q">Why not exactly-once?<span class="tag tricky">tricky</span></div>
+<p>Exactly-once needs Kafka transactions and more complexity. Here duplicates are harmless: scoring the same subscriber twice gives the same score, so the operation is effectively idempotent. At-least-once plus idempotent processing gives the practical effect of exactly-once, far more simply.</p></div>
+
+<div class="qa"><div class="qa-q">What is a dead-letter queue, and why do you need one?<span class="tag core">core</span></div>
+<p>A separate topic for messages that can't be processed. Without one, a malformed "poison" message crashes the consumer; on restart it reads the same message and crashes again, forever. With it, the bad message is set aside with its reason and original payload, the batch continues, and someone can inspect it later. CI sends poison messages to prove this.</p></div>
+
+<div class="qa"><div class="qa-q">If the model is unavailable, do messages go to the dead-letter queue?<span class="tag tricky">tricky</span></div>
+<p>No, deliberately. That would throw away perfectly good data because of a temporary problem. Instead the batch fails and offsets aren't committed, so the messages are retried once the model is back. The DLQ is only for messages that are themselves bad.</p></div>
+
+<div class="qa"><div class="qa-q">Why key the output by subscriber?</div>
+<p>Kafka keeps order only within a partition, and messages with the same key go to the same partition. Keying by subscriber keeps each person's scores in order, so a consumer never sees an older score arrive after a newer one.</p></div>
+
+<div class="qa"><div class="qa-q">How would you scale the stream scorer?</div>
+<p>Run more instances in the same consumer group: Kafka splits the topic's partitions between them. The Kubernetes manifest runs 2 replicas. The limit is the number of partitions, since each is read by one consumer in the group.</p></div>
+
+<div class="qa"><div class="qa-q">How do you monitor the stream scorer?</div>
+<p>It exposes its own Prometheus endpoint on port 8001, scraped as a separate job, so a dead consumer isn't hidden behind a healthy API. The StreamScorerDown alert fires if it stops answering, and throughput is graphed separately from the API's.</p></div>
+
+<!-- =========================== K ============================ -->
+<h1 id="qa-monitoring" data-toc="K · Monitoring, drift and alerting"><span class="num">SECTION K</span>Monitoring, drift and alerting</h1>
+
+<div class="qa"><div class="qa-q">Why do ML models need special monitoring?<span class="tag core">core</span></div>
+<p>Ordinary software fails loudly: errors, crashes. A model fails <em>quietly</em>: it keeps returning confident predictions while the world changes, and nothing errors. Monitoring the inputs, the outputs and, eventually, outcomes is how that silent decay becomes visible.</p></div>
+
+<div class="qa"><div class="qa-q">What is data drift? Concept drift?<span class="tag core">core</span></div>
+<p><strong>Data drift</strong> (covariate shift): the distribution of the inputs changes, for example people listen less. <strong>Concept drift</strong>: the relationship between inputs and outcome changes, for example the same behaviour now means something different because a competitor appeared. Data drift is detectable immediately from inputs alone; concept drift needs outcomes (labels), which arrive later.</p></div>
+
+<div class="qa"><div class="qa-q">Which does your system detect?<span class="tag tricky">tricky</span></div>
+<p>Data drift, per feature, plus drift in the model's output distribution, using PSI. Concept drift needs true labels, which only arrive 30 days later. The scheduled pipeline covers it indirectly: each retrain is evaluated on fresh labelled data and the gate compares it with the champion. Live accuracy monitoring from delayed labels would be the next step.</p></div>
+
+<div class="qa"><div class="qa-q">Explain PSI.<span class="tag core">core</span></div>
+<p>The Population Stability Index compares two distributions of one feature. Split the training data into 10 quantile bins; put live data into the same bins; for each bin compare the live share <em>a</em> with the training share <em>e</em>; sum (a − e) × ln(a / e). Identical distributions give 0. Below 0.1 is stable, 0.1–0.25 moderate, above 0.25 significant.</p></div>
+
+<div class="qa"><div class="qa-q">Why PSI and not a statistical test like Kolmogorov–Smirnov?<span class="tag tricky">tricky</span></div>
+<p>With large samples, tests like KS flag tiny, meaningless differences as "significant", because the p-value shrinks with sample size. PSI measures the <em>size</em> of the shift on a stable scale, with industry-standard thresholds, which is what matters for deciding whether to retrain. It's also easy to compute from stored bin proportions.</p></div>
+
+<div class="qa"><div class="qa-q">What did drift detection find on real data?<span class="tag core">core</span></div>
+<p>Run on February 2017, the latest real month, read from Postgres, against the training months: 7,614 subscribers, verdict <strong>stable</strong>, every feature's PSI below 0.06. KKBox's population didn't shift in that period. That's a real result, not a failure to detect: the dashboard's drift test proves the detector fires when something changes.</p></div>
+
+<div class="qa"><div class="qa-q">How do you know the drift detector works?<span class="tag core">core</span></div>
+<p>By testing it on a change I control. The dashboard creates 400 subscribers, then a copy with sessions cut to near zero and last activity pushed back 45 days. The detector ranks exactly those two features at the top, with the other seven under 0.5. CI does the same with injected drift, which must be detected.</p></div>
+
+<div class="qa"><div class="qa-q">What is the reference profile?</div>
+<p>A snapshot of the training distribution, saved when the model is trained: bin edges and proportions for each feature and for the predictions. Drift is always measured against the profile of the model that's currently serving, not against whatever data is newest.</p></div>
+
+<div class="qa"><div class="qa-q">Why Prometheus?<span class="tag core">core</span></div>
+<p>It's the standard open-source metrics system: a time-series database, a query language (PromQL), and alert rules evaluated alongside the data. It <em>pulls</em> metrics from services every 15 seconds, so a service that stops answering is itself a signal.</p></div>
+
+<div class="qa"><div class="qa-q">Pull vs push monitoring?</div>
+<p>In pull, the monitor scrapes each service; the monitor controls timing, and a silent service is immediately visible. In push, services send metrics; that suits short-lived jobs that may finish before a scrape. Prometheus is pull-based; the batch pipeline writes a report file that the API exposes, rather than pushing.</p></div>
+
+<div class="qa"><div class="qa-q">Counter, gauge, histogram: what's the difference?<span class="tag core">core</span></div>
+<p>A <strong>counter</strong> only goes up (predictions served); you graph its rate. A <strong>gauge</strong> goes up and down (model loaded, flagged rate). A <strong>histogram</strong> counts observations into buckets (prediction probabilities), so percentiles like p90 can be computed.</p></div>
+
+<div class="qa"><div class="qa-q">How did you decide what to alert on?<span class="tag core">core</span></div>
+<p>By asking whether a human would act on it. "Drift is significant" is actionable: someone decides whether to retrain. "PSI moved from 0.04 to 0.06" isn't. Paging people for trivia teaches them to ignore alerts. A rejected challenger is the gate working, so it's informational, never a page.</p></div>
+
+<div class="qa"><div class="qa-q">What does Alertmanager do?</div>
+<p>It receives firing alerts from Prometheus, groups related ones into one notification, routes them by severity (critical to on-call immediately, warning for review, info recorded), and repeats them at sensible intervals. It also <strong>inhibits</strong>: if the API is down, the warnings that are merely symptoms of that are suppressed.</p></div>
+
+<div class="qa"><div class="qa-q">What is alert inhibition, with an example?</div>
+<p>Suppressing an alert that another alert already explains. If ApiDown is firing, a FlaggedRateSpike warning for the same component is noise: the real problem is the outage. Inhibition shows only the cause, not every symptom.</p></div>
+
+<div class="qa"><div class="qa-q">Is any alert firing right now?<span class="tag tricky">tricky</span></div>
+<p>Yes: FairnessDisparity, and it's correct. The model's fairness audit genuinely fails on the standard plan. Earlier, two false alerts (PipelineStale and ModelNotLoaded) were firing because the stream scorer exported default values for the API's metrics. I found that by looking at Grafana, and fixed it by scoping every API-state query to the API's job, with a test.</p></div>
+
+<div class="qa"><div class="qa-q">What does the Grafana dashboard show?</div>
+<p>Six sections: whether the model is up and what it's serving; prediction traffic and score distribution; drift and the retraining pipeline; decision quality (fairness, calibration, savings); shadow scoring; and outreach capacity. It's provisioned from a JSON file, so it's version-controlled like code.</p></div>
+
+<div class="qa"><div class="qa-q">Why does Grafana show "NOT RUN" for last promotion?</div>
+<p>Because the most recent pipeline run was the monitoring-only flow, which checks drift and trains nothing. It neither promoted nor rejected anything. Earlier the panel said "REJECTED", because a gauge's default value 0 means rejected. That was a false claim, so those gauges now start as "no value".</p></div>
+
+<!-- =========================== L ============================ -->
+<h1 id="qa-orchestration" data-toc="L · Orchestration and reproducibility"><span class="num">SECTION L</span>Orchestration and reproducibility</h1>
+
+<div class="qa"><div class="qa-q">What does Prefect do?<span class="tag core">core</span></div>
+<p>It runs the pipeline (ingest, drift check, train and gate, report) as a flow of tasks, with retries, structured logs and a run history, and it can serve the flow on a schedule (nightly at 03:00 by default). There's also a monitoring-only flow and a backfill flow.</p></div>
+
+<div class="qa"><div class="qa-q">Why Prefect rather than cron or Airflow?</div>
+<p>Cron runs a command but gives no retries, dependencies or history. Airflow is powerful but heavy: a scheduler, a database and a webserver to operate. Prefect turns ordinary Python functions into tasks with a decorator and runs locally with no infrastructure, which suits a project this size. The steps are plain functions, so moving to Airflow later wouldn't mean rewriting them.</p></div>
+
+<div class="qa"><div class="qa-q">Why is drift checked before retraining?<span class="tag core">core</span></div>
+<p>Training writes a new reference profile from the latest data. Checking drift afterwards would compare the data with a profile built from itself, so it would always say "stable" and never detect anything. Checked before, it asks whether the world has moved since the <em>serving</em> model was fitted.</p></div>
+
+<div class="qa"><div class="qa-q">What does idempotent mean, and why does it matter?<span class="tag core">core</span></div>
+<p>Running something twice gives the same result as running it once. If the nightly job fails halfway and is re-run, it mustn't double every subscriber's history or promote twice. CI runs the pipeline twice and checks the second run changes nothing.</p></div>
+
+<div class="qa"><div class="qa-q">What is DVC, and what do you use it for?<span class="tag core">core</span></div>
+<p>Data Version Control. <code>dvc.yaml</code> declares pipeline stages (simulate, train) with their commands, input files, parameters and outputs. <code>dvc repro</code> re-runs only stages whose inputs changed, and <code>dvc.lock</code> records the exact hash of every input and output. Any result can be traced to exact data, code and parameters.</p></div>
+
+<div class="qa"><div class="qa-q">How would someone reproduce your model?<span class="tag core">core</span></div>
+<p>Check out the commit, load the same data, and run the training with the same <code>params.yaml</code>. The seed is fixed and the split is by date, so the result is deterministic. The model's metadata records its parameters, split sizes, training time and library versions, and <code>constraints-model.txt</code> pins those libraries.</p></div>
+
+<div class="qa"><div class="qa-q">Why keep settings in params.yaml?</div>
+<p>So every tunable number (windows, split, hyperparameters, costs, drift and fairness thresholds, the promotion margin) lives in one reviewable file rather than scattered through code. Changing the model is a one-line, versioned change. Any value can also be overridden with an <code>SDD_*</code> environment variable.</p></div>
+
+<div class="qa"><div class="qa-q">What does "needs attention" mean in a pipeline run?</div>
+<p>A human should look: a challenger was rejected, drift was significant, or fairness failed. None of these fails the pipeline: a rejected challenger means the gate worked, and drift means the world moved. Failing the run would train people to ignore failures. So it's an info alert and a note in the report.</p></div>
+
+<!-- =========================== M ============================ -->
+<h1 id="qa-cicd" data-toc="M · CI/CD and testing"><span class="num">SECTION M</span>CI/CD and testing</h1>
+
+<div class="qa"><div class="qa-q">What is CI/CD?<span class="tag core">core</span></div>
+<p><strong>Continuous integration:</strong> every change is automatically built and tested, so problems surface immediately. <strong>Continuous delivery:</strong> every change that passes is packaged into a releasable artifact. <strong>Continuous deployment:</strong> that artifact is also released to production automatically.</p></div>
+
+<div class="qa"><div class="qa-q">What does your CI do?<span class="tag core">core</span></div>
+<p>Seven jobs on every push: lint and 434 tests; train and gate on SQLite; train and gate on Postgres plus the demo queries; the full pipeline (idempotent, identical challenger rejected, drift detected); the streaming loop with poison messages; building and smoke-testing the Docker image; and, on <code>main</code>, publishing the image to the GitHub Container Registry.</p></div>
+
+<div class="qa"><div class="qa-q">Do you have CD?<span class="tag tricky">tricky</span></div>
+<p>Continuous <em>delivery</em>, yes: every merge to <code>main</code> that passes all six test jobs publishes the image, tagged with the commit hash. Continuous <em>deployment</em>, no: nothing automatically releases it to a production cluster, because there's no free cluster that fits the stack. I'd describe it exactly that way.</p></div>
+
+<div class="qa"><div class="qa-q">Why tag the image with the commit hash?</div>
+<p>So any running deployment can be traced to exactly the code that built it, and rolled back by deploying the previous hash. <code>latest</code> alone says nothing about what's inside.</p></div>
+
+<div class="qa"><div class="qa-q">Tell me about CI being broken for 17 days.<span class="tag core">core</span><span class="tag tricky">tricky</span></div>
+<p>A test required that every file a DVC stage depends on exists on disk. One dependency, the warehouse database, is git-ignored and produced by a pipeline stage: present on my machine, absent on every fresh checkout, which is what CI is. So CI failed on every push while local tests passed, and because that job gates the others, four jobs didn't run at all. I found it by running the suite on a fresh clone. The rule is now "in the repo or produced by a stage", and the demo checklist checks CI is green.</p></div>
+
+<div class="qa"><div class="qa-q">How many tests are there, and what do they cover?</div>
+<p>434, across 15 files: monitoring, evaluation, streaming, the API, Prometheus and alerting config, the KKBox loader, point-in-time features, orchestration, training, the registry, shadow scoring, explanations, features, DVC and the Postgres copy.</p></div>
+
+<div class="qa"><div class="qa-q">Which test is most important?<span class="tag core">core</span></div>
+<p>The leakage test: adding events after the cutoff must not change any feature. If it failed, every metric the project reports would be meaningless.</p></div>
+
+<div class="qa"><div class="qa-q">What kinds of tests do you have?</div>
+<p>Unit tests (PSI maths, cost formulas); integration tests (training end to end on a small warehouse, API requests); property tests (SHAP contributions add up for every row); configuration tests (every alert references a real metric, no credentials, no overlapping dashboard panels); and system tests in CI (idempotency, the gate, drift, poison messages).</p></div>
+
+<div class="qa"><div class="qa-q">How do you test something that needs Postgres or Kafka?</div>
+<p>In CI, Postgres runs as a GitHub Actions service container, and the full train-and-gate run executes against it. For Kafka, the stream logic is tested against an in-memory broker with the same interface, so the loop, dead-lettering and commit ordering are tested without a real broker.</p></div>
+
+<div class="qa"><div class="qa-q">What is linting?</div>
+<p>Automatic checking of code for errors and style problems without running it. The project uses ruff; CI fails on any finding.</p></div>
+
+<!-- =========================== N ============================ -->
+<h1 id="qa-deploy" data-toc="N · Docker, Compose and Kubernetes"><span class="num">SECTION N</span>Docker, Compose and Kubernetes</h1>
+
+<div class="qa"><div class="qa-q">What is Docker, and why use it?<span class="tag core">core</span></div>
+<p>Docker packages an application with everything it needs (runtime, libraries, configuration) into an image that runs identically on any machine as a container. It removes "works on my machine" problems and lets eight services start with one command.</p></div>
+
+<div class="qa"><div class="qa-q">Container vs virtual machine?</div>
+<p>A VM emulates a whole computer with its own operating system: heavy, slow to start. A container shares the host's kernel and isolates only the application's processes and files: light, starting in seconds. Many containers fit where a few VMs would.</p></div>
+
+<div class="qa"><div class="qa-q">What is Docker Compose?<span class="tag core">core</span></div>
+<p>A tool that defines a multi-container application in one file (services, images, ports, volumes, environment, dependencies) and starts it all with one command. This project's <code>docker-compose.yml</code> defines 8 services.</p></div>
+
+<div class="qa"><div class="qa-q">What is a Docker volume, and why use one for Postgres?</div>
+<p>Storage managed by Docker that lives outside any container. Containers are disposable; if the database's files were inside the container, recreating it would delete the data. The 82.8 million rows live in a named volume, so they survive restarts and upgrades.</p></div>
+
+<div class="qa"><div class="qa-q">What's special about your Dockerfile?</div>
+<p>It's multi-stage: a builder stage installs dependencies and trains, and a slim runtime stage copies only what's needed, so the image is smaller with less attack surface. The service runs as a non-root user, has a health check, and installs the model's libraries pinned to the training versions.</p></div>
+
+<div class="qa"><div class="qa-q">Why mount the model into the container instead of building it in?<span class="tag tricky">tricky</span></div>
+<p>The real model file is git-ignored, and the image must build from a clean checkout, so the image trains a synthetic stand-in. Mounting the registry-promoted artifact read-only means the container serves exactly the champion. Before that fix, the stack silently served the synthetic model. The demo checklist now verifies the served model's training date.</p></div>
+
+<div class="qa"><div class="qa-q">Why pin library versions for the model?</div>
+<p>A pickled scikit-learn model should be loaded by the same version that trained it; a different version can load it without complaint and score differently. One rebuild quietly moved scikit-learn from 1.9.0 to 1.9.1. Now <code>constraints-model.txt</code> pins them, and the checklist compares the container's versions with the model's metadata.</p></div>
+
+<div class="qa"><div class="qa-q">What is Kubernetes, and how does your project use it?<span class="tag core">core</span></div>
+<p>A system for running containers across a cluster of machines: it keeps the requested number of copies running, restarts failures, scales, and rolls out updates. The project has manifests for the API and stream scorer: Deployments with 2 replicas, resource limits, health probes, an autoscaler (2–10 replicas at 70% CPU), a PodDisruptionBudget and a ConfigMap. They're written but not deployed, since no free cluster fits the stack.</p></div>
+
+<div class="qa"><div class="qa-q">What are liveness, readiness and startup probes?</div>
+<p><strong>Liveness</strong>: if it fails, Kubernetes restarts the container. <strong>Readiness</strong>: if it fails, traffic stops being sent to it (without a restart). <strong>Startup</strong>: gives a slow-starting container time, so a long model load isn't mistaken for a crash. Here they use <code>/health</code>, <code>/ready</code> and <code>/health</code> respectively.</p></div>
+
+<div class="qa"><div class="qa-q">What is a HorizontalPodAutoscaler? A PodDisruptionBudget?</div>
+<p>An HPA adds or removes replicas to keep a metric (here CPU at 70%) near its target, between a minimum and maximum (2 and 10). A PDB limits voluntary disruptions, such as node maintenance, so at least a set number of pods (here 1) stays running.</p></div>
+
+<div class="qa"><div class="qa-q">Why isn't it deployed to the cloud?<span class="tag tricky">tricky</span></div>
+<p>Cost and size. The full stack (a 15 GB warehouse, MLflow, Kafka, Prometheus, Grafana) doesn't fit any free tier, and the project was built on free resources only. It runs in Docker locally, the image is published on every merge, and the Kubernetes manifests are ready. Deploying to a managed cluster is the stated next step.</p></div>
+
+<!-- =========================== O ============================ -->
+<h1 id="qa-theory" data-toc="O · General ML and MLOps theory"><span class="num">SECTION O</span>General ML and MLOps theory</h1>
+
+<div class="qa"><div class="qa-q">Supervised vs unsupervised learning?<span class="tag core">core</span></div>
+<p>Supervised learning trains on examples with known answers (labels) to predict answers for new cases; churn prediction is supervised classification. Unsupervised learning finds structure without labels, such as clustering subscribers into segments.</p></div>
+
+<div class="qa"><div class="qa-q">Classification vs regression?</div>
+<p>Classification predicts a category (churn: yes or no); regression predicts a number. This model is a classifier that outputs a probability, which a threshold turns into a decision.</p></div>
+
+<div class="qa"><div class="qa-q">What is the bias–variance trade-off?<span class="tag core">core</span></div>
+<p>Bias is error from a model too simple to capture the pattern (underfitting). Variance is error from a model so flexible it fits noise (overfitting). Reducing one tends to increase the other. Boosting reduces bias with many shallow trees; its learning rate, depth and subsampling keep variance in check.</p></div>
+
+<div class="qa"><div class="qa-q">What is regularisation?</div>
+<p>Anything that discourages a model from fitting noise. In gradient boosting: a small learning rate, shallow trees, a minimum number of samples per leaf, and subsampling, all used here.</p></div>
+
+<div class="qa"><div class="qa-q">How does a decision tree decide where to split?</div>
+<p>It tries candidate splits on each feature and picks the one that most reduces impurity (or, in gradient boosting, most reduces the loss) in the resulting groups. It repeats on each group until a stopping rule applies, such as maximum depth or minimum leaf size.</p></div>
+
+<div class="qa"><div class="qa-q">What is one-hot encoding?</div>
+<p>Turning a category into separate yes/no columns, one per value. Plan type becomes <code>plan_type_basic</code>, <code>plan_type_standard</code> and <code>plan_type_premium</code>. It stops a model treating categories as if they had an order.</p></div>
+
+<div class="qa"><div class="qa-q">What is the logistic (sigmoid) function?</div>
+<p>It maps any number to a probability between 0 and 1: 1 ÷ (1 + e<sup>−x</sup>). Gradient boosting for classification adds up tree outputs as log-odds, then applies it to get the probability.</p></div>
+
+<div class="qa"><div class="qa-q">What is model decay?<span class="tag core">core</span></div>
+<p>A deployed model getting worse over time because the world it learned from changes: data drift or concept drift. It's the reason for monitoring and scheduled retraining.</p></div>
+
+<div class="qa"><div class="qa-q">What is a feature store, and would you need one?</div>
+<p>A system that computes and stores features once and serves them consistently to both training (history) and serving (latest values), preventing training–serving skew. This project gets the same guarantee more simply: one saved pipeline, and point-in-time SQL over the warehouse. At larger scale, with many models sharing features, a feature store would be worth it.</p></div>
+
+<div class="qa"><div class="qa-q">What are the MLOps maturity levels?</div>
+<p>A common framing (from Google): level 0 is manual; a data scientist trains and hands over a model. Level 1 automates the training pipeline, with continuous training and monitoring. Level 2 adds CI/CD for the pipeline itself. This project has automated, gated training, monitoring and CI that tests the pipeline and publishes the service. It's around level 1, reaching toward 2, without automatic production deployment.</p></div>
+
+<div class="qa"><div class="qa-q">Batch vs online (real-time) inference?</div>
+<p>Batch scores many records on a schedule (a nightly list); online scores one request on demand with low latency. This system does both: batch through <code>/predict/batch</code> and the pipeline, online through <code>/predict</code>, plus streaming, which is continuous scoring as events arrive.</p></div>
+
+<div class="qa"><div class="qa-q">What is data versioning, and why does it matter?</div>
+<p>Tracking exactly which data a model was trained on, like Git tracks code. Without it, you can't reproduce a model, explain why it changed, or roll back to the data behind a good version. DVC does this here.</p></div>
+
+<div class="qa"><div class="qa-q">What is a champion–challenger setup?</div>
+<p>The current production model (champion) keeps serving while a candidate (challenger) is evaluated against it, on held-out data and in shadow on live traffic. The challenger replaces it only on evidence. It's exactly what the MLflow aliases and the gate implement.</p></div>
+
+<div class="qa"><div class="qa-q">Correlation vs causation, in your project?<span class="tag core">core</span></div>
+<p>The model learns correlations. Auto-renew being associated with churn doesn't mean auto-renew <em>causes</em> churn; it goes with cheap short plans. Acting on a model's features as if they were causes needs an experiment, such as an A/B test of an intervention.</p></div>
+
+<!-- =========================== P ============================ -->
+<h1 id="qa-honesty" data-toc="P · Limitations, ethics and hard questions"><span class="num">SECTION P</span>Limitations, ethics and hard questions</h1>
+
+<div class="qa"><div class="qa-q">What are the biggest weaknesses of your project?<span class="tag core">core</span></div>
+<p>The model is modest (PR-AUC 0.073, recall 16.8%) because the data lacks strong signals. The fairness audit fails on the standard plan. The cost figures are placeholders. The churn label is stricter than Kaggle's. And it isn't deployed to a public cloud: continuous delivery, not deployment.</p></div>
+
+<div class="qa"><div class="qa-q">Would you deploy this model to production?<span class="tag tricky">tricky</span></div>
+<p>The system, yes; this model, only with care. It's far better than random and well calibrated, so it can usefully rank who to look at first. But it misses most churners, and the fairness failure should be understood before it drives decisions about the standard plan. I'd use it to prioritise human attention, not to act automatically.</p></div>
+
+<div class="qa"><div class="qa-q">Are there ethical concerns with churn prediction?<span class="tag core">core</span></div>
+<p>Yes. It's behavioural data about people, so privacy and data protection apply. Offers could be allocated unfairly across groups, which is why there's a fairness audit. And the model could be misused, for example to make cancelling harder for people flagged as at risk. It should be used to improve retention offers, never to obstruct leaving.</p></div>
+
+<div class="qa"><div class="qa-q">How did you verify your results are real?<span class="tag core">core</span></div>
+<p>The leakage test; a time-based split; cross-checking the feature pipeline on two databases row for row; checking the running system's served model and preset scores with a 19-point checklist; screenshots of every screen; and running the test suite on a fresh clone, as CI does.</p></div>
+
+<div class="qa"><div class="qa-q">What would you do differently if you started again?</div>
+<p>Test against Postgres and a fresh checkout from day one. SQLite and my own working directory hid several bugs. And look at the real outputs (dashboards, containers, CI) as a habit, not only when something seems off.</p></div>
+
+<div class="qa"><div class="qa-q">How did you build this? Did you use AI tools?<span class="tag core">core</span><span class="tag tricky">tricky</span></div>
+<p>Answer truthfully. Check your college's policy on AI assistance beforehand. If you used an AI coding assistant, say so plainly and explain what <em>you</em> did: chose the problem and data, made or approved the design decisions, ran and verified everything on your own machine, and understood the system well enough to answer every question in this book. Being open about the tools while clearly understanding the system is far stronger than a claim that falls apart under one follow-up.</p></div>
+
+<div class="qa"><div class="qa-q">Which part are you most proud of?</div>
+<p>A good answer names one thing and why. For example: the point-in-time warehouse, because it's what makes every metric trustworthy. Or the PR-AUC gate, because the real data proved the choice right. Or finding the false alerts, because it showed that a green test suite isn't the same as a correct system.</p></div>
+
+<div class="qa"><div class="qa-q">Can you show me it working right now?<span class="tag core">core</span></div>
+<p>Yes. <code>make demo</code> starts all eight services and <code>make demo-check</code> verifies 19 things. Then: the dashboard at port 8000, the warehouse in TablePlus, MLflow at 5050, Grafana at 3000, the alerts at 9090, and the green CI runs on GitHub. If anything fails live, the screenshots in <code>docs/viva/screenshots/</code> are the fallback.</p></div>

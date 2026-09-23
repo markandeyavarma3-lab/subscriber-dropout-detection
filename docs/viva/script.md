@@ -31,9 +31,7 @@ own way, but keep the order, because each part sets up the next.
 7. With the 2-tab limit, keep one tab showing a table and one SQL tab. Reuse the SQL tab: select
    all (⌘A), paste the next query, run.
 
-> **If you see tables called `experiments`, `runs`, `metrics` …** in the sidebar: they belong
-> to MLflow, not to the warehouse. They're empty leftovers from an earlier setup. If asked:
-> "MLflow's tracking tables; MLflow now has its own database, and these are empty."
+The sidebar shows exactly six tables: the five warehouse tables plus `warehouse_summary`.
 
 ---
 

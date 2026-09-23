@@ -1,0 +1,181 @@
+<section class="part-title">
+  <div class="kicker">PART II</div>
+  <h1 id="part-2" data-part="Part II · Viva question bank">Viva question bank</h1>
+  <p>Questions an examiner is likely to ask, grouped by topic, with short answers. <span class="tag core">core</span> marks the most likely; <span class="tag tricky">tricky</span> marks the ones that probe a weakness or the edge of your understanding.</p>
+</section>
+
+<!-- =========================== A ============================ -->
+<h1 id="qa-project" data-toc="A · The project and its purpose"><span class="num">SECTION A</span>The project and its purpose</h1>
+
+<div class="qa"><div class="qa-q">Explain your project in one minute.<span class="tag core">core</span></div>
+<p>It predicts which subscribers of a music-streaming service will cancel in the next 30 days, using real KKBox data: 31 GB, 6.8 million subscribers. The model is the small part. The project is an MLOps system around it: a Postgres event warehouse that can't leak the future, a registry where a model only goes live by beating the current one on PR-AUC, an API and a Kafka stream scorer that explain every prediction, drift monitoring and alerting, a scheduled retraining pipeline, and CI/CD that tests the whole system on every push.</p></div>
+
+<div class="qa"><div class="qa-q">Why did you choose churn prediction?<span class="tag core">core</span></div>
+<p>It's a real business problem with a clear decision attached (who gets a retention offer), so it exercises everything MLOps is meant to handle: a rare event, costs that differ by type of mistake, a model that goes stale as behaviour changes, and a need to explain decisions to the people acting on them. There's also a public, realistic dataset for it.</p></div>
+
+<div class="qa"><div class="qa-q">What is MLOps, and how is it different from DevOps?<span class="tag core">core</span></div>
+<p>MLOps applies DevOps practices (automation, testing, monitoring, reproducibility) to machine-learning systems. The difference is that an ML system depends on <strong>data</strong> and a <strong>trained model</strong> as well as code. So on top of versioning and testing code, MLOps has to version data and models, validate data, gate which model goes live, and monitor for the model quietly getting worse as the data changes. That last one is a failure mode ordinary software doesn't have.</p></div>
+
+<div class="qa"><div class="qa-q">What are the main components of your system?<span class="tag core">core</span></div>
+<p>Four stages plus automation. <strong>Data:</strong> KKBox ingestion and a Postgres event warehouse. <strong>Model:</strong> point-in-time features, gradient boosting, a decision-quality audit, and an MLflow registry with a promotion gate. <strong>Serving:</strong> a FastAPI service with SHAP explanations and a dashboard, plus a Kafka stream scorer. <strong>Monitoring:</strong> Prometheus, Alertmanager, Grafana and PSI drift detection. <strong>Automation:</strong> Prefect for the pipeline, DVC for reproducibility, GitHub Actions for CI/CD.</p></div>
+
+<div class="qa"><div class="qa-q">Who would use this system, and how?</div>
+<p>A retention team. Each day they'd get the subscribers flagged as at risk, with the reasons, and decide who gets an offer. Engineers would use the monitoring to know whether the model can still be trusted, and the pipeline would retrain it on a schedule.</p></div>
+
+<div class="qa"><div class="qa-q">What makes this more than a Jupyter-notebook project?<span class="tag core">core</span></div>
+<p>A notebook trains a model once. This system runs continuously and safely: data is validated before loading; training is reproducible and can't leak the future; a new model can't go live unless it's measurably better; predictions are served with explanations and graceful failure; the model is monitored for drift and alerts fire; and 434 tests plus seven CI jobs check the whole system on every change.</p></div>
+
+<div class="qa"><div class="qa-q">What is your single most important design decision?<span class="tag core">core</span></div>
+<p>Storing data as timestamped events and building features point-in-time. It's what makes every metric trustworthy: the model is trained only on information it would really have had at prediction time. Without it, every number in the project could be inflated by leakage.</p></div>
+
+<div class="qa"><div class="qa-q">What was the hardest part?</div>
+<p>Working with real data at scale. The 392-million-row listening log needed a bounded window; the orphan transactions needed a defensible decision; and a feature query that ran fine on synthetic data never finished on the real data, because a subscriber cap on one step didn't bound the others. The second hardest was making the monitoring report only true things, which I found by looking at the dashboards rather than trusting green tests.</p></div>
+
+<div class="qa"><div class="qa-q">What did you learn?<span class="tag core">core</span></div>
+<p>That passing tests aren't the same as a working system. Nearly every serious bug was invisible to the tests at the time and found by checking the real thing: the real database, the running container, the actual screen, a fresh clone. Each discovery then became a test or a checklist item. And that metric choice matters enormously on imbalanced data.</p></div>
+
+<div class="qa"><div class="qa-q">If you had one more month, what would you do?</div>
+<p>Add listening-trend features from the full 392M-row log (weekly decline, skip rates), which is where the missing signal most likely is; replace the placeholder costs with real ones so the threshold is set by money; and deploy to a managed Kubernetes cluster with CI deploying each image to staging.</p></div>
+
+<!-- =========================== B ============================ -->
+<h1 id="qa-data" data-toc="B · Data and the warehouse"><span class="num">SECTION B</span>Data and the warehouse</h1>
+
+<div class="qa"><div class="qa-q">What dataset did you use, and where is it from?<span class="tag core">core</span></div>
+<p>The KKBox churn dataset from the WSDM Cup 2018 competition on Kaggle. KKBox is a Taiwanese music-streaming service. Three files, 31.3 GB: members (6.77M subscribers), transactions (21.5M payments and plan changes) and daily listening logs (392M rows).</p></div>
+
+<div class="qa"><div class="qa-q">Is the data real or synthetic?<span class="tag core">core</span></div>
+<p>The trained model and the warehouse use <strong>real</strong> KKBox data. There's also a synthetic data generator, used for fast tests and CI, because CI can't download 31 GB. Every pipeline works identically on both; the switch is only which data is loaded.</p></div>
+
+<div class="qa"><div class="qa-q">Is there any personal data? What about privacy?</div>
+<p>No directly identifying data. KKBox anonymised the export: subscribers are 44-character hashes, with no names, emails or phone numbers. The members file has city, age and gender, which aren't used as model inputs. It's still behavioural data about people, so in a real deployment it would need a lawful basis, access control and a retention policy.</p></div>
+
+<div class="qa"><div class="qa-q">Why store events rather than one row per subscriber?<span class="tag core">core</span></div>
+<p>Because training needs the past. To build a training example "as of 1 November 2016", I need each subscriber exactly as they were that day. Events with timestamps can answer that for any date by filtering on time; a table of running totals can't, because the totals already include the future.</p></div>
+
+<div class="qa"><div class="qa-q">Describe the warehouse schema.<span class="tag core">core</span></div>
+<p>Five tables: <code>subscribers</code> (one per person: signup date, channel), <code>subscription_events</code> (signup, renewal and cancellation, with plan, fee and auto-renew), <code>payments</code>, <code>sessions</code> (one per listening day) and <code>support_tickets</code> (empty for KKBox). Each event table has an index on (subscriber_id, occurred_at). 82.8 million rows in total.</p></div>
+
+<div class="qa"><div class="qa-q">Why that index?</div>
+<p>Almost every query asks "this subscriber's events before this date". A composite index on (subscriber_id, occurred_at) answers exactly that: find the subscriber, then read their events in time order. One subscriber's full history comes back in 17 milliseconds out of 82.8 million rows.</p></div>
+
+<div class="qa"><div class="qa-q">What cleaning did you do?<span class="tag core">core</span></div>
+<p>Dropped 2.66 million orphan transactions; widened the ID column from 32 to 64 characters; clipped negative listening durations to zero; normalised prices to a monthly rate; mapped plan lengths to tiers; and bounded the listening history to October 2016 – February 2017.</p></div>
+
+<div class="qa"><div class="qa-q">Why did you drop the orphan rows instead of fixing them?<span class="tag core">core</span><span class="tag tricky">tricky</span></div>
+<p>432,623 subscribers appear in transactions but not in the members file. The only way to "fix" them is to invent a signup date, and the earliest possible one is their first transaction, which lands on the first day of the log. So they almost certainly signed up <em>before</em> the data begins. Inventing a date would make loyal long-term customers look brand new, and the model treats "new" as risky. That would silently corrupt 432,623 subscribers' tenure. Dropping them is visible and countable.</p>
+<p class="followup">"Isn't 18% a lot to drop?" Yes, and it's reported, not hidden. The alternative corrupts a feature for all of them, which is worse than losing them. The remaining 6.77M subscribers are still plenty.</p></div>
+
+<div class="qa"><div class="qa-q">Why only load sessions from October 2016?</div>
+<p>Features look at the 30 days before a cutoff, and the cutoffs run from November 2016 to February 2017. Loading all 392 million rows would take over 7 hours for data no feature uses. Bounding it to 38.2 million rows keeps every needed day.</p></div>
+
+<div class="qa"><div class="qa-q">KKBox has no plan tiers. Where do basic/standard/premium come from?<span class="tag tricky">tricky</span></div>
+<p>From plan length: up to 31 days is basic, 32–180 standard, 181+ premium. It's an assumption, and it's documented as one. KKBox only has durations and prices, and longer commitments are the closest analogue to a higher tier.</p></div>
+
+<div class="qa"><div class="qa-q">How do you validate incoming data?</div>
+<p>With a data contract (<code>contract.py</code>): required columns, parseable types, value ranges, non-empty IDs, and events that refer to known subscribers. A dry-run mode validates everything and writes nothing, so a problem in a 30 GB file shows up in minutes, not hours into a failed load.</p></div>
+
+<div class="qa"><div class="qa-q">Why Postgres? Why not just SQLite?<span class="tag core">core</span></div>
+<p>Postgres is a real database server: strict types, parallel queries and a much better query planner. The same feature query took 506 seconds on SQLite and 6.8 seconds on Postgres, about 74× faster. It also caught bugs SQLite silently accepted. SQLite stays as a zero-setup fallback for development and tests.</p></div>
+
+<div class="qa"><div class="qa-q">You didn't install Postgres. Where is it running?<span class="tag core">core</span></div>
+<p>In a Docker container, from the official <code>postgres:16-alpine</code> image, defined in <code>docker-compose.yml</code>. Its port 5432 is published to the Mac, so TablePlus and the pipeline connect to <code>localhost:5432</code> as if it were installed normally. The data lives in a Docker volume, so it survives restarts. That's how companies run databases too: the same version everywhere, nothing to install.</p></div>
+
+<div class="qa"><div class="qa-q">How did you get 82.8 million rows into Postgres?</div>
+<p>With Postgres's bulk <code>COPY</code>. SQLite exports each table as CSV, which is piped straight into <code>COPY</code> inside the container in 5-million-row slices, with no temporary files. Indexes are dropped during the load and rebuilt once at the end. It took about 7.5 minutes, and every table's row count was verified equal to the source.</p></div>
+
+<div class="qa"><div class="qa-q">Why not insert the rows with normal INSERT statements?</div>
+<p>82.8 million individual inserts through Python would take hours: every row is a separate parameter set and index update. <code>COPY</code> is Postgres's bulk-load path; it parses the stream directly and runs at hundreds of thousands of rows per second.</p></div>
+
+<div class="qa"><div class="qa-q">How does the same code run on two different databases?</div>
+<p>Through SQLAlchemy. The schema is defined once in Python, and the queries use bound parameters and standard SQL. Date arithmetic is done in pandas rather than SQL, because the two databases write date maths differently. One environment variable, <code>SDD_DATABASE_URL</code>, chooses the database.</p></div>
+
+<div class="qa"><div class="qa-q">What is a data warehouse, and is this one?</div>
+<p>A data warehouse is a database organised for analysis: historical, integrated data from source systems, optimised for reading. This is a small one: an <strong>event store</strong> of integrated KKBox history, designed so any past state can be reconstructed for analysis and training. It isn't a column-store analytics engine like BigQuery or Snowflake, which would be the choice at larger scale.</p></div>
+
+<div class="qa"><div class="qa-q">Two of your nine inputs are always zero. Why keep them?<span class="tag tricky">tricky</span></div>
+<p>KKBox has no customer-service data, so support tickets are always 0, and it only records a transaction when money moved, so payment failures are always 0. The model can't learn from a constant. They remain because the API's input format requires them, and the schema is designed for a business that does have that data. The dashboard says so openly and never offers them as levers.</p></div>
+
+<!-- =========================== C ============================ -->
+<h1 id="qa-features" data-toc="C · Features and data leakage"><span class="num">SECTION C</span>Features and data leakage</h1>
+
+<div class="qa"><div class="qa-q">What is data leakage?<span class="tag core">core</span></div>
+<p>Training data that contains information the model wouldn't have when it's really used, typically information from the future. The model then looks excellent in testing, because it's partly reading the answer, and fails in production. It's the most common way ML projects overstate their results.</p></div>
+
+<div class="qa"><div class="qa-q">How did you prevent leakage?<span class="tag core">core</span></div>
+<p>Point-in-time features. For a cutoff date T, every feature uses only events strictly before T (the previous 30 days, or 180 for payments); the label only looks at the 30 days from T. The windows never overlap. A test adds future events and checks no feature changes. And the data is split by time, never randomly.</p></div>
+
+<div class="qa"><div class="qa-q">Give an example of leakage that would have been easy to introduce.<span class="tag core">core</span></div>
+<p>Computing "sessions in the last 30 days" as of <em>today</em> for everyone, then using labels from last month. For a subscriber who churned last month, that feature covers the period after they left: zero sessions, which perfectly predicts the label. The model would look superb and be useless.</p></div>
+
+<div class="qa"><div class="qa-q">Define your label exactly.<span class="tag core">core</span></div>
+<p>1 if the subscriber has a cancellation event (KKBox's <code>is_cancel</code>) in the 30 days from the cutoff, otherwise 0. Subscribers who had already cancelled before the cutoff are excluded, because they can't churn again.</p></div>
+
+<div class="qa"><div class="qa-q">Kaggle defines churn differently. Why didn't you use their definition?<span class="tag tricky">tricky</span></div>
+<p>The competition counts anyone who doesn't take a new subscription within 30 days of expiry, which includes quiet lapses. Mine counts explicit cancellations. It's a stricter, event-based definition that fits the warehouse model, but it gives fewer positives (about 1.5%) and isn't comparable with the leaderboard. Training on the competition's definition too is in the future work.</p></div>
+
+<div class="qa"><div class="qa-q">What features does the model use?<span class="tag core">core</span></div>
+<p>Nine inputs: tenure, plan type, monthly fee, listening days in the last 30 days, days since last activity, support tickets, payment failures, discounts used, and auto-renew. Derived from them: tenure in months, recency ratio (days inactive ÷ tenure), engagement-recency score, fee per session, discount dependency, a friction score, per-month rates, and a dormant flag. Plan type is one-hot encoded.</p></div>
+
+<div class="qa"><div class="qa-q">Why is "last active" computed over all history, not just 30 days?</div>
+<p>A subscriber absent for 90 days has no sessions in a 30-day window at all. If "last active" only looked at the window, that would read as "no data" rather than "long absent", erasing one of the strongest churn signals. So it looks back across all history before the cutoff, and is capped at tenure.</p></div>
+
+<div class="qa"><div class="qa-q">Why are dates handled in pandas instead of SQL?</div>
+<p>SQLite and Postgres write date arithmetic differently. Passing dates as parameters and doing the subtraction in pandas keeps a single query that runs identically on both.</p></div>
+
+<div class="qa"><div class="qa-q">Tell me about the bug you found comparing SQLite and Postgres.<span class="tag core">core</span></div>
+<p>The same training snapshot differed by one subscriber out of 1,104. SQLite stores dates as text, and the query compared <code>'2016-12-01' &lt; '2016-12-01 00:00:00'</code>. As strings that's true, because a shorter prefix sorts first. So subscribers who signed up <em>on</em> the cutoff day were counted as before it. No future data reached a feature, but they took slots in a capped sample. I wrote a failing test first, fixed it by comparing against a real date, and the two databases then matched exactly.</p></div>
+
+<div class="qa"><div class="qa-q">Why split by time rather than randomly?<span class="tag core">core</span></div>
+<p>A random split mixes later rows into training and earlier rows into testing. The model learns from the future and is graded on the past, so the score measures memory, not prediction. Splitting by time mirrors real use: train on what has happened, judge on what happens next. Train: Nov–Dec 2016; validation: 31 Dec 2016; test: 29 Jan 2017.</p></div>
+
+<div class="qa"><div class="qa-q">Why not use k-fold cross-validation?<span class="tag tricky">tricky</span></div>
+<p>Standard k-fold shuffles rows, which breaks time order and leaks the future, as above. For time-dependent data the right form is <strong>time-series (forward-chaining) validation</strong>: train on earlier periods, validate on later ones. The fixed train/validation/test split by date is the simplest version of that.</p></div>
+
+<div class="qa"><div class="qa-q">Do training and serving compute features the same way?<span class="tag core">core</span></div>
+<p>Yes. The derived features and preprocessing are one scikit-learn pipeline, saved with the model. Serving passes the raw nine inputs through the same pipeline, so training–serving skew from two different implementations can't happen.</p></div>
+
+<div class="qa"><div class="qa-q">What is training–serving skew?</div>
+<p>When the features a model sees in production are computed differently from those it was trained on, for example a different formula, unit or default. The model then silently performs worse live than in testing. Sharing one pipeline object between training and serving prevents it.</p></div>
+
+<div class="qa"><div class="qa-q">What preprocessing is applied?</div>
+<p>A scikit-learn ColumnTransformer: missing numeric values are imputed and scaled, and the plan type is one-hot encoded. Scaling doesn't matter for tree models, since trees split on thresholds and scaling doesn't change their order. It's harmless, and it keeps the pipeline usable with other model types.</p></div>
+
+<!-- =========================== D ============================ -->
+<h1 id="qa-model" data-toc="D · The model"><span class="num">SECTION D</span>The model</h1>
+
+<div class="qa"><div class="qa-q">Which algorithm did you use, and why?<span class="tag core">core</span></div>
+<p>Scikit-learn gradient boosting. It's among the strongest methods for tabular data, handles mixed numeric and categorical inputs, captures non-linear effects without hand-built features, and supports SHAP's exact tree explainer, so every prediction can be explained exactly.</p></div>
+
+<div class="qa"><div class="qa-q">How does gradient boosting work?<span class="tag core">core</span></div>
+<p>It builds decision trees one after another. Each new tree is fitted to the <em>errors</em> of the ensemble so far (technically, the gradient of the loss), and its predictions are added in, scaled down by the learning rate. Many small corrections add up to a strong model. For classification it works in log-odds and converts to a probability at the end.</p></div>
+
+<div class="qa"><div class="qa-q">Gradient boosting vs random forest?<span class="tag core">core</span></div>
+<p>A random forest builds many deep trees <em>independently</em>, on random samples, and averages them, which mainly reduces variance. Gradient boosting builds shallow trees <em>sequentially</em>, each correcting the last, which mainly reduces bias. Boosting is usually more accurate on tabular data but more sensitive to its settings and easier to overfit.</p></div>
+
+<div class="qa"><div class="qa-q">Why not XGBoost or LightGBM?</div>
+<p>They're faster, more tuned implementations of the same idea, and worth trying. At 67,000 training rows, scikit-learn's version trains in seconds, keeps dependencies simple, and works with SHAP's exact explainer. The model is swappable because the registry and gate don't care which algorithm produced a model.</p></div>
+
+<div class="qa"><div class="qa-q">Why not deep learning?<span class="tag tricky">tricky</span></div>
+<p>On structured, tabular data with a handful of features, tree ensembles consistently match or beat neural networks, while being faster, needing less data, and being easier to explain. Deep learning shines on images, text and sequences. A sequence model over the raw daily listening log could be interesting future work.</p></div>
+
+<div class="qa"><div class="qa-q">Explain your hyperparameters.</div>
+<p>300 trees at learning rate 0.05: many small steps generalise better than few large ones. Max depth 3: shallow trees capture interactions without memorising. Subsample 0.9: each tree sees 90% of rows, which adds randomness and reduces overfitting. Min samples per leaf 20: no decision rests on a handful of subscribers.</p></div>
+
+<div class="qa"><div class="qa-q">Did you tune the hyperparameters?<span class="tag tricky">tricky</span></div>
+<p>No systematic search: they're sensible, conservative defaults kept in <code>params.yaml</code>. The limiting factor here is the features, not the settings. A search (on the validation set, never the test set) would be a fair next step, and the registry's gate would decide whether the tuned model earns promotion.</p></div>
+
+<div class="qa"><div class="qa-q">How do you know the model isn't overfitting?</div>
+<p>It's judged on a later, unseen time period. Validation PR-AUC (0.052) and test PR-AUC (0.073) are in the same range, and ROC-AUC is 0.834 against 0.835. An overfitted model would do much better on training data than on these. The shallow trees, subsampling and leaf minimum also limit memorisation.</p></div>
+
+<div class="qa"><div class="qa-q">What is overfitting? Underfitting?<span class="tag core">core</span></div>
+<p>Overfitting: the model learns noise specific to the training data, so it scores well there and poorly on new data. Underfitting: it's too simple to capture the real pattern and scores poorly everywhere. The bias–variance trade-off is the balance between the two.</p></div>
+
+<div class="qa"><div class="qa-q">How did you handle the class imbalance?<span class="tag core">core</span><span class="tag tricky">tricky</span></div>
+<p>Not with resampling or class weights. Through the <strong>metric</strong> (PR-AUC, which is sensitive to the rare class) and the <strong>threshold</strong> (0.05 instead of 0.5). That was deliberate: oversampling or reweighting distorts the predicted probabilities, and this project uses the probabilities directly for costs and calibration. Keeping them honest matters more than a nicer-looking recall.</p>
+<p class="followup">"Wouldn't SMOTE help?" It would change the operating point, not the information available: it creates synthetic positives from existing ones. It could be tried as a challenger, and the gate would judge it on PR-AUC, but it would need recalibrating afterwards.</p></div>
+
+<div class="qa"><div class="qa-q">What is the most important feature, and does it make sense?<span class="tag tricky">tricky</span></div>
+<p>Auto-renew, at 28% of importance, and surprisingly it <em>raises</em> risk. On KKBox, auto-renew goes with the cheap, short plans that churn most. It's a real association in the data, not a cause. That's exactly why explanations matter: a human should know when a model's reasoning is a correlation, not something to act on directly.</p></div>
+
+<div class="qa"><div class="qa-q">Is the model deterministic?</div>
+<p>Yes. A fixed random seed (42) controls subsampling, and the split is by date, so retraining on the same data gives the same model. That's also what lets CI check that an identical challenger is rejected.</p></div>

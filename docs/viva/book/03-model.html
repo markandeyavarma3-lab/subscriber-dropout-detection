@@ -1,0 +1,132 @@
+<h1 id="ch-training" data-toc="Training and evaluating the model" data-num="7"><span class="num">CHAPTER 7</span>Training and evaluating the model</h1>
+<p class="lede">A deliberately simple, well-understood model, judged with metrics that suit a rare event, and audited for whether it is actually fit for the decision it drives.</p>
+
+<h2>The model</h2>
+<p>A scikit-learn <strong>gradient boosting classifier</strong>: an ensemble of shallow decision trees, each built to correct the errors of the ones before it.</p>
+<table>
+  <thead><tr><th>Parameter</th><th>Value</th><th>Why</th></tr></thead>
+  <tr><td>n_estimators</td><td>300</td><td>Enough trees to learn the signal at a low learning rate</td></tr>
+  <tr><td>learning_rate</td><td>0.05</td><td>Small steps generalise better than large ones</td></tr>
+  <tr><td>max_depth</td><td>3</td><td>Shallow trees capture interactions without memorising</td></tr>
+  <tr><td>subsample</td><td>0.9</td><td>Each tree sees 90% of rows, which adds randomness and reduces overfitting</td></tr>
+  <tr><td>min_samples_leaf</td><td>20</td><td>No leaf is built on a handful of subscribers</td></tr>
+</table>
+<p><strong>Why gradient boosting?</strong> It's among the strongest methods for tabular data with mixed numeric and categorical columns. It captures non-linear effects (risk that rises sharply after a few inactive weeks) without hand-built features. And it works with SHAP's exact <em>tree</em> explainer, so every prediction can be explained exactly. All parameters live in <code>params.yaml</code>, so changing one is a versioned, reviewable change.</p>
+
+<h2>Why accuracy is useless here</h2>
+<p>Only about <strong>1.5%</strong> of subscribers cancel in a 30-day window. A "model" that predicts <em>nobody ever churns</em> is right 98.5% of the time, and completely useless. This model's accuracy is 95.6%, <em>lower</em> than that useless baseline, because it deliberately flags people. Accuracy rewards ignoring the rare class, so it's never used to judge anything in this project.</p>
+
+<h2>PR-AUC, ROC-AUC, and the finding that shaped the project</h2>
+<p><strong>ROC-AUC</strong> measures how well the model ranks a random churner above a random non-churner. It uses the false-positive <em>rate</em>, which divides by the huge number of non-churners, so it barely notices how rare churn is. <strong>PR-AUC</strong> (area under the precision–recall curve) is built from precision: "of the people I flagged, how many really churn?". That is dominated by the rare class. A random model's PR-AUC equals the churn rate.</p>
+<p>The project saw the difference directly. Moving from synthetic data (about 20% churn) to real KKBox data (1.5% churn):</p>
+<table>
+  <thead><tr><th>Metric</th><th class="num">Synthetic data</th><th class="num">Real KKBox</th><th>Direction</th></tr></thead>
+  <tr><td>ROC-AUC</td><td class="num">0.674</td><td class="num">0.835</td><td>Up</td></tr>
+  <tr><td>PR-AUC</td><td class="num">0.345</td><td class="num">0.073</td><td>Down, sharply</td></tr>
+</table>
+<p>ROC-AUC said the model got <em>better</em>. PR-AUC said the problem got much <em>harder</em>, and PR-AUC is the one that matches the business reality: with rarer churners, far more of the people you flag are false alarms. <strong>If the promotion gate had used ROC-AUC, it would have reported an improvement at the exact moment the model became harder to act on.</strong> That's why the gate uses PR-AUC. The decision was made before the real data arrived, and the real data confirmed it.</p>
+
+<h2>Results on the held-out test set (29 January 2017)</h2>
+<table>
+  <thead><tr><th>Metric</th><th class="num">Value</th><th>What it means</th></tr></thead>
+  <tr><td>PR-AUC</td><td class="num">0.073</td><td>About 4.8× better than random (0.015)</td></tr>
+  <tr><td>ROC-AUC</td><td class="num">0.835</td><td>Ranks a churner above a non-churner 83.5% of the time</td></tr>
+  <tr><td>Churn rate</td><td class="num">1.53%</td><td>506 churners among 33,042 subscribers</td></tr>
+  <tr><td>Recall @ 0.05</td><td class="num">16.8%</td><td>Catches 85 of 506 churners: about 1 in 6</td></tr>
+  <tr><td>Precision @ 0.05</td><td class="num">7.6%</td><td>1 in 13 flagged subscribers really churns: 5× the base rate</td></tr>
+  <tr><td>Flagged</td><td class="num">3.4%</td><td>1,125 of 33,042 subscribers</td></tr>
+  <tr><td>Accuracy</td><td class="num">95.6%</td><td>Shown only to prove the point above</td></tr>
+  <tr><td>Calibration error (ECE)</td><td class="num">0.004</td><td>Predicted probabilities match observed rates closely</td></tr>
+</table>
+<p>At the 0.05 threshold the confusion matrix is: <strong>85</strong> true positives, <strong>1,040</strong> false positives, <strong>421</strong> false negatives, <strong>31,496</strong> true negatives.</p>
+
+<h3>Which features matter most</h3>
+<table>
+  <thead><tr><th>Feature</th><th class="num">Importance</th></tr></thead>
+  <tr><td>is_auto_renew_enabled</td><td class="num">0.283</td></tr>
+  <tr><td>monthly_fee</td><td class="num">0.167</td></tr>
+  <tr><td>tenure_days</td><td class="num">0.097</td></tr>
+  <tr><td>recency_ratio</td><td class="num">0.096</td></tr>
+  <tr><td>discount_dependency</td><td class="num">0.076</td></tr>
+  <tr><td>tenure_months</td><td class="num">0.071</td></tr>
+</table>
+<div class="callout warn">
+  <div class="callout-title">The surprising one: auto-renew raises risk</div>
+  <p>Intuition says auto-renew should <em>lower</em> churn risk. On KKBox it raises it: on an otherwise identical subscriber, turning auto-renew on moves the prediction from 0.0024 to 0.6037. In this data, auto-renew goes with the cheap, short plans that churn most. The model learned a <strong>real association in this data, not a cause</strong>. That's the honest answer, and a good example of why models need explanations and human judgement.</p>
+</div>
+
+<h2>Choosing the decision threshold</h2>
+<p>The model outputs a probability; a threshold turns it into a decision (flag or not). The default 0.5 would flag almost no one when churn is 1.5%. The served threshold is <strong>0.05</strong>. It's the value that <strong>maximised F1 on the validation set</strong>, searched over 0.05 to 0.95 in steps of 0.01. It sits at the very bottom of that range, which means F1 would have preferred it even lower.</p>
+
+<h2>The decision-quality audit</h2>
+<p>Every training run writes a report asking whether the model is fit for the decision it drives, not just whether its metrics look good. Four parts.</p>
+
+<h3>1 · Cost</h3>
+<p>Each outcome is given a cost (in <code>params.yaml</code>; these are <strong>placeholder assumptions</strong>, not real business figures):</p>
+<table class="plain">
+  <tr><td>Missed churner (false negative)</td><td>£240: about a year of lost revenue</td></tr>
+  <tr><td>Retention offer</td><td>£20</td></tr>
+  <tr><td>Offer efficacy</td><td>30%: an offer saves 3 in 10 real churners</td></tr>
+  <tr><td>Flagged churner (true positive)</td><td>£20 + 70% × £240 = £188</td></tr>
+  <tr><td>Flagged non-churner (false positive)</td><td>£20: the wasted offer</td></tr>
+</table>
+<p>Flagging someone is worth it only when the expected saving beats the offer's cost: <em>p × (240 − 188) &gt; (1 − p) × 20</em>, which gives <strong>p &gt; 0.278</strong>. Searching thresholds on the test set, the cheapest is <strong>0.43</strong>: total cost £121,312, against £137,820 at the served 0.05, so <strong>£16,508 cheaper</strong>. At 0.43 the model sends only 8 offers out of 33,042.</p>
+<div class="callout">
+  <div class="callout-title">The honest reading</div>
+  <p>At a 1.5% churn rate, and with an offer that only works 30% of the time, almost no one is risky enough to be worth an offer. So the cost-optimal policy is "send almost nothing". F1 chose 0.05; the cost audit prefers 0.43. <strong>The audit reports this rather than silently changing the threshold</strong>, because the right answer depends on real costs the project doesn't have. Grafana shows it as "savings left on the table".</p>
+</div>
+
+<h3>2 · Calibration</h3>
+<p>A model is <strong>calibrated</strong> when a predicted 5% really happens about 5% of the time. That matters whenever a probability drives a money decision. Expected calibration error is <strong>0.004</strong>, and the Brier score is 0.0146, both very good. On average it predicts 1.16% against an actual 1.53%, so it slightly under-predicts. Isotonic calibration is tried as a diagnostic on every run: fitted on the validation set, it would improve the error by a further 0.003. It's <strong>reported, not applied</strong>; the raw model is already well calibrated.</p>
+
+<h3>3 · Fairness</h3>
+<p>The audit compares performance across <code>plan_type</code> groups (groups need at least 30 members, and a ratio below 0.8 between the worst and best group is flagged: the US "four-fifths rule" from employment law, a convention rather than a law of nature). <strong>It fails.</strong> On the <code>standard</code> plan (949 subscribers in the test set) the model's ROC-AUC is 0.54, close to random, against much higher on the other plans. The selection rates also differ widely. The likely cause is too few standard-plan subscribers to learn from. The failure is written to the report, exported to Prometheus, shown as "DISPARITY" in Grafana, and fires the <code>FairnessDisparity</code> alert. <strong>It's reported, not hidden.</strong></p>
+
+<h3>4 · Capacity</h3>
+<p>A real retention team can only contact so many people. The cost model supports a capacity cap (<code>max_offer_rate</code>): if the cost-optimal policy needs more offers than the budget allows, the threshold rises to the top-k subscribers and the report prices the shortfall. No cap is set for KKBox, since the cost-optimal policy only needs 8 offers.</p>
+
+<div class="callout say">
+  <div class="callout-title">Say this</div>
+  <p>"Accuracy is useless at 1.5% churn: predicting 'nobody churns' is 98.5% accurate. I use PR-AUC, and the real data proved why: ROC-AUC went up while PR-AUC fell. The model gets 0.073, about 5× better than random. It's modest, and I say so. Every run is audited: it's well calibrated, the cost audit prefers a stricter threshold under placeholder costs, and the fairness audit fails on one plan, which is reported and alerted on."</p>
+</div>
+
+<!-- =================================================================== -->
+
+<h1 id="ch-registry" data-toc="The registry and the promotion gate" data-num="8"><span class="num">CHAPTER 8</span>The registry and the promotion gate</h1>
+<p class="lede">No model reaches production by accident. Every model is recorded, and the only way to become the live model is to beat the current one on evidence.</p>
+
+<h2>MLflow: tracking and registry</h2>
+<p>Every training run is logged to <strong>MLflow</strong>: its parameters, metrics and the model itself. Models are registered under one name, <code>subscriber-dropout-classifier</code>, as numbered versions. Two <strong>aliases</strong> say which version plays which role:</p>
+<ul>
+  <li><strong>@champion</strong>: the version serving production traffic.</li>
+  <li><strong>@challenger</strong>: the newest candidate.</li>
+</ul>
+<p>Serving loads "whatever <code>@champion</code> points to". Promoting a model means moving an alias; <strong>rolling back means moving it back</strong>. No files are copied and nothing is redeployed. (MLflow 3 removed the older "Staging/Production" stages altogether; aliases replace them.)</p>
+
+<h2>The gate</h2>
+<p><code>src/registry/promote.py</code> decides. It has three properties:</p>
+<ol>
+  <li><strong>Comparable:</strong> champion and challenger are scored on the <em>same</em> held-out data, in the same process. Comparing a challenger's fresh test score with a champion's score from months ago measures two different datasets, and that's a reliable way to promote a worse model.</li>
+  <li><strong>The right metric:</strong> PR-AUC, for the reasons in Chapter 7.</li>
+  <li><strong>A margin:</strong> the challenger must win by at least <strong>0.005</strong>. Two equivalent models differ only by noise; with a zero margin, the gate would promote on that noise about half the time, and the registry would flip back and forth forever.</li>
+</ol>
+<p>If there's no champion yet, the first model is promoted unopposed. Every decision (promoted or rejected, with both scores and the required margin) is recorded in the run report.</p>
+<div class="callout">
+  <div class="callout-title">Proved in CI, not just claimed</div>
+  <p>The pipeline job in CI trains twice on identical data. The second model is identical to the champion, so it <strong>must be rejected</strong>, and CI fails if it isn't. A rejected challenger isn't a failure: it's the gate doing its job, so it raises an <code>info</code> alert, never a page.</p>
+</div>
+
+<h2>Shadow scoring: judging a challenger on real traffic</h2>
+<p>Test-set scores are one thing; live behaviour is another. When a <em>distinct</em> challenger is registered, the API scores every request with <strong>both</strong> models but returns <strong>only the champion's</strong> answer. The challenger's answer is recorded and compared:</p>
+<ul>
+  <li><strong>Agreement rate:</strong> how often both models make the same flag / don't-flag decision.</li>
+  <li><strong>Outreach volume change:</strong> how many more or fewer people the challenger would flag, which tells the business how the campaign would change on promotion.</li>
+  <li><strong>Divergence:</strong> the typical difference between the two probabilities.</li>
+  <li><strong>Errors and latency:</strong> a challenger that crashes or is slow is caught before it matters.</li>
+</ul>
+<p>Shadow scoring never affects the response. If the challenger fails, the champion's answer still goes out and the error is counted. A verdict needs at least 200 comparisons. Right now no distinct challenger exists, so the dashboard honestly shows "IDLE" and "no challenger".</p>
+
+<div class="callout say">
+  <div class="callout-title">Say this</div>
+  <p>"Every run is logged in MLflow. The live model is whichever version holds the @champion alias. A new model only takes over if it beats the champion on PR-AUC, on the same data, by at least 0.005, so noise can't flip it. Rollback is just moving the alias back. CI proves an identical challenger gets rejected. And shadow scoring lets a challenger be judged on live traffic without ever answering a real request."</p>
+</div>

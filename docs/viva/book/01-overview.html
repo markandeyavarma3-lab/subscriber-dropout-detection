@@ -1,0 +1,198 @@
+<h1 id="how-to-use" data-toc="How to use this book">How to use this book</h1>
+<p class="lede">Two halves. Part I explains the whole system, end to end, in the order the data flows. Part II is a question bank: the questions an examiner is likely to ask, with answers.</p>
+
+<p><strong>Read Part I once, slowly.</strong> Every chapter ends with a short "Say this" box: the two or three sentences worth being able to say without notes. Part II assumes you've read Part I; its answers are short on purpose.</p>
+
+<p><strong>Learn ideas, not wording.</strong> An examiner who hears a memorised paragraph asks a follow-up, and the follow-up is where understanding shows. Many answers in Part II include an <em>"If they push"</em> line: the most likely follow-up and how to handle it.</p>
+
+<p><strong>Every number is real.</strong> Figures come from the trained model's own reports (<code>src/models/artifacts/metrics.json</code>), the Postgres warehouse, the CI runs, or measurements taken while building the demo. Where a number is an assumption, such as the cost figures, the book says so.</p>
+
+<div class="callout warn">
+  <div class="callout-title">Be honest about the weak parts</div>
+  <p>The model is modest, one fairness check fails, and the cost figures are placeholders. Part I says so plainly, and so should you. Examiners respect a student who knows exactly where their system is weak far more than one who claims it has no weaknesses. Chapter 16 lists every limitation.</p>
+</div>
+
+<h2>Tags used in Part II</h2>
+<table class="plain">
+  <tr><td><span class="tag core">core</span></td><td>Very likely to be asked. Know these cold.</td></tr>
+  <tr><td><span class="tag tricky">tricky</span></td><td>Questions designed to find the edge of your understanding, or that touch a known weakness. Prepare these carefully.</td></tr>
+</table>
+
+<!-- =================================================================== -->
+
+<section class="part-title">
+  <div class="kicker">PART I</div>
+  <h1 id="part-1" data-part="Part I · The project, end to end">The project, end to end</h1>
+  <p>What the system does, how every piece works, and why each design decision was made, from 31 GB of raw CSV to a monitored model served in production.</p>
+</section>
+
+<h1 id="ch-overview" data-toc="What this project is" data-num="1"><span class="num">CHAPTER 1</span>What this project is</h1>
+<p class="lede">A production-style machine learning system that predicts which subscribers of a music-streaming service are about to cancel, explains why, and keeps itself trustworthy after it ships.</p>
+
+<h2>The business problem</h2>
+<p>A subscription business earns money every month a customer stays. When a subscriber cancels ("churns" or "drops out"), that revenue is gone, and winning a customer back costs far more than keeping one. If the business can tell <em>in advance</em> who is likely to cancel, it can act while they're still a customer: a discount, a better-suited plan, a reminder of what they'd lose.</p>
+<p>This project answers one question for every subscriber: <strong>what is the probability they cancel in the next 30 days?</strong> It also says <em>why</em>, and it runs the whole thing the way a real company would: versioned data, a gated model registry, an API, streaming, monitoring, alerting and automated testing.</p>
+
+<h2>What "MLOps" means here</h2>
+<p>Training a good model once is machine learning. <strong>MLOps</strong> is everything that keeps a model good in production:</p>
+<ul>
+  <li><strong>Data you can trust:</strong> validated on the way in, stored so the past can be rebuilt exactly.</li>
+  <li><strong>Training you can reproduce:</strong> versioned code, data and parameters.</li>
+  <li><strong>A registry and a gate:</strong> a record of every model, and a rule that stops a worse model reaching production.</li>
+  <li><strong>Serving:</strong> the model behind an API and a streaming consumer, with explanations.</li>
+  <li><strong>Monitoring:</strong> metrics, drift detection and alerts, so a model that is quietly getting worse is noticed.</li>
+  <li><strong>Automation:</strong> a scheduled retraining pipeline, and CI/CD that tests the <em>system</em>, not just the code.</li>
+</ul>
+<p>The model itself (gradient boosting) is a small part of the codebase. Most of the work, and most of what is worth discussing in a viva, is everything around it.</p>
+
+<h2>The project in numbers</h2>
+<div class="stats">
+  <div><b>31.3 GB</b><span>raw KKBox CSV</span></div>
+  <div><b>82.8M</b><span>rows in the Postgres warehouse</span></div>
+  <div><b>1.5%</b><span>churn rate in any 30-day window</span></div>
+  <div><b>0.073</b><span>test PR-AUC (random = 0.015)</span></div>
+</div>
+<div class="stats">
+  <div><b>8</b><span>Docker services, started by <code>make demo</code></span></div>
+  <div><b>15</b><span>Prometheus alert rules</span></div>
+  <div><b>434</b><span>automated tests</span></div>
+  <div><b>7</b><span>CI/CD jobs on every push</span></div>
+</div>
+
+<h2>What was built, in one paragraph</h2>
+<p>The KKBox churn dataset (real, public, 31.3 GB) is validated, cleaned and loaded into an <strong>event warehouse</strong> in Postgres. A <strong>point-in-time feature pipeline</strong> builds training data for any past date without leaking the future. A <strong>gradient-boosting model</strong> is trained on a time-based split, audited for calibration, cost and fairness, and registered in <strong>MLflow</strong>. It only becomes the live <code>@champion</code> by beating the current one on <strong>PR-AUC</strong>. The champion is served by a <strong>FastAPI</strong> service with <strong>SHAP</strong> explanations and a dashboard, and by a <strong>Kafka stream scorer</strong> with a dead-letter queue. <strong>Prometheus, Alertmanager and Grafana</strong> watch it, with <strong>PSI drift detection</strong>. A <strong>Prefect</strong> pipeline retrains on a schedule, <strong>DVC</strong> versions the data pipeline, and <strong>GitHub Actions</strong> runs seven jobs on every push, including training on two databases and publishing the Docker image.</p>
+
+<div class="callout say">
+  <div class="callout-title">Say this</div>
+  <p>"It predicts which subscribers will cancel in the next 30 days, on real data from a music-streaming service. But the model is the small part. The project is really about MLOps: making a model trustworthy in production, with a warehouse that can't leak the future, a registry with a promotion gate, explained predictions, drift monitoring, and CI that tests the whole system."</p>
+</div>
+
+<!-- =================================================================== -->
+
+<h1 id="ch-architecture" data-toc="Architecture" data-num="2"><span class="num">CHAPTER 2</span>Architecture</h1>
+<p class="lede">Four stages (data, model, serve, watch) with automation running underneath all of them.</p>
+
+<figure class="wide">
+  <img src="/docs/viva/architecture.png" alt="Architecture diagram">
+  <figcaption>Figure 2.1: The system in four stages. Dashed arrows are automation.</figcaption>
+</figure>
+
+<h2>The four stages</h2>
+<table>
+  <thead><tr><th>Stage</th><th>What happens</th><th>Main code</th></tr></thead>
+  <tr><td>1 · Data</td><td>Raw KKBox CSV is validated against a contract, mapped to the warehouse schema, cleaned (orphans dropped, prices normalised) and stored as timestamped events.</td><td><code>src/data/external/</code>, <code>src/warehouse/</code></td></tr>
+  <tr><td>2 · Model</td><td>Point-in-time features for chosen cutoff dates; time-based split; gradient boosting; decision-quality audit; registered in MLflow and promoted only through the PR-AUC gate.</td><td><code>src/features/</code>, <code>src/models/</code>, <code>src/registry/</code></td></tr>
+  <tr><td>3 · Serve</td><td>The champion model answers HTTP requests (single, batch) with SHAP explanations, powers the dashboard, and scores a Kafka event stream.</td><td><code>src/api/</code>, <code>src/streaming/</code></td></tr>
+  <tr><td>4 · Watch</td><td>Metrics scraped by Prometheus, 15 alert rules routed by Alertmanager, a Grafana dashboard, and PSI drift checks against the training distribution.</td><td><code>src/monitoring/</code>, <code>deploy/</code></td></tr>
+  <tr><td>Automation</td><td>Prefect runs ingest, drift, train and gate on a schedule; DVC tracks the pipeline; GitHub Actions tests and publishes on every push.</td><td><code>src/orchestration/</code>, <code>dvc.yaml</code>, <code>.github/</code></td></tr>
+</table>
+
+<h2>Two flows through the system</h2>
+<h3>The training flow (offline, nightly or on demand)</h3>
+<ol>
+  <li>New events land in the warehouse (<code>subscribers</code>, <code>subscription_events</code>, <code>payments</code>, <code>sessions</code>).</li>
+  <li>The drift step compares recent data against the serving model's training distribution. It runs <em>before</em> retraining (Chapter 12 explains why).</li>
+  <li>For each cutoff date, the feature pipeline builds one row per subscriber using only data before the cutoff, and a label from the 30 days after.</li>
+  <li>The model trains on older cutoffs, is tuned on a later one, and is tested on the latest.</li>
+  <li>The run is logged to MLflow and registered as <code>@challenger</code>. If it beats <code>@champion</code> on PR-AUC by at least 0.005, the champion alias moves to it.</li>
+  <li>A run report is written; Prometheus exposes it; alerts fire if something needs a human.</li>
+</ol>
+<h3>The serving flow (online, per request)</h3>
+<ol>
+  <li>A client sends a subscriber's nine features to <code>POST /predict</code> (or events arrive on the <code>subscriber-events</code> Kafka topic).</li>
+  <li>The service validates the input (types, ranges, and that the last activity isn't longer ago than tenure).</li>
+  <li>The champion model returns a probability; it's mapped to a risk band (low / medium / high) using the decision threshold.</li>
+  <li>SHAP computes each feature's contribution; the top reasons become a plain-language explanation.</li>
+  <li>If a distinct challenger exists, it scores the same request silently (shadow scoring).</li>
+  <li>Counters and histograms update; Prometheus scrapes them every 15 seconds.</li>
+</ol>
+
+<div class="callout say">
+  <div class="callout-title">Say this</div>
+  <p>"Left to right: data, model, serve, watch. Raw data is cleaned into a Postgres event warehouse; point-in-time features train a model that only reaches production through a PR-AUC gate in MLflow; the champion is served by an API and a Kafka consumer; Prometheus and Grafana watch it. Prefect and GitHub Actions automate all of it."</p>
+</div>
+
+<!-- =================================================================== -->
+
+<h1 id="ch-stack" data-toc="Technology stack, and why each piece" data-num="3"><span class="num">CHAPTER 3</span>Technology stack, and why each piece</h1>
+<p class="lede">Every tool is free and open-source (or has a free tier) and was chosen for a specific job. Be ready to justify any row of this table.</p>
+
+<table>
+  <thead><tr><th>Layer</th><th>Tool</th><th>Why this one</th></tr></thead>
+  <tr><td>Language</td><td>Python 3.11</td><td>The standard for ML; every library below is Python-native.</td></tr>
+  <tr><td>Warehouse</td><td>PostgreSQL 16 (SQLite as local fallback)</td><td>A real database server with parallel queries and a proper planner: the same feature query ran in 6.8 s on Postgres against 506 s on SQLite. SQLite keeps the project runnable with no server at all.</td></tr>
+  <tr><td>Database access</td><td>SQLAlchemy 2 + psycopg 3</td><td>The schema and queries are written once and run on both databases; one setting (<code>SDD_DATABASE_URL</code>) switches.</td></tr>
+  <tr><td>Data processing</td><td>pandas, NumPy</td><td>Tabular data handling; date arithmetic is done here, not in SQL, so queries stay portable.</td></tr>
+  <tr><td>Model</td><td>scikit-learn gradient boosting</td><td>Strong on tabular data, handles non-linear effects, and works with SHAP's exact tree explainer.</td></tr>
+  <tr><td>Explanations</td><td>SHAP (TreeExplainer)</td><td>Exact per-prediction attributions that add up to the model's output: the explanation can't disagree with the score.</td></tr>
+  <tr><td>Experiment tracking + registry</td><td>MLflow 3</td><td>Records every run; the registry's aliases (<code>@champion</code>, <code>@challenger</code>) decide which model is live.</td></tr>
+  <tr><td>Serving</td><td>FastAPI + Uvicorn + Pydantic</td><td>Typed request validation, automatic API docs at <code>/docs</code>, and async serving.</td></tr>
+  <tr><td>Streaming</td><td>Redpanda (Kafka-compatible) + kafka-python</td><td>Kafka's protocol without the JVM and ZooKeeper; runs as one container.</td></tr>
+  <tr><td>Metrics</td><td>Prometheus + prometheus-client</td><td>The standard pull-based metrics system; alert rules live next to the metrics.</td></tr>
+  <tr><td>Alert routing</td><td>Alertmanager</td><td>Groups, routes by severity, and suppresses alerts that another alert already explains.</td></tr>
+  <tr><td>Dashboards</td><td>Grafana</td><td>Provisioned from a JSON file in the repo, so the dashboard is version-controlled.</td></tr>
+  <tr><td>Orchestration</td><td>Prefect 3</td><td>Turns pipeline steps into tasks with retries, logging and a run history; can schedule nightly.</td></tr>
+  <tr><td>Data versioning</td><td>DVC</td><td>Declares pipeline stages with inputs, parameters and outputs; reruns only what changed.</td></tr>
+  <tr><td>Containers</td><td>Docker + Docker Compose</td><td>Eight services start identically on any machine with one command.</td></tr>
+  <tr><td>Orchestrated deployment</td><td>Kubernetes manifests</td><td>Deployments with health probes, an autoscaler and a disruption budget: the step after Compose.</td></tr>
+  <tr><td>CI/CD</td><td>GitHub Actions + GitHub Container Registry</td><td>Free for public repos; seven jobs test the system, and the image is published on every merge to <code>main</code>.</td></tr>
+  <tr><td>Database browser</td><td>TablePlus (free version)</td><td>A clear window into the Postgres warehouse for the demo.</td></tr>
+  <tr><td>Quality</td><td>pytest, ruff</td><td>434 tests; ruff for linting and consistent style.</td></tr>
+</table>
+
+<div class="callout">
+  <div class="callout-title">Why Redpanda instead of Apache Kafka?</div>
+  <p>Redpanda speaks the Kafka protocol, so the code uses a standard Kafka client and would run unchanged against Apache Kafka. It's a single binary with no JVM and no ZooKeeper, which makes it light enough for a laptop and for CI.</p>
+</div>
+
+<!-- =================================================================== -->
+
+<h1 id="ch-repo" data-toc="A tour of the repository" data-num="4"><span class="num">CHAPTER 4</span>A tour of the repository</h1>
+<p class="lede">Where each part of the system lives. Useful when an examiner says "show me the code for that".</p>
+
+<pre>subscriber-dropout-detection/
+├── src/
+│   ├── config/settings.py        every setting, overridable by SDD_* environment variables
+│   ├── data/external/            KKBox loader: contract.py (validation), kkbox.py (mapping),
+│   │                             ingest.py (orphan removal, writing)
+│   ├── warehouse/                schema.py (5 event tables), database.py (engine, helpers),
+│   │                             simulate.py (synthetic data), to_postgres.py (bulk copy)
+│   ├── features/                 point_in_time.py (leak-free snapshots),
+│   │                             build_features.py (derived features, preprocessing)
+│   ├── models/                   train.py (training entry point), costs.py (cost model,
+│   │                             capacity), calibration.py, evaluate.py
+│   ├── evaluation/               explain.py (SHAP), fairness.py (group audit)
+│   ├── registry/                 tracking.py (MLflow logging), promote.py (the gate)
+│   ├── api/                      main.py (routes), schemas.py (validation), service.py
+│   │                             (loading, prediction, shadow), static/index.html (dashboard)
+│   ├── streaming/                runner.py, processor.py (dead-lettering), kafka.py, produce.py
+│   ├── monitoring/               drift.py (PSI), profile.py (reference profile),
+│   │                             prometheus.py (metrics), tracker.py (rolling window)
+│   ├── orchestration/            pipeline.py (steps), flows.py (Prefect flows)
+│   └── demo.py                   make demo / demo-check / demo-down
+├── tests/                        434 tests in 15 files
+├── deploy/
+│   ├── prometheus/               prometheus.yml (scrape targets), alerts.yml (15 rules)
+│   ├── alertmanager/             alertmanager.yml (routing, inhibition)
+│   ├── grafana/                  provisioned datasource + dashboard JSON
+│   ├── kubernetes/               api.yaml, stream-scorer.yaml, config.yaml
+│   └── postgres/init/            creates MLflow's own database
+├── docs/viva/                    architecture, demo script, questions, slides, this book
+├── .github/workflows/ci.yml      7 CI/CD jobs
+├── docker-compose.yml            8 services
+├── Dockerfile                    multi-stage image, non-root user
+├── dvc.yaml, params.yaml         pipeline stages and every tunable parameter
+├── constraints-model.txt         model libraries pinned to the training versions
+├── Makefile                      every workflow as one command
+└── DEMO_QUERIES_POSTGRES.sql     the eight demo queries</pre>
+
+<h2>The most important files</h2>
+<table>
+  <thead><tr><th>File</th><th>Why it matters</th></tr></thead>
+  <tr><td><code>src/features/point_in_time.py</code></td><td>The leakage defence. If this is wrong, every metric the project reports is wrong.</td></tr>
+  <tr><td><code>src/registry/promote.py</code></td><td>The gate: the only way a model reaches production.</td></tr>
+  <tr><td><code>src/api/service.py</code></td><td>Model loading, prediction, risk bands, explanations and shadow scoring.</td></tr>
+  <tr><td><code>src/monitoring/drift.py</code></td><td>PSI drift detection.</td></tr>
+  <tr><td><code>src/orchestration/flows.py</code></td><td>The pipeline as Prefect flows.</td></tr>
+  <tr><td><code>.github/workflows/ci.yml</code></td><td>What "tested" means in this project.</td></tr>
+</table>

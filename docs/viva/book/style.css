@@ -1,0 +1,156 @@
+/* Print typesetting for the project book. Rendered by headless Chrome. */
+
+@page {
+  size: A4;
+  margin: 22mm 20mm 24mm 20mm;
+  @bottom-center {
+    content: counter(page);
+    font: 9pt "Helvetica Neue", Arial, sans-serif;
+    color: #7a8396;
+  }
+  @top-right {
+    content: "Subscriber Dropout Detection";
+    font: 8pt "Helvetica Neue", Arial, sans-serif;
+    color: #9aa3b0;
+    letter-spacing: 0.08em;
+  }
+}
+@page cover { margin: 0; @bottom-center { content: none; } @top-right { content: none; } }
+@page toc { @top-right { content: none; } }
+
+:root {
+  --ink: #1b1f27;
+  --soft: #4a5261;
+  --muted: #7a8396;
+  --line: #d9dde3;
+  --tint: #f3f6f8;
+  --accent: #0f766e;
+  --accent-tint: #e6f4f2;
+  --warn: #b45309;
+  --warn-tint: #fdf3e6;
+  --bad: #b42318;
+}
+
+html { font-size: 10.6pt; }
+body {
+  font-family: Georgia, "Times New Roman", serif;
+  color: var(--ink);
+  line-height: 1.55;
+  margin: 0;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+h1, h2, h3, h4, .kicker, th, .cover, .toc, .qa-q, .tag, figcaption, .callout-title {
+  font-family: "Helvetica Neue", Arial, sans-serif;
+}
+
+/* ---------------- cover ---------------- */
+.cover {
+  page: cover;
+  height: 297mm;
+  box-sizing: border-box;
+  padding: 58mm 22mm 20mm;
+  background: #0b0d11;
+  color: #f4f6f8;
+  break-after: page;
+  position: relative;
+}
+.cover .eyebrow { color: #3ed6c0; font-size: 10pt; letter-spacing: 0.3em; font-weight: 700; }
+.cover h1 { break-before: avoid; font-family: Georgia, serif; font-weight: 400; font-size: 40pt; line-height: 1.1; margin: 10mm 0 6mm; color: #fff; }
+.cover .sub { font-size: 14pt; color: #a9b2be; max-width: 150mm; line-height: 1.45; }
+.cover .stats { display: flex; gap: 14mm; margin-top: 30mm; }
+.cover .stats b { display: block; font-family: Georgia, serif; font-weight: 400; font-size: 26pt; color: #e8dfce; }
+.cover .stats span { font-size: 9pt; color: #7a8396; }
+/* The in-book .stats boxes are light; on the dark cover they must not be. */
+.cover .stats div { flex: none; background: transparent; padding: 0; border-radius: 0; }
+.cover .foot { position: absolute; bottom: 20mm; left: 22mm; right: 22mm; font-size: 9pt; color: #7a8396; border-top: 1px solid #262b33; padding-top: 5mm; }
+
+/* ---------------- contents ---------------- */
+.toc { page: toc; break-after: page; }
+.toc h1 { break-before: auto; }
+.toc ol { list-style: none; padding: 0; margin: 0; }
+.toc li.part { margin: 7mm 0 2mm; font-weight: 700; color: var(--accent); font-size: 10pt; letter-spacing: 0.12em; text-transform: uppercase; }
+.toc li.ch { padding: 1.4mm 0; border-bottom: 1px dotted var(--line); font-size: 10.5pt; }
+.toc li.ch a { color: var(--ink); text-decoration: none; }
+.toc li.ch .n { display: inline-block; width: 11mm; color: var(--muted); }
+
+/* ---------------- headings ---------------- */
+h1 {
+  break-before: page;
+  font-size: 23pt;
+  font-weight: 700;
+  margin: 0 0 3mm;
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+}
+h1 .num { display: block; font-size: 10pt; color: var(--accent); letter-spacing: 0.25em; font-weight: 700; margin-bottom: 3mm; }
+.part-title { break-before: page; break-after: page; padding-top: 70mm; }
+.part-title .kicker { color: var(--accent); font-size: 11pt; letter-spacing: 0.3em; font-weight: 700; }
+.part-title h1 { break-before: avoid; font-size: 32pt; margin-top: 4mm; }
+.part-title p { color: var(--soft); max-width: 140mm; font-size: 12pt; }
+.lede { font-size: 12pt; color: var(--soft); margin: 0 0 7mm; }
+h2 { font-size: 14pt; margin: 8mm 0 2mm; break-after: avoid; color: var(--ink); }
+h3 { font-size: 11pt; margin: 5mm 0 1.5mm; break-after: avoid; color: var(--accent); }
+p { margin: 0 0 3mm; orphans: 3; widows: 3; }
+ul, ol { margin: 0 0 3mm; padding-left: 6mm; }
+li { margin-bottom: 1.2mm; }
+strong { color: #0e1116; }
+code, .mono { font-family: Menlo, "Courier New", monospace; font-size: 0.86em; background: var(--tint); padding: 0.2mm 1mm; border-radius: 1mm; }
+pre {
+  font-family: Menlo, "Courier New", monospace; font-size: 8.4pt; line-height: 1.45;
+  background: var(--tint); border: 1px solid var(--line); border-radius: 2mm;
+  padding: 3mm 4mm; margin: 2mm 0 4mm; white-space: pre-wrap; break-inside: avoid;
+}
+pre code { background: none; padding: 0; font-size: inherit; }
+
+/* ---------------- tables ---------------- */
+table { width: 100%; border-collapse: collapse; margin: 2mm 0 5mm; font-size: 9.3pt; break-inside: auto; }
+thead { display: table-header-group; }
+tr { break-inside: avoid; }
+th { text-align: left; font-size: 8.4pt; text-transform: uppercase; letter-spacing: 0.06em; color: var(--soft); border-bottom: 1.5px solid var(--ink); padding: 1.8mm 2mm; }
+td { border-bottom: 1px solid var(--line); padding: 1.8mm 2mm; vertical-align: top; }
+td:first-child { font-weight: 600; }
+table.plain td:first-child { font-weight: normal; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+
+/* ---------------- callouts ---------------- */
+.callout { border-radius: 2mm; padding: 3.5mm 4.5mm; margin: 3mm 0 5mm; background: var(--accent-tint); break-inside: avoid; }
+.callout.warn { background: var(--warn-tint); }
+.callout.say { background: #eef1f6; }
+.callout-title { font-size: 8.6pt; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--accent); margin-bottom: 1.5mm; }
+.callout.warn .callout-title { color: var(--warn); }
+.callout.say .callout-title { color: #3b4b6b; }
+.callout p:last-child, .callout ul:last-child { margin-bottom: 0; }
+
+/* stat row */
+.stats { display: flex; gap: 4mm; margin: 3mm 0 6mm; break-inside: avoid; }
+.stats div { flex: 1; background: var(--tint); border-radius: 2mm; padding: 3mm 4mm; }
+.stats b { display: block; font-family: Georgia, serif; font-weight: 400; font-size: 20pt; color: var(--accent); line-height: 1.1; }
+.stats span { font-family: "Helvetica Neue", Arial, sans-serif; font-size: 8.4pt; color: var(--soft); }
+
+/* figures */
+figure { margin: 3mm 0 6mm; break-inside: avoid; text-align: center; }
+figure img { max-width: 100%; border: 1px solid var(--line); border-radius: 1.5mm; }
+figure.wide img { width: 100%; }
+figcaption { font-size: 8.6pt; color: var(--muted); margin-top: 2mm; }
+
+/* ---------------- Q&A bank ---------------- */
+.qa-section { counter-reset: none; }
+.qa { break-inside: avoid; margin: 0 0 4.5mm; padding-bottom: 3.5mm; border-bottom: 1px solid var(--line); }
+.qa-q { font-weight: 700; font-size: 10.4pt; margin-bottom: 1.4mm; color: #0e1116; }
+.qa-q::before { counter-increment: q; content: "Q" counter(q) "  "; color: var(--accent); }
+body { counter-reset: q; }
+.qa p, .qa ul { margin-bottom: 1.6mm; }
+.tag { display: inline-block; font-size: 7.4pt; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; padding: 0.3mm 1.6mm; border-radius: 1mm; margin-left: 1.5mm; vertical-align: 1px; }
+.tag.core { background: var(--accent-tint); color: var(--accent); }
+.tag.tricky { background: var(--warn-tint); color: var(--warn); }
+.followup { font-size: 9.4pt; color: var(--soft); }
+.followup::before { content: "If they push: "; font-weight: 700; font-family: "Helvetica Neue", Arial, sans-serif; font-size: 8.4pt; color: var(--warn); }
+
+.two { columns: 2; column-gap: 8mm; }
+.two > table { break-inside: avoid; }
+dl.gloss dt { break-after: avoid; }
+dl.gloss dd { break-inside: avoid; }
+dl.gloss dt { font-family: "Helvetica Neue", Arial, sans-serif; font-weight: 700; font-size: 9.6pt; margin-top: 2.5mm; }
+dl.gloss dd { margin: 0.5mm 0 0 0; font-size: 9.6pt; color: var(--soft); }

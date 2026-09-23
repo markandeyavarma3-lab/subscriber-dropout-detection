@@ -1,0 +1,231 @@
+<h1 id="ch-serving" data-toc="Serving: the API, explanations and the dashboard" data-num="9"><span class="num">CHAPTER 9</span>Serving: the API, explanations and the dashboard</h1>
+<p class="lede">The champion model behind an HTTP API that validates every input, explains every answer, and degrades gracefully instead of failing.</p>
+
+<h2>The API</h2>
+<p>Built with <strong>FastAPI</strong> (<code>src/api/main.py</code>), served by Uvicorn on port 8000. Interactive documentation is generated automatically at <code>/docs</code>.</p>
+<table>
+  <thead><tr><th>Endpoint</th><th>Purpose</th></tr></thead>
+  <tr><td><code>GET /</code></td><td>The dashboard (a single self-contained HTML page)</td></tr>
+  <tr><td><code>GET /health</code></td><td>Liveness: is the process up? Always cheap; used by Docker and Kubernetes</td></tr>
+  <tr><td><code>GET /ready</code></td><td>Readiness: is a model loaded and able to serve?</td></tr>
+  <tr><td><code>GET /model-info</code></td><td>Which model is serving: name, training date, threshold, required inputs, library versions, source</td></tr>
+  <tr><td><code>POST /predict</code></td><td>Score one subscriber, with an explanation</td></tr>
+  <tr><td><code>POST /predict/batch</code></td><td>Score 1 to 1,000 subscribers in one call</td></tr>
+  <tr><td><code>GET /metrics</code></td><td>A JSON summary of recent traffic: counts, flagged rate, score percentiles, shift from training</td></tr>
+  <tr><td><code>GET /metrics/prometheus</code></td><td>The same, in Prometheus's text format, for scraping</td></tr>
+  <tr><td><code>POST /monitoring/drift</code></td><td>Compare a sample (up to 50,000 rows) against the training distribution with PSI</td></tr>
+  <tr><td><code>GET /monitoring/shadow</code></td><td>The champion-vs-challenger shadow report</td></tr>
+</table>
+
+<h3>Liveness vs readiness</h3>
+<p>Two different questions. <strong>Liveness</strong> (<code>/health</code>): is the process running? If not, restart it. <strong>Readiness</strong> (<code>/ready</code>): can it serve right now? If not, stop sending it traffic, but don't kill it. A service with no model is alive but not ready. It answers <code>/health</code>, and <code>/predict</code> returns <strong>503 Service Unavailable</strong> with a clear message rather than crashing with a 500. Kubernetes uses exactly these two endpoints for its probes.</p>
+
+<h3>Input validation</h3>
+<p>Every request is validated by <strong>Pydantic</strong> before it reaches the model: required fields present, correct types, values in range (for example, fees 0–10,000), plan type normalised. There's also a cross-field rule: <strong>last activity can't be longer ago than the subscription's tenure</strong>. Invalid input gets a <strong>422</strong> response naming the field and the problem, never a wrong prediction.</p>
+
+<h3>What a prediction returns</h3>
+<pre>{
+  "dropout_probability": 0.6037,
+  "predicted_label": 1,
+  "risk_level": "high",
+  "threshold": 0.05,
+  "explanation": "High dropout risk (60%): relies on discounts (2 in the last 6 months), ...",
+  "top_risk_factors": ["relies on discounts ...", "auto-renew enabled", ...],
+  "explanation_method": "shap",
+  "attributions": [ { "feature": "discounts", "contribution": 3.062,
+                      "direction": "increases_risk", "description": "..." }, ... ]
+}</pre>
+
+<h3>Risk bands</h3>
+<table class="plain">
+  <tr><td><strong>low</strong></td><td>below the decision threshold (5%): not flagged</td></tr>
+  <tr><td><strong>medium</strong></td><td>from 5% up to halfway between the threshold and 100%, about 52.5%</td></tr>
+  <tr><td><strong>high</strong></td><td>above that</td></tr>
+</table>
+
+<h2>Explanations with SHAP</h2>
+<p><strong>SHAP</strong> (SHapley Additive exPlanations) comes from cooperative game theory. It asks how much each feature contributed to <em>this</em> prediction, compared with the average prediction. For tree models, SHAP's TreeExplainer computes the values <strong>exactly</strong>, not by approximation.</p>
+<p>The key property is <strong>additivity</strong>: the average prediction plus every feature's contribution equals exactly what the model predicted (in log-odds, the scale the model works in internally). A test in the suite checks this for every row. So the explanation <strong>can't disagree with the score</strong>, unlike a rule-based explanation that describes the input without knowing what the model did.</p>
+<p>Raw SHAP values are per model column, and some concepts span several columns (e.g. <code>tenure_days</code> and <code>tenure_months</code>). The service <strong>sums them into ten concepts</strong>: recency, engagement, tenure, payments, support, friction, discounts, price, auto-renew and plan. Summing is valid because Shapley values are additive. The strongest concepts, by absolute size, become the explanation. The wording states the <em>actual</em> input: an earlier version said "auto-renew enabled" for a subscriber who had it <em>off</em>, because it followed the direction of the effect rather than the value. That's fixed and tested.</p>
+<p>If SHAP isn't available or fails, the prediction is still returned, with a rule-based explanation and <code>"explanation_method": "rules"</code>, so a client always knows which kind it got. <strong>An explanation is a feature of a prediction, never a precondition for one.</strong></p>
+
+<h2>The dashboard</h2>
+<p>A single self-contained page (<code>src/api/static/index.html</code>, no build step) with four tabs, each reachable by link (<code>#score</code>, <code>#live</code>, <code>#model</code>, <code>#monitoring</code>):</p>
+<table>
+  <thead><tr><th>Tab</th><th>What it shows</th></tr></thead>
+  <tr><td>Score</td><td>A form (sliders and inputs, with three presets), the probability, risk band, distance from the threshold, the SHAP drivers, and "What would change it"</td></tr>
+  <tr><td>Live traffic</td><td>Predictions served, flagged rate, risk mix, score spread, and live traffic against the training reference</td></tr>
+  <tr><td>Model</td><td>Provenance, library versions, required inputs, and notes on the two surprising behaviours</td></tr>
+  <tr><td>Monitoring</td><td>The shadow-scoring status, and a live drift test (below)</td></tr>
+</table>
+
+<figure>
+  <img src="/docs/viva/screenshots/dashboard-score.png" alt="Dashboard score tab" style="width:88%">
+  <figcaption>Figure 9.1: The Score tab, on the "at-risk" preset: 60%, high risk, with SHAP drivers and counterfactual levers.</figcaption>
+</figure>
+
+<h3>The three presets</h3>
+<table>
+  <thead><tr><th>Preset</th><th class="num">Probability</th><th>Band</th></tr></thead>
+  <tr><td>At-risk</td><td class="num">60.37%</td><td>high</td></tr>
+  <tr><td>Borderline</td><td class="num">5.01%</td><td>medium (a hair over the threshold)</td></tr>
+  <tr><td>Healthy</td><td class="num">0.05%</td><td>low</td></tr>
+</table>
+
+<h3>"What would change it": counterfactual levers</h3>
+<p>SHAP says what the model leaned on. It doesn't say what a retention team could <em>do</em>. So the dashboard sends real second requests to the model, each with <strong>one field changed</strong>, and shows the new probability. For the at-risk preset:</p>
+<table>
+  <thead><tr><th>Lever</th><th class="num">60.4% becomes</th></tr></thead>
+  <tr><td>Turn auto-renew off</td><td class="num">0.24%</td></tr>
+  <tr><td>Stop discounting</td><td class="num">0.79%</td></tr>
+  <tr><td>Bring them back this week</td><td class="num">31%</td></tr>
+  <tr><td>Double their listening</td><td class="num">53%</td></tr>
+</table>
+<p>These are the model's own answers, not inferences. The two fields that are always zero in KKBox (tickets, payment failures) are deliberately never offered as levers, because they'd promise an action that changes nothing.</p>
+
+<h3>The live drift test</h3>
+<p>The Monitoring tab builds 400 plausible subscribers from the presets, then a second "disengaged" copy: sessions cut to near zero and last activity pushed back 45 days. It sends both to <code>/monitoring/drift</code> and compares. The detector ranks <strong>exactly the two features that were changed</strong> at the top, while the other seven move by less than 0.5. It's an instrument test: proof the detector responds to a change we control.</p>
+
+<div class="callout say">
+  <div class="callout-title">Say this</div>
+  <p>"The API validates every input and returns a probability, a risk band and the reasons. The reasons are SHAP values, which add up exactly to the prediction, so the explanation can't contradict the score. The dashboard also asks the model what would change the outcome: each lever is a real second prediction with one field changed. And if the model or the explainer fails, the service degrades: a 503 or a rule-based explanation, never a crash."</p>
+</div>
+
+<!-- =================================================================== -->
+
+<h1 id="ch-streaming" data-toc="Streaming inference with Kafka" data-num="10"><span class="num">CHAPTER 10</span>Streaming inference with Kafka</h1>
+<p class="lede">Scoring events as they happen, without losing data and without letting one bad message stop the pipeline.</p>
+
+<h2>Why streaming as well as an API</h2>
+<p>The API answers when asked. But subscriber events (a payment, a plan change, a quiet week) happen continuously, and the business wants a fresh risk score when they do, not only when someone remembers to ask. A stream scorer consumes events as they arrive and publishes scores for other systems to act on.</p>
+
+<h2>The setup</h2>
+<table>
+  <thead><tr><th>Piece</th><th>Value</th></tr></thead>
+  <tr><td>Broker</td><td>Redpanda (Kafka-compatible), one container, port 19092</td></tr>
+  <tr><td>Input topic</td><td><code>subscriber-events</code></td></tr>
+  <tr><td>Output topic</td><td><code>subscriber-scores</code></td></tr>
+  <tr><td>Dead-letter topic</td><td><code>subscriber-scores-dlq</code></td></tr>
+  <tr><td>Consumer group</td><td><code>subscriber-scorer</code></td></tr>
+  <tr><td>Batch size</td><td>up to 200 messages per poll</td></tr>
+  <tr><td>Metrics</td><td>Prometheus endpoint on port 8001</td></tr>
+</table>
+
+<h2>The consume → score → produce loop</h2>
+<ol>
+  <li>Poll a batch of up to 200 messages from <code>subscriber-events</code>.</li>
+  <li>Parse and validate each one with the same schema the API uses.</li>
+  <li>Score the valid ones in a single batch call to the same prediction code the API uses.</li>
+  <li>Publish each score to <code>subscriber-scores</code>, keyed by subscriber (so one subscriber's scores stay in order in one partition).</li>
+  <li>Send each invalid message to <code>subscriber-scores-dlq</code>, with the <strong>reason</strong> and the <strong>original payload</strong> kept verbatim.</li>
+  <li>Wait for the broker to confirm the writes (<code>acks=all</code>), and <strong>only then</strong> commit the input offsets.</li>
+</ol>
+
+<h2>Delivery guarantee: at-least-once</h2>
+<p>Offsets are committed <strong>only after</strong> the scores are safely written. If the scorer crashes between producing and committing, it re-reads those messages on restart and scores them again: a duplicate, never a loss. That's <strong>at-least-once</strong> delivery. Auto-commit is switched off on purpose: it would acknowledge messages whose scores never reached the output topic, which is the one way this design could lose data. Duplicates are harmless here, because re-scoring the same subscriber gives the same score.</p>
+
+<h2>The dead-letter queue</h2>
+<p>A <strong>poison message</strong> (malformed JSON, a missing field, an impossible value) would crash a naive consumer. Worse, the consumer would restart, read the same message again and crash again: the classic <strong>poison-pill loop</strong> that takes a pipeline down for good. Here a bad message goes to the dead-letter topic with the reason attached, and the batch carries on. Every message ends up in exactly one place: scored, or dead-lettered with a reason.</p>
+<p>One exception is deliberate. If the <em>model</em> itself is unavailable, messages are <strong>not</strong> dead-lettered, because that would throw away perfectly good data over a temporary problem. The batch fails, offsets aren't committed, and the messages are retried.</p>
+<p>CI proves all of this: the streaming job sends deliberately broken messages and checks they land in the dead-letter topic while the good ones are scored.</p>
+
+<div class="callout say">
+  <div class="callout-title">Say this</div>
+  <p>"The stream scorer reads events from Kafka, scores them, and writes the scores back. Offsets are committed only after the scores are safely written, so it's at-least-once: a crash causes a duplicate, never a loss. A malformed message goes to a dead-letter topic with the reason, so one bad message can't take the pipeline down. CI sends poison messages to prove it."</p>
+</div>
+
+<!-- =================================================================== -->
+
+<h1 id="ch-monitoring" data-toc="Monitoring, drift and alerting" data-num="11"><span class="num">CHAPTER 11</span>Monitoring, drift and alerting</h1>
+<p class="lede">A model that was good at launch can quietly get worse. This chapter covers how the system notices.</p>
+
+<h2>Why models need monitoring</h2>
+<p>Ordinary software fails loudly: it crashes or returns errors. A model fails <strong>quietly</strong>. It keeps returning confident probabilities while the world it was trained on changes underneath it: prices change, a competitor launches, listening habits shift. Nothing errors. The predictions just get steadily worse. Monitoring exists to make that visible.</p>
+
+<h2>The monitoring stack</h2>
+<table>
+  <thead><tr><th>Component</th><th>Role</th></tr></thead>
+  <tr><td>prometheus-client</td><td>The API and the stream scorer expose counters, histograms and gauges</td></tr>
+  <tr><td>Prometheus</td><td><em>Pulls</em> (scrapes) those metrics every 15 seconds, stores the history, and evaluates the alert rules</td></tr>
+  <tr><td>Alertmanager</td><td>Receives firing alerts, groups them, routes them by severity, and suppresses redundant ones</td></tr>
+  <tr><td>Grafana</td><td>The dashboard, provisioned from a JSON file in the repository</td></tr>
+</table>
+<p>Prometheus <strong>pulls</strong> rather than having services push. The monitoring system decides what and how often to collect, and a service that stops answering is itself a signal: its <code>up</code> metric drops to 0.</p>
+
+<h2>What is measured</h2>
+<ul>
+  <li><strong>Traffic:</strong> predictions per second by risk band and by component (API or stream), and the score distribution (median, p90, p99).</li>
+  <li><strong>Serving state:</strong> model loaded, which source it was served from, the decision threshold, flagged rate, and the shift of the live mean score from the training mean.</li>
+  <li><strong>Pipeline:</strong> time since the last run, whether it needs attention, the last promotion decision, the drift verdict, and PSI per feature.</li>
+  <li><strong>Decision quality:</strong> calibration error, fairness pass/fail and ratios, savings available, and capacity.</li>
+  <li><strong>Shadow scoring:</strong> active or not, agreement rate, outreach change, divergence, latency and errors.</li>
+</ul>
+
+<h2>Drift detection with PSI</h2>
+<p>The <strong>Population Stability Index</strong> compares two distributions of one feature: training ("expected") and live ("actual").</p>
+<ol>
+  <li>Split the training values into 10 bins (by quantile, so each holds about 10% of training data). The bin edges are saved in <code>reference_profile.json</code> when the model trains.</li>
+  <li>Put the live values into the <em>same</em> bins.</li>
+  <li>For each bin, compare the live share <em>a</em> with the training share <em>e</em>, then add up the terms:</li>
+</ol>
+<pre>PSI = Σ (a − e) × ln(a / e)</pre>
+<p>(Shares are clipped at a tiny positive number first, so an empty bin can't cause a division by zero.) If the distributions are identical, every term is zero. The more the live data has moved, the larger PSI grows. Categorical features (plan type) use their categories as bins. The prediction itself is also checked, so a shift in the model's <em>output</em> is caught even when no single input moved much.</p>
+<table>
+  <thead><tr><th class="num">PSI</th><th>Verdict</th><th>Meaning</th></tr></thead>
+  <tr><td class="num">&lt; 0.10</td><td>stable</td><td>No meaningful change</td></tr>
+  <tr><td class="num">0.10 – 0.25</td><td>moderate</td><td>Worth watching</td></tr>
+  <tr><td class="num">&gt; 0.25</td><td>significant</td><td>The population has shifted; consider retraining</td></tr>
+</table>
+<p>Samples under 100 rows are flagged as too small to trust. PSI is noisy on tiny samples, and the response says so rather than reporting a confident verdict.</p>
+
+<h3>The real result</h3>
+<p>The pipeline's drift step was run on the <strong>latest real month (February 2017)</strong>, read from Postgres, against the training distribution (November–December 2016): 7,614 subscribers. Verdict: <strong>stable</strong>. Every feature's PSI was below 0.06: last activity 0.058, tenure 0.032, sessions 0.007, fee 0.003, plan 0.002. That's a real finding: KKBox's subscriber base didn't shift in those months. The dashboard's drift test is how you show the detector <em>does</em> fire when something changes.</p>
+
+<h2>The alert rules</h2>
+<p>Fifteen rules in <code>deploy/prometheus/alerts.yml</code>. The guiding principle: <strong>alert on what a human would actually act on</strong>. Paging someone for trivia teaches them to ignore the pager.</p>
+<table>
+  <thead><tr><th>Alert</th><th>Severity</th><th>Fires when</th></tr></thead>
+  <tr><td>ModelNotLoaded</td><td>critical</td><td>The API is running without a model (5 min)</td></tr>
+  <tr><td>ApiDown</td><td>critical</td><td>Prometheus can't scrape the API (2 min)</td></tr>
+  <tr><td>StreamScorerDown</td><td>critical</td><td>The stream scorer stops answering (5 min)</td></tr>
+  <tr><td>AlertmanagerDown</td><td>critical</td><td>The alert router itself is down (5 min)</td></tr>
+  <tr><td>FlaggedRateSpike</td><td>warning</td><td>More than half of scored subscribers are flagged (15 min)</td></tr>
+  <tr><td>ScoreDistributionShift</td><td>warning</td><td>Live mean score differs from training by over 0.15 (30 min)</td></tr>
+  <tr><td>SignificantDrift</td><td>warning</td><td>The last drift check was "significant" (10 min)</td></tr>
+  <tr><td>PipelineStale</td><td>warning</td><td>No pipeline run in over 36 hours</td></tr>
+  <tr><td>FairnessDisparity</td><td>warning</td><td>The fairness audit failed (30 min). <strong>Firing now, correctly.</strong></td></tr>
+  <tr><td>ShadowChallengerErroring</td><td>warning</td><td>The challenger failed to score live traffic</td></tr>
+  <tr><td>PipelineNeedsAttention</td><td>info</td><td>A challenger was rejected, or drift/fairness flagged (1 h)</td></tr>
+  <tr><td>RetentionCapacityBinding</td><td>info</td><td>The outreach budget, not the model, limits retention (6 h)</td></tr>
+  <tr><td>OutreachVolumeUnaffordable</td><td>info</td><td>The cost-optimal policy implies a huge campaign (6 h)</td></tr>
+  <tr><td>ShadowLargeBehaviourChange</td><td>info</td><td>Champion and challenger disagree on most decisions (30 min)</td></tr>
+  <tr><td>ShadowOutreachVolumeShift</td><td>info</td><td>Promoting would change outreach volume sharply (30 min)</td></tr>
+</table>
+<p>The duration in brackets is how long the condition must hold before the alert fires. It filters out brief blips.</p>
+
+<h2>Alertmanager: routing and inhibition</h2>
+<ul>
+  <li><strong>Routing by severity:</strong> <em>critical</em> goes to an on-call receiver immediately and repeats hourly; <em>warning</em> goes to a review receiver and repeats every 12 hours; <em>info</em> is recorded and repeats daily.</li>
+  <li><strong>Grouping:</strong> alerts are grouped by name and component, so ten related alerts become one notification.</li>
+  <li><strong>Inhibition:</strong> if the API is down, warnings about it are suppressed, since they're symptoms of the same outage. If no model is loaded, alerts about the score distribution are suppressed.</li>
+  <li><strong>No credentials in the repo:</strong> the receivers ship empty. A test fails the build if anything credential-shaped (webhook URLs, routing keys) appears in the config.</li>
+</ul>
+
+<h2>Grafana</h2>
+<figure>
+  <img src="/docs/viva/screenshots/grafana.png" alt="Grafana dashboard" style="width:62%">
+  <figcaption>Figure 11.1: The Grafana dashboard. From the top: serving state, traffic, drift and the pipeline, decision quality, shadow scoring, capacity.</figcaption>
+</figure>
+
+<h2>What looking at it found</h2>
+<p>With every automated check passing, a screenshot of Grafana showed that things were wrong:</p>
+<ul>
+  <li><strong>Two values in every panel</strong> ("LOADED | NO MODEL"). The stream scorer shares the API's metric registry but never updates the API's state gauges, so it exported their defaults. Worse, the <strong>alert rules matched those zeros</strong>: <em>PipelineStale</em> was firing and <em>ModelNotLoaded</em> was about to, on a healthy system. Fix: every API-state query is scoped to <code>job="subscriber-api"</code>, and a test fails if one isn't.</li>
+  <li><strong>"Last promotion: REJECTED"</strong> for a run that trained nothing, and <strong>"0% agreement"</strong> with no challenger. A gauge's default 0 is a <em>claim</em>. These now start as "no value" (NaN) and read "NOT RUN" and "no challenger".</li>
+  <li><strong>Two sections drawn on top of each other</strong>, plus a duplicated section. Re-laid out, with a test that no two panels overlap.</li>
+</ul>
+
+<div class="callout say">
+  <div class="callout-title">Say this</div>
+  <p>"Models fail quietly, so the system watches them. Prometheus scrapes metrics every 15 seconds and evaluates 15 alert rules; Alertmanager routes them by severity and suppresses symptoms of the same outage. Drift is measured with PSI against the training distribution: on real February 2017 data every feature is under 0.06, so stable. And the one alert firing, fairness, is real."</p>
+</div>

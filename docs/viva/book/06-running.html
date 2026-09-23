@@ -1,0 +1,139 @@
+<h1 id="ch-running" data-toc="Running the demo" data-num="15"><span class="num">CHAPTER 15</span>Running the demo</h1>
+<p class="lede">Everything needed to bring the system up on the Mac, prove it's healthy, and show it.</p>
+
+<h2>The four commands</h2>
+<table>
+  <thead><tr><th>Command</th><th>When</th><th>What it does</th></tr></thead>
+  <tr><td><code>make demo-prepare</code></td><td>Once, the day before</td><td>Builds the Docker image and writes the drift report, so nothing slow happens on the day</td></tr>
+  <tr><td><code>make demo</code></td><td>Before presenting</td><td>Starts Docker if needed, starts the services, waits until each one is <em>really</em> serving, starts the MLflow UI, sends warm-up traffic, prints every URL</td></tr>
+  <tr><td><code>make demo-check</code></td><td>Straight after</td><td>The pre-demo checklist: 19 checks, green or red</td></tr>
+  <tr><td><code>make demo-down</code></td><td>Afterwards</td><td>Stops everything and keeps all data (never deletes volumes)</td></tr>
+</table>
+<p><code>make demo</code> sends warm-up traffic (300 predictions through the batch endpoint and 60 events onto the Kafka topic) because a freshly started Prometheus and Grafana show "No data" everywhere, which looks broken to anyone who doesn't know why.</p>
+
+<h2>The 19 checks</h2>
+<table>
+  <thead><tr><th>Check</th><th>Why it matters</th></tr></thead>
+  <tr><td>6 × each web UI responds</td><td>Dashboard, API docs, MLflow, Grafana, Prometheus, Alertmanager</td></tr>
+  <tr><td>Serving the promoted KKBox model</td><td>The served model's training date matches the real artifact, not the synthetic fallback</td></tr>
+  <tr><td>Container libraries match training</td><td>scikit-learn, pandas and NumPy in the container equal the model's recorded versions</td></tr>
+  <tr><td>3 × preset scores</td><td>At-risk 0.6037 high, healthy 0.0005 low, borderline 0.0501 medium. If the model changed, these move</td></tr>
+  <tr><td>5 × Postgres row counts</td><td>Every warehouse table holds exactly the rows it should</td></tr>
+  <tr><td>Drift report present</td><td>Grafana's drift panels have real data</td></tr>
+  <tr><td>Prometheus scraping every target</td><td>API, stream scorer, Alertmanager and Prometheus itself all up</td></tr>
+  <tr><td>Latest CI run on main is green</td><td>Because the demo sends the examiner to GitHub Actions</td></tr>
+</table>
+
+<h2>The addresses</h2>
+<table class="plain">
+  <tr><td><strong>Dashboard</strong></td><td><code>http://127.0.0.1:8000</code></td></tr>
+  <tr><td><strong>API docs</strong></td><td><code>http://127.0.0.1:8000/docs</code></td></tr>
+  <tr><td><strong>MLflow</strong></td><td><code>http://127.0.0.1:5050</code></td></tr>
+  <tr><td><strong>Grafana</strong></td><td><code>http://127.0.0.1:3000</code> (viewing needs no login)</td></tr>
+  <tr><td><strong>Prometheus</strong></td><td><code>http://127.0.0.1:9090</code> (alerts at <code>/alerts</code>)</td></tr>
+  <tr><td><strong>Alertmanager</strong></td><td><code>http://127.0.0.1:9093</code></td></tr>
+  <tr><td><strong>Postgres</strong></td><td><code>localhost:5432</code>, database <code>warehouse</code>, user and password <code>subscriber</code></td></tr>
+</table>
+
+<h2>Showing the database in TablePlus</h2>
+<ol>
+  <li>Download TablePlus <strong>only from tableplus.com</strong>, open the <code>.dmg</code>, and drag it into Applications. The free version never expires; it limits you to 2 tabs and 2 windows.</li>
+  <li><strong>Create a new connection → PostgreSQL</strong>. Host <code>127.0.0.1</code>, port <code>5432</code>, user <code>subscriber</code>, password <code>subscriber</code>, database <code>warehouse</code>. Click <strong>Test</strong> (the stack must be running), then <strong>Save</strong> and <strong>Connect</strong>.</li>
+  <li>The sidebar shows six tables: the five warehouse tables and <code>warehouse_summary</code>.</li>
+  <li>Press <strong>⌘E</strong> for a SQL tab, paste one block from <code>DEMO_QUERIES_POSTGRES.sql</code>, put the cursor inside it, and press <strong>⌘↵</strong> to run just that query.</li>
+</ol>
+
+<h3>The eight demo queries</h3>
+<table>
+  <thead><tr><th>#</th><th>Query</th><th>What it shows</th></tr></thead>
+  <tr><td>1</td><td>Warehouse summary</td><td>82.8 million rows across the tables</td></tr>
+  <tr><td>2</td><td>Subscribers</td><td>44-character anonymised IDs</td></tr>
+  <tr><td>3</td><td>The event log</td><td>Timestamped lifecycle events</td></tr>
+  <tr><td>4</td><td>One subscriber's history</td><td>Events, payments and sessions for one person, assembled from three tables in milliseconds</td></tr>
+  <tr><td>5</td><td>The cleaning log</td><td>The five cleaning decisions and why</td></tr>
+  <tr><td>6</td><td>Plan mix</td><td>Events, average fee and auto-renew by plan</td></tr>
+  <tr><td>7</td><td>Lifecycle breakdown</td><td>Signups, renewals, cancellations</td></tr>
+  <tr><td>8</td><td>Acquisition channels</td><td>The opaque <code>via_n</code> codes, carried through honestly</td></tr>
+</table>
+<p>The slowest runs in about 1.5 seconds on the full data. The Postgres versions differ from the SQLite ones in two places, because Postgres is stricter: <code>ROUND</code> needs a <code>numeric</code> value, and booleans are counted with <code>FILTER</code> rather than summed as integers.</p>
+
+<h2>If something breaks</h2>
+<table>
+  <thead><tr><th>Symptom</th><th>Do this</th></tr></thead>
+  <tr><td>A check fails</td><td>Read its detail column. Most failures are a service still starting: wait 30 seconds and run it again</td></tr>
+  <tr><td>Docker won't start</td><td>Open Docker Desktop by hand, wait for it to settle, run <code>make demo</code> again</td></tr>
+  <tr><td>TablePlus "connection refused"</td><td><code>docker compose up -d postgres</code>, wait 10 seconds, reconnect</td></tr>
+  <tr><td>Grafana says "No data"</td><td>Traffic ages out. Click a few presets on the dashboard, or run <code>make demo</code> again</td></tr>
+  <tr><td>CI check says "rate limit"</td><td>GitHub allows 60 unauthenticated requests an hour; open the Actions page instead</td></tr>
+  <tr><td>Anything else, live</td><td>Don't debug in front of the examiner. Switch to the screenshots in <code>docs/viva/screenshots/</code></td></tr>
+</table>
+
+<!-- =================================================================== -->
+
+<h1 id="ch-results" data-toc="Results, limitations and future work" data-num="16"><span class="num">CHAPTER 16</span>Results, limitations and future work</h1>
+<p class="lede">What the system achieves, where it falls short, and what would come next, stated plainly.</p>
+
+<h2>What was achieved</h2>
+<ul>
+  <li>A complete MLOps system on <strong>real</strong> data: 31.3 GB raw, 82.8 million warehouse rows.</li>
+  <li>A leak-free training pipeline, verified by tests and by cross-checking two databases row for row.</li>
+  <li>A model about <strong>4.8× better than random</strong> at finding churners (PR-AUC 0.073 against a 0.015 base), and <strong>well calibrated</strong> (ECE 0.004).</li>
+  <li>A registry with a promotion gate, proven in CI to reject an identical challenger.</li>
+  <li>Explained predictions, a dashboard, and streaming inference with a dead-letter queue.</li>
+  <li>Monitoring with PSI drift, 15 alert rules and a Grafana dashboard that reports only true things.</li>
+  <li>Seven CI/CD jobs, 434 tests, and a published, commit-tagged image.</li>
+  <li>The whole stack started and verified with two commands.</li>
+</ul>
+
+<h2>Limitations</h2>
+<table>
+  <thead><tr><th>Limitation</th><th>Why, and what it means</th></tr></thead>
+  <tr><td>The model is modest</td><td>PR-AUC 0.073, recall 16.8%. KKBox lacks strong signals: two inputs are always zero, and the strict churn definition gives few positives. It's far better than random, but it wouldn't catch most churners.</td></tr>
+  <tr><td>The fairness audit fails</td><td>Near-random on the standard plan (949 subscribers). Reported and alerted, not fixed.</td></tr>
+  <tr><td>Cost figures are placeholders</td><td>The cost-optimal threshold (0.43) is illustrative; the served threshold (0.05) is the F1 choice.</td></tr>
+  <tr><td>Stricter churn label than Kaggle's</td><td>Explicit cancellations only, not quiet lapses. Results aren't comparable with the competition's leaderboard.</td></tr>
+  <tr><td>Calibration is reported, not applied</td><td>Isotonic calibration would shave 0.003 off an already-small error; the pipeline tries it on every run but doesn't switch it on.</td></tr>
+  <tr><td>Not deployed to a public cloud</td><td>A 15 GB warehouse plus MLflow, Kafka and Grafana fits no free tier. It runs on Docker locally; Kubernetes manifests are written but not deployed.</td></tr>
+  <tr><td>Continuous delivery, not deployment</td><td>Every merge publishes a tested image; nothing deploys it to production automatically.</td></tr>
+  <tr><td>No real challenger yet</td><td>Shadow scoring is built and tested in CI, but idle in the demo.</td></tr>
+</table>
+
+<h2>Future work</h2>
+<ol>
+  <li><strong>Richer features</strong> from the full 392-million-row listening log: trends (listening falling week on week), skip rates, completion rates.</li>
+  <li><strong>Real offer costs</strong>, so the threshold is chosen by money rather than F1.</li>
+  <li><strong>The competition's churn definition</strong>, trained alongside this one, to compare.</li>
+  <li><strong>Address the fairness failure:</strong> more standard-plan data, a per-plan threshold, or a model with plan-specific interactions.</li>
+  <li><strong>Deploy to a managed Kubernetes cluster</strong>, with CI deploying each published image to a staging environment.</li>
+  <li><strong>A real challenger</strong> (for example, a model with the new features) running in shadow before any promotion.</li>
+  <li><strong>A feature store</strong>, so training and serving read features from one place.</li>
+</ol>
+
+<div class="callout say">
+  <div class="callout-title">Say this</div>
+  <p>"The engineering is complete and tested, and the model is modest: about 5× better than random, because the data lacks strong signals. The fairness audit fails for one plan, the costs are placeholders, and it isn't on a public cloud. I'd add listening-trend features from the full logs, real offer costs, and a managed Kubernetes deployment next."</p>
+</div>
+
+<!-- =================================================================== -->
+
+<h1 id="ch-lessons" data-toc="What building it taught" data-num="17"><span class="num">CHAPTER 17</span>What building it taught</h1>
+<p class="lede">The bugs and surprises, collected in one place. "Tell us about a problem you found" is a classic viva question; each of these is a real, specific answer.</p>
+
+<table>
+  <thead><tr><th>Problem</th><th>How it was found</th><th>Lesson</th></tr></thead>
+  <tr><td>ROC-AUC rose while PR-AUC fell on real data</td><td>Moving from synthetic to real data</td><td>Choose metrics for the class balance you'll actually face</td></tr>
+  <tr><td>IDs declared 32 characters; real ones are 44</td><td>Loading real data; Postgres would reject every row</td><td>SQLite forgives what Postgres won't; test on the real database</td></tr>
+  <tr><td>Same-day signups counted as "before" the cutoff</td><td>Comparing SQLite and Postgres snapshots row for row</td><td>Text-stored dates compare as text; cross-check two implementations</td></tr>
+  <tr><td>A subscriber cap that didn't cap anything</td><td>A single cutoff never finished on real data</td><td>A <code>LIMIT</code> on one step doesn't bound the others; push the filter into every aggregate</td></tr>
+  <tr><td>An explanation that contradicted its input ("auto-renew enabled" when it was off)</td><td>Reading real explanations</td><td>For booleans, state the value, not the direction of the effect</td></tr>
+  <tr><td>Preset examples silently inverted (at-risk scored low)</td><td>Looking at the dashboard after retraining</td><td>Tests that only compare two outputs can pass while both are wrong</td></tr>
+  <tr><td>The container served a synthetic model</td><td>Checking <code>/model-info</code> in the running stack</td><td>Verify the deployed artifact, not the code</td></tr>
+  <tr><td>False alerts, "REJECTED" and overlapping panels in Grafana</td><td>A screenshot, with every check green</td><td>A passing check isn't a correct screen; look at it</td></tr>
+  <tr><td>scikit-learn drifted from 1.9.0 to 1.9.1 on rebuild</td><td>A new checklist item comparing versions</td><td>Pin what the model depends on</td></tr>
+  <tr><td>CI red for 17 days</td><td>Running the suite on a fresh clone</td><td>A test that passes only on your machine isn't passing</td></tr>
+</table>
+
+<div class="callout">
+  <div class="callout-title">The common thread</div>
+  <p>Almost every one of these was invisible to the automated tests at the time and found by <strong>checking the real thing</strong>: the real data, the real database, the running container, the actual screen, a clean checkout. The lasting fixes turned each discovery into a test or a checklist item, so it can't silently come back.</p>
+</div>

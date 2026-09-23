@@ -1,0 +1,143 @@
+<section class="part-title">
+  <div class="kicker">APPENDICES</div>
+  <h1 id="part-3" data-part="Appendices">Quick reference</h1>
+  <p>The one-page summary, every number worth knowing, every command, and a glossary. The pages to reread the night before.</p>
+</section>
+
+<h1 id="app-summary" data-toc="A · The whole project on one page"><span class="num">APPENDIX A</span>The whole project on one page</h1>
+<table class="plain">
+  <tr><td><strong>Problem</strong></td><td>Predict which subscribers of a music-streaming service cancel in the next 30 days, explain why, and run it as a trustworthy production system.</td></tr>
+  <tr><td><strong>Data</strong></td><td>KKBox (WSDM Cup 2018, Kaggle): 31.3 GB, 6.77M subscribers. Cleaned into a Postgres event warehouse of 82.8M rows. 2.66M orphan rows dropped rather than invented.</td></tr>
+  <tr><td><strong>No leakage</strong></td><td>Features from the 30 days before a cutoff; label from the 30 days after; windows never overlap; split by time (train Nov–Dec 2016, test Jan 2017).</td></tr>
+  <tr><td><strong>Model</strong></td><td>Gradient boosting, 300 trees of depth 3. Test PR-AUC 0.073 (random 0.015: 4.8× better), ROC-AUC 0.835, recall 16.8% at threshold 0.05, calibration error 0.004.</td></tr>
+  <tr><td><strong>Key finding</strong></td><td>On real data ROC-AUC rose (0.674 → 0.835) while PR-AUC fell (0.345 → 0.073). So the gate uses PR-AUC.</td></tr>
+  <tr><td><strong>Audit</strong></td><td>Calibrated; the cost audit prefers threshold 0.43 under placeholder costs; the fairness audit fails on the standard plan (reported and alerted).</td></tr>
+  <tr><td><strong>Registry</strong></td><td>MLflow. Live model = <code>@champion</code>. A challenger is promoted only if it beats the champion on PR-AUC, on the same data, by ≥ 0.005. Rollback = move the alias back.</td></tr>
+  <tr><td><strong>Serving</strong></td><td>FastAPI with SHAP explanations that add up exactly to the prediction; a dashboard with counterfactual levers; a Kafka stream scorer, at-least-once, with a dead-letter queue.</td></tr>
+  <tr><td><strong>Monitoring</strong></td><td>Prometheus (15 alert rules), Alertmanager (routing, inhibition), Grafana. PSI drift on real Feb 2017 data: stable, every feature under 0.06.</td></tr>
+  <tr><td><strong>Automation</strong></td><td>Prefect pipeline (ingest → drift → train and gate → report), idempotent. DVC + params.yaml. GitHub Actions: 7 jobs, 434 tests, image published to ghcr.io.</td></tr>
+  <tr><td><strong>Deployment</strong></td><td>8 Docker services, <code>make demo</code> + 19-point <code>make demo-check</code>. Kubernetes manifests written, not deployed.</td></tr>
+  <tr><td><strong>Limitations</strong></td><td>Modest model; fairness failure; placeholder costs; stricter churn label than Kaggle's; not on a public cloud.</td></tr>
+</table>
+
+<h1 id="app-numbers" data-toc="B · Numbers worth knowing"><span class="num">APPENDIX B</span>Numbers worth knowing</h1>
+<div class="two">
+<table class="plain">
+  <tr><td>Raw data</td><td class="num">31.3 GB</td></tr>
+  <tr><td>Subscribers</td><td class="num">6,769,473</td></tr>
+  <tr><td>Subscription events</td><td class="num">18,891,703</td></tr>
+  <tr><td>Payments</td><td class="num">18,891,703</td></tr>
+  <tr><td>Sessions (listening days)</td><td class="num">38,216,556</td></tr>
+  <tr><td>Warehouse total</td><td class="num">82.8M rows · 16 GB</td></tr>
+  <tr><td>Raw listening log</td><td class="num">392M rows</td></tr>
+  <tr><td>Orphan rows dropped</td><td class="num">2,656,043</td></tr>
+  <tr><td>Unknown subscribers</td><td class="num">432,623 (18.3%)</td></tr>
+  <tr><td>Postgres load time</td><td class="num">~7.5 min</td></tr>
+  <tr><td>Feature query: SQLite vs Postgres</td><td class="num">506 s vs 6.8 s</td></tr>
+  <tr><td>One subscriber's history</td><td class="num">17 ms</td></tr>
+  <tr><td>Train / val / test rows</td><td class="num">66,704 / 33,600 / 33,042</td></tr>
+  <tr><td>Churn rate (test)</td><td class="num">1.53%</td></tr>
+  <tr><td>Churners in test</td><td class="num">506</td></tr>
+  <tr><td>Trees · depth · learning rate</td><td class="num">300 · 3 · 0.05</td></tr>
+</table>
+<table class="plain">
+  <tr><td>Test PR-AUC</td><td class="num">0.073</td></tr>
+  <tr><td>Test ROC-AUC</td><td class="num">0.835</td></tr>
+  <tr><td>Validation PR-AUC / ROC-AUC</td><td class="num">0.052 / 0.834</td></tr>
+  <tr><td>Threshold (best F1)</td><td class="num">0.05</td></tr>
+  <tr><td>Recall · precision @ 0.05</td><td class="num">16.8% · 7.6%</td></tr>
+  <tr><td>TP · FP · FN · TN</td><td class="num">85 · 1,040 · 421 · 31,496</td></tr>
+  <tr><td>Calibration error (ECE)</td><td class="num">0.004</td></tr>
+  <tr><td>Cost-optimal threshold</td><td class="num">0.43 (saves £16,508)</td></tr>
+  <tr><td>Standard-plan ROC-AUC</td><td class="num">0.54 (n = 949)</td></tr>
+  <tr><td>Promotion margin</td><td class="num">0.005 PR-AUC</td></tr>
+  <tr><td>PSI stable / significant</td><td class="num">&lt; 0.10 / &gt; 0.25</td></tr>
+  <tr><td>Real drift (Feb 2017)</td><td class="num">max PSI 0.058</td></tr>
+  <tr><td>Alert rules</td><td class="num">15</td></tr>
+  <tr><td>Tests · CI jobs</td><td class="num">434 · 7</td></tr>
+  <tr><td>Docker services</td><td class="num">8</td></tr>
+  <tr><td>Demo checks</td><td class="num">19</td></tr>
+</table>
+</div>
+<p>The three demo presets: <strong>at-risk 60.37% (high)</strong>, <strong>borderline 5.01% (medium)</strong>, <strong>healthy 0.05% (low)</strong>. Turning auto-renew off takes the at-risk subscriber from 60% to 0.24%.</p>
+
+<h1 id="app-commands" data-toc="C · Commands"><span class="num">APPENDIX C</span>Commands</h1>
+<table>
+  <thead><tr><th>Command</th><th>What it does</th></tr></thead>
+  <tr><td><code>make demo-prepare</code></td><td>Build the image and write the drift report (once, before a demo)</td></tr>
+  <tr><td><code>make demo</code></td><td>Start everything, wait until healthy, warm up, print URLs</td></tr>
+  <tr><td><code>make demo-check</code></td><td>The 19-point pre-demo checklist</td></tr>
+  <tr><td><code>make demo-down</code></td><td>Stop everything, keep all data</td></tr>
+  <tr><td><code>make warehouse-postgres</code></td><td>Copy the SQLite warehouse into Postgres (82.8M rows)</td></tr>
+  <tr><td><code>make monitor</code></td><td>Drift check on Postgres, no retraining</td></tr>
+  <tr><td><code>make pipeline</code></td><td>The full retraining pipeline once</td></tr>
+  <tr><td><code>make pipeline-drift</code></td><td>The pipeline after injecting drift</td></tr>
+  <tr><td><code>make train-promote</code></td><td>Train, register in MLflow, run the gate</td></tr>
+  <tr><td><code>make mlflow-ui</code></td><td>Browse runs and the registry at port 5050</td></tr>
+  <tr><td><code>make serve</code></td><td>Run the API locally with auto-reload</td></tr>
+  <tr><td><code>make stream-events</code> / <code>stream-poison</code></td><td>Publish sample / malformed events to Kafka</td></tr>
+  <tr><td><code>make test</code> · <code>make lint</code></td><td>Run the tests · lint the code</td></tr>
+  <tr><td><code>make repro</code> · <code>make metrics-diff</code></td><td>Rerun changed DVC stages · compare metrics with main</td></tr>
+  <tr><td><code>make help</code></td><td>List every target</td></tr>
+</table>
+
+<h1 id="app-glossary" data-toc="D · Glossary"><span class="num">APPENDIX D</span>Glossary</h1>
+<div class="two">
+<dl class="gloss">
+  <dt>A/B test</dt><dd>Real users are split between two versions and real outcomes compared.</dd>
+  <dt>Alias (MLflow)</dt><dd>A named pointer to a model version, such as <code>@champion</code>. Moving it promotes or rolls back.</dd>
+  <dt>Alertmanager</dt><dd>Groups, routes and suppresses alerts from Prometheus.</dd>
+  <dt>At-least-once delivery</dt><dd>Every message is processed one or more times; duplicates possible, loss not.</dd>
+  <dt>Baseline</dt><dd>The simplest reference a model must beat, such as random guessing.</dd>
+  <dt>Bias–variance trade-off</dt><dd>Too simple underfits (bias); too flexible overfits (variance).</dd>
+  <dt>Brier score</dt><dd>Mean squared error of predicted probabilities; lower is better.</dd>
+  <dt>Calibration</dt><dd>Whether predicted probabilities match observed frequencies.</dd>
+  <dt>Champion / challenger</dt><dd>The production model / the candidate evaluated against it.</dd>
+  <dt>Churn</dt><dd>A customer leaving. Here: an explicit cancellation within 30 days.</dd>
+  <dt>CI / CD</dt><dd>Continuous integration (build and test every change) / continuous delivery or deployment (release it).</dd>
+  <dt>Concept drift</dt><dd>The relationship between inputs and outcome changes.</dd>
+  <dt>Confusion matrix</dt><dd>Counts of true/false positives and negatives.</dd>
+  <dt>Container</dt><dd>An isolated, portable package of an application and its dependencies.</dd>
+  <dt>Counterfactual</dt><dd>"What would the model predict if this one input were different?"</dd>
+  <dt>Cutoff date</dt><dd>The "as of" date for a training example; features before it, the label after.</dd>
+  <dt>Data contract</dt><dd>Rules incoming data must satisfy before it's loaded.</dd>
+  <dt>Data drift</dt><dd>The distribution of inputs changes over time.</dd>
+  <dt>Data leakage</dt><dd>Training on information that wouldn't be available at prediction time.</dd>
+  <dt>Dead-letter queue</dt><dd>Where unprocessable messages go, with a reason, instead of crashing the consumer.</dd>
+  <dt>DVC</dt><dd>Data Version Control: versions data and pipeline stages.</dd>
+  <dt>ECE</dt><dd>Expected calibration error: the average gap between predicted and actual rates.</dd>
+  <dt>Event warehouse</dt><dd>A store of immutable, timestamped events, rebuildable as of any date.</dd>
+  <dt>F1</dt><dd>Harmonic mean of precision and recall.</dd>
+  <dt>Feature store</dt><dd>A system serving identical features to training and serving.</dd>
+  <dt>Four-fifths rule</dt><dd>A fairness convention: a group ratio below 0.8 is flagged.</dd>
+  <dt>Gauge / counter / histogram</dt><dd>Prometheus metric types: up-and-down value / only-increasing count / bucketed distribution.</dd>
+  <dt>Gradient boosting</dt><dd>Trees built one after another, each correcting the errors so far.</dd>
+  <dt>Grafana</dt><dd>Dashboards over Prometheus data.</dd>
+  <dt>HPA</dt><dd>HorizontalPodAutoscaler: Kubernetes adds or removes replicas to hold a target.</dd>
+  <dt>Idempotent</dt><dd>Running twice has the same effect as running once.</dd>
+  <dt>Inhibition</dt><dd>Suppressing alerts already explained by another alert.</dd>
+  <dt>Isotonic calibration</dt><dd>A monotonic mapping from raw scores to calibrated probabilities.</dd>
+  <dt>Kafka / Redpanda</dt><dd>A distributed log for event streams / a Kafka-compatible broker.</dd>
+  <dt>Liveness / readiness</dt><dd>Is the process up? / Can it serve traffic now?</dd>
+  <dt>Log-odds</dt><dd>ln(p ÷ (1 − p)); the scale boosting and SHAP work in.</dd>
+  <dt>MLflow</dt><dd>Experiment tracking and model registry.</dd>
+  <dt>MLOps</dt><dd>Practices for building, deploying and maintaining ML systems reliably.</dd>
+  <dt>Offset (Kafka)</dt><dd>A consumer's position in a topic partition.</dd>
+  <dt>Overfitting</dt><dd>Learning noise; good on training data, poor on new data.</dd>
+  <dt>Point-in-time correctness</dt><dd>Features use only what was known at the cutoff.</dd>
+  <dt>Poison message</dt><dd>A message that crashes a consumer every time it's read.</dd>
+  <dt>PR-AUC</dt><dd>Area under the precision–recall curve; random equals the positive rate.</dd>
+  <dt>Precision / recall</dt><dd>Of those flagged, share correct / of true positives, share flagged.</dd>
+  <dt>Prefect</dt><dd>Workflow orchestration: tasks, retries, schedules.</dd>
+  <dt>Prometheus</dt><dd>Pull-based metrics database with alert rules.</dd>
+  <dt>PSI</dt><dd>Population Stability Index: Σ (a − e) ln(a/e) over bins.</dd>
+  <dt>Reference profile</dt><dd>The training distribution, saved for drift comparisons.</dd>
+  <dt>ROC-AUC</dt><dd>Probability a random positive is ranked above a random negative.</dd>
+  <dt>Shadow scoring</dt><dd>A challenger scores live traffic silently; only the champion's answer is used.</dd>
+  <dt>SHAP</dt><dd>Game-theoretic feature contributions that add up to the prediction.</dd>
+  <dt>Temporal split</dt><dd>Train on earlier periods, test on later ones.</dd>
+  <dt>Threshold</dt><dd>The probability above which a subscriber is flagged.</dd>
+  <dt>Training–serving skew</dt><dd>Features computed differently in training and in production.</dd>
+  <dt>Volume (Docker)</dt><dd>Storage that outlives any container.</dd>
+</dl>
+</div>

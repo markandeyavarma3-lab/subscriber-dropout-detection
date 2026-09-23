@@ -1,0 +1,174 @@
+<!-- =========================== E ============================ -->
+<h1 id="qa-metrics" data-toc="E · Metrics and evaluation"><span class="num">SECTION E</span>Metrics and evaluation</h1>
+
+<div class="qa"><div class="qa-q">Why not use accuracy?<span class="tag core">core</span></div>
+<p>Only 1.5% of subscribers churn, so predicting "nobody churns" is 98.5% accurate and useless. Accuracy rewards ignoring the rare class. My model's accuracy is 95.6%, <em>lower</em> than that useless baseline, because it deliberately flags people.</p></div>
+
+<div class="qa"><div class="qa-q">Define precision and recall.<span class="tag core">core</span></div>
+<p><strong>Precision:</strong> of those flagged, the fraction who really churn (TP ÷ (TP + FP)). <strong>Recall:</strong> of those who really churn, the fraction flagged (TP ÷ (TP + FN)). At the 0.05 threshold: precision 7.6% (85 of 1,125 flagged), recall 16.8% (85 of 506 churners).</p></div>
+
+<div class="qa"><div class="qa-q">What is F1?</div>
+<p>The harmonic mean of precision and recall: 2PR ÷ (P + R). It's high only when both are high, and treats a missed churner and a false alarm as equally bad. Here it's 0.104 at 0.05. That equal treatment is its weakness when the two mistakes cost different amounts, which is why the cost audit exists.</p></div>
+
+<div class="qa"><div class="qa-q">What is ROC-AUC?<span class="tag core">core</span></div>
+<p>The area under the curve of true-positive rate against false-positive rate across all thresholds. It equals the probability that the model scores a random churner above a random non-churner. 0.5 is random; 1.0 is perfect. This model: 0.835.</p></div>
+
+<div class="qa"><div class="qa-q">What is PR-AUC, and why is it your main metric?<span class="tag core">core</span></div>
+<p>The area under the precision–recall curve across all thresholds. A random model's PR-AUC equals the positive rate (here 0.015). It's built from precision, which is dominated by the rare class, so it reflects how useful the flags really are when churners are rare. ROC-AUC uses the false-positive <em>rate</em>, which divides by the huge number of non-churners and so hides how many false alarms you'd send. Mine is 0.073: about 4.8× random.</p></div>
+
+<div class="qa"><div class="qa-q">Tell me about ROC-AUC going up while PR-AUC went down.<span class="tag core">core</span></div>
+<p>Moving from synthetic data (about 20% churn) to real KKBox (1.5%), ROC-AUC rose from 0.674 to 0.835 while PR-AUC fell from 0.345 to 0.073. ROC-AUC said "better"; PR-AUC said "much harder", which is the truth for the business, because with rarer churners far more flags are false alarms. A gate on ROC-AUC would have claimed an improvement at exactly the wrong moment. That's why the gate uses PR-AUC.</p></div>
+
+<div class="qa"><div class="qa-q">PR-AUC 0.073 sounds terrible. Is your model any good?<span class="tag core">core</span><span class="tag tricky">tricky</span></div>
+<p>Compare it with the baseline, not with 1.0. Random gets 0.015, so the model is about 4.8× better; its flags are 5× richer in real churners than random picks. But honestly, it's modest: it catches 1 churner in 6. The data lacks strong signals (two inputs are always zero), and my stricter churn definition leaves few positives. The project's contribution is mainly the engineering around the model, and the model can be swapped through the gate.</p></div>
+
+<div class="qa"><div class="qa-q">Show me the confusion matrix.</div>
+<p>At threshold 0.05, on 33,042 test subscribers: 85 true positives, 1,040 false positives, 421 false negatives, 31,496 true negatives. 1,125 flagged, of whom 85 churned; 506 churned in total.</p></div>
+
+<div class="qa"><div class="qa-q">Why do validation and test scores differ (PR-AUC 0.052 vs 0.073)?<span class="tag tricky">tricky</span></div>
+<p>They're different months with different churn rates (1.43% vs 1.53%) and only about 500 positives each, so PR-AUC is noisy between periods. ROC-AUC is almost identical (0.834 vs 0.835). The variation is a reason for the promotion margin: small differences between runs can be noise.</p></div>
+
+<div class="qa"><div class="qa-q">What is a baseline, and what's yours?</div>
+<p>The simplest reference a model must beat to be worth anything. Here: random guessing (PR-AUC 0.015) and "predict nobody churns" (98.5% accuracy, zero recall). The model beats random by 4.8× on PR-AUC. A good next baseline would be a simple rule, like "inactive for 30+ days", to show how much the model adds over common sense.</p></div>
+
+<div class="qa"><div class="qa-q">What is the Brier score?</div>
+<p>The mean squared difference between predicted probability and outcome (0 or 1); lower is better. It measures accuracy and calibration of the probabilities together. Here it's 0.0146.</p></div>
+
+<!-- =========================== F ============================ -->
+<h1 id="qa-decisions" data-toc="F · Thresholds, costs, calibration and fairness"><span class="num">SECTION F</span>Thresholds, costs, calibration and fairness</h1>
+
+<div class="qa"><div class="qa-q">What is the decision threshold, and why 0.05?<span class="tag core">core</span></div>
+<p>The probability above which a subscriber is flagged. 0.5 would flag almost nobody at a 1.5% churn rate. 0.05 is the value that maximised F1 on the validation set, searched from 0.05 to 0.95. It sits at the bottom of that range, so F1 would have liked it even lower.</p></div>
+
+<div class="qa"><div class="qa-q">Is 0.05 the best threshold?<span class="tag tricky">tricky</span></div>
+<p>Not by cost. The cost audit prices each mistake and finds the cheapest threshold is 0.43, about £16.5k cheaper on the test set, because at 1.5% churn and 30% offer efficacy almost nobody is worth an offer. But those costs are placeholders. The audit reports the gap rather than silently changing the threshold, because the right choice depends on real business costs.</p></div>
+
+<div class="qa"><div class="qa-q">Explain your cost model.<span class="tag core">core</span></div>
+<p>A missed churner costs £240 (about a year of revenue). An offer costs £20 and saves 30% of real churners. So flagging a churner costs £20 + 70% × £240 = £188 (the offer, plus the loss when it fails), flagging a non-churner costs £20, and missing a churner costs £240. Flagging is worth it when p × (240 − 188) &gt; (1 − p) × 20, which gives p &gt; 0.278. All of these are in <code>params.yaml</code> and all are assumptions.</p></div>
+
+<div class="qa"><div class="qa-q">Why does the cost-optimal policy send only 8 offers?<span class="tag tricky">tricky</span></div>
+<p>Because an offer only helps if the subscriber would really churn <em>and</em> the offer works (30%). With a 1.5% base rate, very few subscribers have a churn probability high enough that the expected saving beats a £20 offer. The honest conclusion under these assumptions is that retention offers are barely worth it for this population, not that the model is wrong.</p></div>
+
+<div class="qa"><div class="qa-q">What does "calibrated" mean? Is your model calibrated?<span class="tag core">core</span></div>
+<p>A model is calibrated if its probabilities mean what they say: among subscribers given 5%, about 5% churn. It matters because the probability feeds cost decisions. Expected calibration error is 0.004, which is very good. It slightly under-predicts on average (1.16% predicted vs 1.53% actual).</p></div>
+
+<div class="qa"><div class="qa-q">What is expected calibration error?</div>
+<p>Predictions are grouped into bins by probability. In each bin, compare the average predicted probability with the actual churn rate, and take the weighted average of those gaps. 0 means perfectly calibrated.</p></div>
+
+<div class="qa"><div class="qa-q">Did you calibrate the model?<span class="tag tricky">tricky</span></div>
+<p>Every run tries isotonic calibration, fitted on the validation set, and reports whether it would help. It would improve the error by a further 0.003, from an already-small 0.004. It's reported, not applied: the raw model is already well calibrated, and applying it is a one-line decision if that changes.</p></div>
+
+<div class="qa"><div class="qa-q">How do you check fairness?<span class="tag core">core</span></div>
+<p>The audit compares the model across <code>plan_type</code> groups (minimum 30 members each), on selection rate (who gets flagged) and on performance (ROC-AUC, recall). A ratio below 0.8 between worst and best group is flagged: the "four-fifths rule", a convention from US employment law.</p></div>
+
+<div class="qa"><div class="qa-q">Your fairness audit fails. What does that mean?<span class="tag core">core</span><span class="tag tricky">tricky</span></div>
+<p>On the standard plan (949 subscribers in the test set) the model's ROC-AUC is 0.54, close to random, far below the other plans. So it's measurably worse at finding churners on that plan. The likely cause is too few standard-plan subscribers to learn from. It's written to the report, shown in Grafana, and fires the FairnessDisparity alert. Reported and alerted, not hidden, and not yet fixed.</p>
+<p class="followup">"How would you fix it?" More standard-plan data, a per-plan threshold, or a model that learns plan-specific patterns. Then the gate and the audit would confirm it on the next run.</p></div>
+
+<div class="qa"><div class="qa-q">Why audit fairness by plan and not by age or gender?</div>
+<p>Plan type is a model input and a business segment, and every subscriber has one. The members file has age and gender, but they're not model inputs and the KKBox values are often missing or implausible (age 0, for example). Auditing on protected attributes would need cleaner data; it's the right extension where it's available.</p></div>
+
+<div class="qa"><div class="qa-q">What is the capacity constraint?</div>
+<p>A real retention team can only contact so many people. If the cost-optimal policy needs more offers than the budget allows, the model contacts the top-k by risk and the report prices the subscribers left uncovered. No cap is set for KKBox because the cost-optimal policy only needs 8 offers.</p></div>
+
+<!-- =========================== G ============================ -->
+<h1 id="qa-explain" data-toc="G · Explainability"><span class="num">SECTION G</span>Explainability</h1>
+
+<div class="qa"><div class="qa-q">What is SHAP?<span class="tag core">core</span></div>
+<p>SHapley Additive exPlanations: a method from cooperative game theory for splitting a prediction among the features. Each feature's SHAP value is its average marginal contribution across all possible orderings of the features. For tree models, TreeExplainer computes them exactly and quickly.</p></div>
+
+<div class="qa"><div class="qa-q">Why is additivity important?<span class="tag core">core</span></div>
+<p>Because it guarantees the explanation matches the prediction: base value plus every contribution equals exactly what the model predicted (in log-odds). So the reasons shown can't contradict the score. A test checks this for every row. Rule-based explanations don't have this property; they describe the input without knowing what the model did.</p></div>
+
+<div class="qa"><div class="qa-q">Why are SHAP values in log-odds?</div>
+<p>Gradient boosting for classification works internally in log-odds and converts to a probability at the end with the logistic function. Additivity holds in log-odds; in probability space contributions don't add up simply. The dashboard shows the contribution sizes and the final probability.</p></div>
+
+<div class="qa"><div class="qa-q">How do you turn SHAP values into a sentence?</div>
+<p>Contributions for related columns are summed into ten concepts (for example, <code>tenure_days</code> and <code>tenure_months</code> become "tenure"). That's valid because SHAP values add. Concepts are ranked by absolute size, and the top ones are phrased from the actual input: "relies on discounts (2 in the last 6 months)".</p></div>
+
+<div class="qa"><div class="qa-q">Feature importance vs SHAP: what's the difference?<span class="tag core">core</span></div>
+<p>Feature importance is <em>global</em>: how much a feature matters across the whole dataset, with no direction. SHAP is <em>local</em>: how much each feature pushed <em>this</em> prediction, and in which direction. A retention agent needs the local view: why this subscriber.</p></div>
+
+<div class="qa"><div class="qa-q">What happens if SHAP fails?</div>
+<p>The prediction still goes out, with a rule-based explanation and <code>explanation_method: "rules"</code>, so the client knows which kind it got. An explanation is a feature of a prediction, never a precondition for one.</p></div>
+
+<div class="qa"><div class="qa-q">What are the counterfactual levers on the dashboard?<span class="tag core">core</span></div>
+<p>SHAP says what the model leaned on, not what a team could change. So for each lever the dashboard sends a second real request with one field changed and shows the new probability. For the at-risk example, turning auto-renew off takes 60% to 0.24%, and stopping discounts takes it to 0.79%. They're the model's actual answers, not inferences.</p></div>
+
+<div class="qa"><div class="qa-q">Should the business turn off auto-renew for everyone, then?<span class="tag tricky">tricky</span></div>
+<p>No. That's exactly the trap. The model learned that auto-renew is <em>associated</em> with churn in KKBox, because it goes with cheap short plans. Switching it off wouldn't change who those subscribers are. A counterfactual shows what the model would predict, not what would happen in the world. Acting on it would need an experiment.</p></div>
+
+<div class="qa"><div class="qa-q">Tell me about the explanation bug you fixed.</div>
+<p>A subscriber with auto-renew <em>off</em> was explained as "auto-renew enabled". The wording followed the direction of the SHAP effect rather than the input's value. For a number that's harmless ("inactive for 45 days" and "last seen 45 days ago" are both true), but for a yes/no field it states something false. It now states the actual value, with a test.</p></div>
+
+<!-- =========================== H ============================ -->
+<h1 id="qa-registry" data-toc="H · Registry, promotion and shadow scoring"><span class="num">SECTION H</span>Registry, promotion and shadow scoring</h1>
+
+<div class="qa"><div class="qa-q">What does MLflow do in your project?<span class="tag core">core</span></div>
+<p>Two things. <strong>Tracking</strong> records every training run: parameters, metrics, the model file. The <strong>registry</strong> stores models as numbered versions under one name, with aliases (<code>@champion</code>, <code>@challenger</code>) that say which version is live.</p></div>
+
+<div class="qa"><div class="qa-q">What is a model registry, and why do you need one?<span class="tag core">core</span></div>
+<p>A catalogue of trained models with versions and metadata. It gives one authoritative answer to "which model is in production, and how was it made?", and it makes promotion and rollback an explicit, recorded action instead of copying files around.</p></div>
+
+<div class="qa"><div class="qa-q">How does promotion work?<span class="tag core">core</span></div>
+<p>A new model is registered as <code>@challenger</code>. The gate scores it and the current champion on the <em>same</em> held-out data with PR-AUC. If the challenger wins by at least 0.005, the <code>@champion</code> alias moves to it. If there's no champion yet, the first model is promoted unopposed. Every decision is recorded.</p></div>
+
+<div class="qa"><div class="qa-q">Why a margin of 0.005 instead of "any improvement"?<span class="tag core">core</span></div>
+<p>Two equivalent models differ by random noise. With zero margin the gate would promote on noise about half the time, and the champion would flip back and forth forever. A margin means only a real improvement is enough to move production.</p></div>
+
+<div class="qa"><div class="qa-q">Why compare both models on the same data?<span class="tag tricky">tricky</span></div>
+<p>Comparing a challenger's fresh score with a champion's score from an old run compares two different datasets. The difference could be the data, not the model. That's a reliable way to promote a worse model. Scoring both on the same rows in the same process makes the comparison fair.</p></div>
+
+<div class="qa"><div class="qa-q">How do you roll back a bad model?<span class="tag core">core</span></div>
+<p>Move the <code>@champion</code> alias back to the previous version. Serving loads whatever the alias points to, so nothing is rebuilt or redeployed.</p></div>
+
+<div class="qa"><div class="qa-q">Why aliases rather than MLflow stages like "Production"?</div>
+<p>MLflow 3 removed stages; aliases replace them. They're also more flexible: any number of named pointers (champion, challenger) rather than a fixed set of stages.</p></div>
+
+<div class="qa"><div class="qa-q">How do you know the gate works?<span class="tag core">core</span></div>
+<p>CI proves it. The pipeline job trains twice on identical data; the second model is identical to the champion, so it <em>must</em> be rejected, and the job fails if it isn't. A rejected challenger is the system working correctly, so it's an info alert, never a page.</p></div>
+
+<div class="qa"><div class="qa-q">What is shadow scoring?<span class="tag core">core</span></div>
+<p>When a distinct challenger exists, every live request is scored by both models, but only the champion's answer is returned. The challenger's answers are compared: agreement rate, how the number of flagged subscribers would change, probability divergence, errors and latency. It judges the challenger on real traffic with zero risk to users.</p></div>
+
+<div class="qa"><div class="qa-q">Shadow scoring vs A/B testing?<span class="tag tricky">tricky</span></div>
+<p>In A/B testing, a share of real users actually receive the new model's decisions, so you can measure real outcomes (did they churn?) but users bear the risk. In shadow scoring nobody receives the challenger's decisions: zero risk, but you only learn how it <em>would</em> behave, not the outcomes. Shadow first, then an A/B test, is a common, safe sequence.</p></div>
+
+<div class="qa"><div class="qa-q">What if the challenger crashes during shadow scoring?</div>
+<p>The champion's answer is returned regardless, and the error is counted. A rising count fires the ShadowChallengerErroring alert, which is exactly what should block that challenger's promotion.</p></div>
+
+<div class="qa"><div class="qa-q">Why does the dashboard show shadow scoring as "IDLE"?</div>
+<p>Because there's currently no distinct challenger: the only registered model is the champion. It's built and tested (CI trains a distinct challenger and checks shadow scoring works); in the demo it honestly reports "no challenger" rather than a misleading 0%.</p></div>
+
+<!-- =========================== I ============================ -->
+<h1 id="qa-serving" data-toc="I · Serving and the API"><span class="num">SECTION I</span>Serving and the API</h1>
+
+<div class="qa"><div class="qa-q">Why FastAPI?<span class="tag core">core</span></div>
+<p>Typed request validation through Pydantic, automatic interactive documentation at <code>/docs</code>, high performance, and a small amount of code. Invalid input is rejected with a clear 422 error before it reaches the model.</p></div>
+
+<div class="qa"><div class="qa-q">Walk me through a prediction request.<span class="tag core">core</span></div>
+<p><code>POST /predict</code> with nine fields. Pydantic validates types, ranges and that last activity isn't longer ago than tenure. The features go through the saved pipeline; the champion returns a probability; it's mapped to low, medium or high using the threshold. SHAP computes contributions and a sentence is built. If a challenger exists it scores in shadow. Metrics update, and the response returns the probability, label, band, threshold, explanation, attributions and method.</p></div>
+
+<div class="qa"><div class="qa-q">Difference between /health and /ready?<span class="tag core">core</span></div>
+<p><code>/health</code> is liveness: is the process running? If not, restart it. <code>/ready</code> is readiness: can it serve, meaning is a model loaded? If not, stop sending it traffic, but don't kill it. Kubernetes uses these for its liveness and readiness probes.</p></div>
+
+<div class="qa"><div class="qa-q">What happens if no model is loaded?</div>
+<p>The service still starts and answers <code>/health</code>; <code>/ready</code> reports not ready, and <code>/predict</code> returns 503 Service Unavailable with a clear message rather than a 500 crash. The ModelNotLoaded alert fires after five minutes.</p></div>
+
+<div class="qa"><div class="qa-q">How are the risk bands defined?</div>
+<p>Low: below the threshold (5%). High: above the point halfway from the threshold to 100%, about 52.5%. Medium: in between.</p></div>
+
+<div class="qa"><div class="qa-q">How does the API know which model to load?</div>
+<p>The setting <code>SDD_MODEL_SOURCE</code>: <code>registry</code> loads the <code>@champion</code> from MLflow; <code>local</code> loads the saved artifact; <code>auto</code> tries the registry first and falls back to local. In the Docker stack, the promoted artifact is mounted read-only and loaded locally.</p></div>
+
+<div class="qa"><div class="qa-q">Why is there a batch endpoint?</div>
+<p>Scoring many subscribers in one call (1 to 1,000) avoids per-request overhead: one validation pass, one model call. It's how a nightly list or the stream scorer scores efficiently.</p></div>
+
+<div class="qa"><div class="qa-q">How would this scale to many requests?</div>
+<p>The API is stateless apart from in-memory metrics, so it scales horizontally: more replicas behind a load balancer. The Kubernetes manifests do exactly this with an autoscaler from 2 to 10 replicas at 70% CPU. Prediction is fast (milliseconds); SHAP is the heavier part, and could be made optional per request if needed.</p></div>
+
+<div class="qa"><div class="qa-q">Is the API secure?<span class="tag tricky">tricky</span></div>
+<p>It validates all input and runs as a non-root user in the container, but it has <strong>no authentication</strong>: it's designed for a trusted internal network. For real use it would sit behind an API gateway with authentication, rate limiting and HTTPS. No secrets are stored in the repository, and a test fails the build if credentials appear in the alerting config.</p></div>
+
+<div class="qa"><div class="qa-q">How did you build and test the dashboard?</div>
+<p>It's a single self-contained HTML page served by the API: no build step, no external libraries. Tests check its structure against the API schema, and it was verified by rendering it in headless Chrome and inspecting screenshots. That caught problems the structural tests missed, including a version that rendered completely blank.</p></div>

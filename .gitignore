@@ -62,3 +62,4 @@ data/kkbox/
 data/*.zip
 backups/
 .demo/
+docs/viva/book/book.html

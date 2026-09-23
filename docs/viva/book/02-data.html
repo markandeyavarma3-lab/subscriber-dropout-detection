@@ -1,0 +1,152 @@
+<h1 id="ch-data" data-toc="The data: from 31 GB of CSV to a warehouse" data-num="5"><span class="num">CHAPTER 5</span>The data: from 31 GB of CSV to a warehouse</h1>
+<p class="lede">Real data from a real subscription business, cleaned with decisions that can each be defended, and stored so that any past date can be rebuilt exactly.</p>
+
+<h2>The source: KKBox</h2>
+<p>KKBox is a music-streaming service in Taiwan, the Asian equivalent of Spotify. Its churn dataset was released for the <strong>WSDM Cup 2018</strong> competition on Kaggle and is public. It's anonymised: every subscriber is identified by <code>msno</code>, a 44-character base64 hash. There are no names, emails or anything identifying.</p>
+<table>
+  <thead><tr><th>File</th><th>What it contains</th><th class="num">Size</th></tr></thead>
+  <tr><td><code>members.csv</code></td><td>One row per subscriber: city, age, gender, registration channel (<code>registered_via</code>), registration date</td><td class="num">6.77M rows</td></tr>
+  <tr><td><code>transactions.csv</code></td><td>Payments and plan changes: plan length in days, list price, amount paid, auto-renew flag, transaction date, expiry, cancel flag</td><td class="num">21.5M rows</td></tr>
+  <tr><td><code>user_logs.csv</code></td><td>One row per subscriber per day of listening: songs played to 25/50/75/98.5/100%, unique songs, total seconds</td><td class="num">392M rows</td></tr>
+</table>
+<p>Together: <strong>31.3 GB</strong> of CSV. Downloading it was itself a small problem: newer Kaggle API tokens (the <code>KGAT_</code> kind) need "Bearer" authentication, but the installed Kaggle command-line tool only sent the older "Basic" kind and was rejected. The fix was a direct download that sent the token correctly.</p>
+
+<h2>Why a warehouse of events</h2>
+<p>The single most important design decision in the data layer: <strong>store immutable, timestamped events, not one pre-summarised row per subscriber.</strong></p>
+<p>A model is trained on the past. To build a training example "as of 1 November 2016", we need each subscriber exactly as they were <em>on that date</em>: their plan then, their sessions in October, their payments before then. A table of running totals ("total sessions: 412") can't answer that, because the totals already include everything that happened after November. A table of events can answer it for <em>any</em> date, simply by filtering on the timestamp.</p>
+
+<h2>The warehouse schema</h2>
+<p>Five tables, defined once with SQLAlchemy in <code>src/warehouse/schema.py</code>:</p>
+<table>
+  <thead><tr><th>Table</th><th>One row per</th><th>Key columns</th><th class="num">Rows</th></tr></thead>
+  <tr><td><code>subscribers</code></td><td>subscriber</td><td>subscriber_id (primary key), signup_date, acquisition_channel</td><td class="num">6,769,473</td></tr>
+  <tr><td><code>subscription_events</code></td><td>lifecycle event</td><td>event_type (signup / renewal / cancellation), plan_type, monthly_fee, is_auto_renew_enabled, occurred_at</td><td class="num">18,891,703</td></tr>
+  <tr><td><code>payments</code></td><td>payment</td><td>amount, status, discount_applied, occurred_at</td><td class="num">18,891,703</td></tr>
+  <tr><td><code>sessions</code></td><td>day of listening</td><td>duration_minutes, occurred_at</td><td class="num">38,216,556</td></tr>
+  <tr><td><code>support_tickets</code></td><td>ticket</td><td>category, occurred_at (KKBox has none)</td><td class="num">0</td></tr>
+</table>
+<p>Every event table has a composite index on <code>(subscriber_id, occurred_at)</code>, because nearly every query asks "this subscriber's events before this date". That index is why looking up one subscriber's full history takes 17 milliseconds out of 82.8 million rows. Total: <strong>82.8 million rows, about 16 GB</strong> in Postgres.</p>
+
+<h2>Mapping KKBox onto the schema</h2>
+<table>
+  <thead><tr><th>Decision</th><th>What was done</th><th>Why</th></tr></thead>
+  <tr><td>Plan tier</td><td>From plan length: 0–31 days → basic, 32–180 → standard, 181+ → premium</td><td>KKBox has no tier names, only durations. The mapping is an assumption, stated openly.</td></tr>
+  <tr><td>Monthly fee</td><td>Price ÷ plan days × 30.44</td><td>Plans run 7 to 410 days; a 410-day payment and a 30-day payment aren't comparable prices.</td></tr>
+  <tr><td>Event type</td><td>First transaction = signup; <code>is_cancel</code> = cancellation; otherwise renewal</td><td><code>is_cancel</code> is the actual lifecycle fact and wins over position.</td></tr>
+  <tr><td>Discount</td><td>Paid less than list price → <code>discount_applied</code></td><td>The one inference the raw data supports directly.</td></tr>
+  <tr><td>Acquisition channel</td><td><code>registered_via</code> 7 → <code>via_7</code></td><td>It's an opaque code; inventing names like "organic search" would put a false claim in the data.</td></tr>
+  <tr><td>Session duration</td><td>Total seconds ÷ 60, negatives clipped to 0</td><td>Negative durations are a known KKBox logging artefact.</td></tr>
+  <tr><td>Payment status</td><td>Every payment "succeeded"</td><td>KKBox only records a transaction when money moved; there are no failures to find.</td></tr>
+</table>
+
+<h2>The cleaning decisions, and how to defend them</h2>
+<h3>1 · 2,656,043 orphan rows dropped</h3>
+<p>The transactions file references <strong>432,623 subscribers who aren't in the members file</strong>: 18.3% of everyone who ever transacted. Two options: invent a subscriber row for each (using their first transaction as a signup date), or drop them.</p>
+<p>They were <strong>dropped</strong>. The earliest transaction for these subscribers falls on the first day of the log, which means they almost certainly signed up <em>before</em> the data begins. Inventing a signup date would make long-standing, loyal customers look brand new, and the model reads "new" as risky. Losing rows is visible and countable; silently corrupting the tenure of 432,623 people is neither.</p>
+<h3>2 · Subscriber IDs widened from 32 to 64 characters</h3>
+<p>The schema originally declared IDs as <code>VARCHAR(32)</code>; real IDs are 44 characters. <strong>SQLite ignored the limit silently. Postgres would have rejected every single row.</strong> This is the first of several bugs in this project that SQLite hid and Postgres exposed.</p>
+<h3>3 · Listening history bounded: 392M → 38.2M rows</h3>
+<p>Only sessions from <strong>1 October 2016 to 28 February 2017</strong> were loaded. Features look at most 30 days before a cutoff (plus all-time "last seen"), and the cutoffs used run from November 2016 to February 2017. Loading the full 392 million rows would have taken over 7 hours for data no feature uses.</p>
+<h3>4 · Negative durations clipped; prices normalised</h3>
+<p>Both covered in the mapping table above. Dropping rows with negative durations would understate activity, which the model would read as churn risk. Clipping to zero keeps the row.</p>
+
+<div class="callout warn">
+  <div class="callout-title">Two features that learn nothing</div>
+  <p><code>support_tickets_last_90d</code> and <code>payment_failures_last_6m</code> are always zero on KKBox: there's no customer-service data, and every payment succeeded. The model can't learn from a constant. They remain in the API because the request format requires them, and the dashboard says so openly. Be ready to explain this before you're asked.</p>
+</div>
+
+<h2>Validation before loading: the data contract</h2>
+<p><code>src/data/external/contract.py</code> checks every table before anything is written: required columns present, types parseable, values in range, IDs non-empty, and events referring to known subscribers. A <code>--dry-run</code> mode reads and validates everything and writes nothing. On a 30 GB export, that's the difference between finding a date-format surprise in ten minutes and finding it three hours into a half-finished load.</p>
+
+<h2>SQLite and Postgres: one schema, two databases</h2>
+<p>The code talks to the database through SQLAlchemy, so the same schema and queries run on both. One setting decides which: <code>SDD_DATABASE_URL</code>.</p>
+<ul>
+  <li><strong>SQLite</strong> is a single file (<code>src/data/warehouse.db</code>, 15 GB). The project runs with no database server at all, which suits development and tests.</li>
+  <li><strong>Postgres 16</strong> runs as a Docker container in the Compose stack. It's what the demo, the dashboard and TablePlus use.</li>
+</ul>
+<p>The real data was first loaded into SQLite, then copied into Postgres by <code>src/warehouse/to_postgres.py</code> (<code>make warehouse-postgres</code>). It streams each table out of SQLite as CSV straight into Postgres's bulk <code>COPY</code> command, in 5-million-row slices, with no temporary files. Secondary indexes are dropped during the load and rebuilt once afterwards, which is much faster than updating them on every insert. The whole copy took <strong>about 7.5 minutes</strong> (up to ~500,000 rows per second), and the row counts were verified to match SQLite <strong>exactly</strong> for every table.</p>
+
+<div class="stats">
+  <div><b>7.5 min</b><span>to copy 82.8M rows into Postgres</span></div>
+  <div><b>17 ms</b><span>to fetch one subscriber's full history</span></div>
+  <div><b>74×</b><span>faster feature query on Postgres (6.8 s vs 506 s)</span></div>
+</div>
+
+<h2>Where Postgres actually runs</h2>
+<p>Postgres isn't installed on the Mac itself. It runs inside <strong>Docker</strong>, as the <code>subscriber-warehouse</code> container from the official <code>postgres:16-alpine</code> image, defined in <code>docker-compose.yml</code>. Its port 5432 is published to the Mac, so any client (TablePlus, the pipeline, psql) connects to <code>localhost:5432</code> as if Postgres were installed normally. The data lives in a Docker <strong>named volume</strong> (<code>warehouse-data</code>), which survives restarts and <code>make demo-down</code>. MLflow's own tables live in a separate <code>mlflow</code> database on the same server, created by an init script, so the warehouse contains only warehouse tables.</p>
+
+<div class="callout say">
+  <div class="callout-title">Say this</div>
+  <p>"The data is real: KKBox, 31 GB, 6.8 million subscribers. I stored it as timestamped events, not totals, so I can rebuild any subscriber as of any past date. The biggest cleaning decision was dropping 2.66 million orphan transactions rather than inventing signup dates, because invented dates would make loyal customers look new. It lives in Postgres, running in Docker: 82.8 million rows, copied and verified row for row."</p>
+</div>
+
+<!-- =================================================================== -->
+
+<h1 id="ch-features" data-toc="Features without leakage" data-num="6"><span class="num">CHAPTER 6</span>Features without leakage</h1>
+<p class="lede">The model must never see anything it wouldn't have at prediction time. This chapter explains how the pipeline guarantees that, and the one subtle bug the guarantee exposed.</p>
+
+<h2>What leakage is</h2>
+<p><strong>Data leakage</strong> is when training data contains information that wouldn't be available when the model is really used. The classic churn example: a feature like "days active in the last 30 days", computed <em>today</em> for a subscriber whose label comes from last month. That feature includes the very period in which they did or didn't cancel. The model looks brilliant in testing, because it's partly reading the answer, and fails in production.</p>
+
+<h2>Point-in-time correctness</h2>
+<p>Every training example is built "as of" a <strong>cutoff date T</strong>, with two windows that never overlap:</p>
+<table>
+  <thead><tr><th>Window</th><th>Covers</th><th>Used for</th></tr></thead>
+  <tr><td>Observation</td><td>The 30 days before T (180 days for payments, 90 for tickets)</td><td>Features, computed only from events with <code>occurred_at &lt; T</code></td></tr>
+  <tr><td>Prediction horizon</td><td>The 30 days from T</td><td>The label: did they cancel with <code>T ≤ occurred_at &lt; T + 30 days</code>?</td></tr>
+</table>
+<p>Nothing at or after T can reach a feature. A test in the suite (<code>test_events_after_the_cutoff_cannot_change_features</code>) adds future events and asserts that no feature changes. It's the most important test in the project, because if it failed, every metric would be meaningless.</p>
+
+<h2>The label: what "churn" means here</h2>
+<p>A subscriber churns if they have an <strong>explicit cancellation event</strong> (KKBox's <code>is_cancel</code> flag) in the 30 days after the cutoff. Subscribers who had <em>already</em> cancelled before the cutoff are excluded: they can't churn twice, and including them would fill the data with trivially-zero labels.</p>
+<div class="callout warn">
+  <div class="callout-title">Know this difference</div>
+  <p>The Kaggle competition defined churn differently: no new subscription within 30 days of the current one expiring. That includes quiet lapses, not just explicit cancellations. This project's definition is stricter, which is one reason its churn rate is only about 1.5%. If an examiner knows the dataset, expect this question.</p>
+</div>
+
+<h2>How the feature query works</h2>
+<p>One SQL query (<code>src/features/point_in_time.py</code>) builds every subscriber's row for a cutoff, as a chain of common table expressions:</p>
+<table>
+  <thead><tr><th>Step</th><th>What it computes</th></tr></thead>
+  <tr><td><code>base</code></td><td>Subscribers who signed up before the cutoff (optionally capped to N, ordered by ID)</td></tr>
+  <tr><td><code>latest_state</code></td><td>Each subscriber's most recent lifecycle event before T: current plan, fee, auto-renew. Uses <code>ROW_NUMBER()</code> ordered by time, then event ID for ties</td></tr>
+  <tr><td><code>session_window</code></td><td>Sessions in the 30 days before T: count and average duration</td></tr>
+  <tr><td><code>session_recency</code></td><td>The last session <em>ever</em> before T. It must look across all history: a subscriber absent for 90 days has no rows in a 30-day window, and treating that as "no data" would erase the strongest signal</td></tr>
+  <tr><td><code>payment_window</code></td><td>Failed payments and discounts used in the 180 days before T</td></tr>
+  <tr><td><code>ticket_window</code></td><td>Support tickets in the 90 days before T</td></tr>
+</table>
+<p>Dates are passed to the query as bound parameters, and date arithmetic (tenure, days since last activity) happens in pandas afterwards. That keeps the SQL identical on SQLite and Postgres, which spell date maths differently. Tenure is measured at the cutoff, not today. A subscriber with no sessions at all gets "last active" equal to their tenure, and "last active" is never allowed to exceed tenure.</p>
+
+<h2>The model's inputs</h2>
+<table>
+  <thead><tr><th>Input (API field)</th><th>Meaning</th></tr></thead>
+  <tr><td><code>tenure_days</code></td><td>Days since signup, as of the cutoff</td></tr>
+  <tr><td><code>plan_type</code></td><td>basic / standard / premium</td></tr>
+  <tr><td><code>monthly_fee</code></td><td>Current fee, normalised to a month</td></tr>
+  <tr><td><code>avg_session_count_last_30d</code></td><td>Listening days in the last 30 days</td></tr>
+  <tr><td><code>last_activity_days_ago</code></td><td>Days since last listened</td></tr>
+  <tr><td><code>support_tickets_last_90d</code></td><td>Always 0 on KKBox</td></tr>
+  <tr><td><code>payment_failures_last_6m</code></td><td>Always 0 on KKBox</td></tr>
+  <tr><td><code>discounts_used_last_6m</code></td><td>Payments made below list price</td></tr>
+  <tr><td><code>is_auto_renew_enabled</code></td><td>Auto-renew on or off</td></tr>
+</table>
+<p>From these, <code>src/features/build_features.py</code> derives: <code>tenure_months</code>, <code>recency_ratio</code> (days inactive ÷ tenure), <code>engagement_recency_score</code> (sessions ÷ days inactive), <code>fee_per_session</code>, <code>discount_dependency</code> (discounts ÷ 6), <code>friction_score</code> (tickets + failures), per-month rates, and <code>is_dormant</code>. The plan type is one-hot encoded. The same code runs in training and serving, so the model always sees identically built features.</p>
+
+<h2>Splitting by time, never randomly</h2>
+<table>
+  <thead><tr><th>Split</th><th>Cutoff(s)</th><th class="num">Rows</th></tr></thead>
+  <tr><td>Train</td><td>1 Nov 2016, 1 Dec 2016</td><td class="num">66,704</td></tr>
+  <tr><td>Validation</td><td>31 Dec 2016</td><td class="num">33,600</td></tr>
+  <tr><td>Test</td><td>29 Jan 2017</td><td class="num">33,042</td></tr>
+</table>
+<p>A random split would put rows from January into training and rows from November into testing: the model would learn from the future and be graded on the past. The test score would measure memory, not prediction. A time-based split is how the model is really used: trained on what has happened, judged on what happens next.</p>
+
+<h2>The bug the Postgres comparison found</h2>
+<p>After moving the warehouse to Postgres, the same training snapshot was built from both databases and compared row for row. <strong>They differed by exactly one subscriber out of 1,104.</strong></p>
+<p>The cause: SQLite stores dates as <em>text</em>. The query compared <code>signup_date &lt; cutoff</code>, with the cutoff passed as a timestamp, so SQLite compared the strings <code>'2016-12-01' &lt; '2016-12-01 00:00:00'</code>. As text, that's <strong>true</strong>, because a shorter string that matches the start of a longer one sorts first. So SQLite counted everyone who signed up <em>on</em> the cutoff day (5,850 people) as having signed up <em>before</em> it. Postgres compares real dates and correctly excluded them.</p>
+<p><strong>Impact:</strong> no future information reached any feature, because those subscribers have no event strictly before the cutoff and a later join dropped them. But they occupied slots in the capped sample, displacing real subscribers. <strong>Fix:</strong> compare the date column against a real date. A regression test was written first, confirmed to fail, and passes after the fix. After it, the two databases produced <strong>identical</strong> snapshots: every row, feature and label.</p>
+
+<div class="callout say">
+  <div class="callout-title">Say this</div>
+  <p>"For a cutoff date T, features only use the 30 days before T and the label only looks at the 30 days after. The windows never overlap, so the model can't see the answer. I split by time: train on November and December 2016, test on January 2017. And comparing SQLite with Postgres caught a real bug: SQLite compared dates as text and let same-day signups through. I fixed it with a test that failed first."</p>
+</div>
