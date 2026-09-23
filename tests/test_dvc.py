@@ -214,13 +214,44 @@ def test_every_declared_parameter_section_exists() -> None:
             assert declared in sections, f"stage declares unknown param section: {declared}"
 
 
-def test_stage_dependencies_and_outputs_exist_on_disk() -> None:
-    """A path typo makes DVC rerun a stage forever, or never."""
+def _stage_outputs(stages: dict) -> set[str]:
+    """Every path some stage produces. `outs` entries may carry options."""
+    produced: set[str] = set()
+    for stage in stages.values():
+        for out in stage.get("outs", []) + stage.get("metrics", []):
+            produced.add(next(iter(out)) if isinstance(out, dict) else out)
+    return produced
+
+
+def test_stage_dependencies_exist_or_are_produced_upstream() -> None:
+    """A path typo makes DVC rerun a stage forever, or never.
+
+    This used to require every dependency to exist on disk, which made CI red
+    for weeks without anyone noticing: `train` depends on warehouse.db, which
+    is gitignored and *produced by the simulate stage* - present on any machine
+    that has run the pipeline, absent on every fresh checkout, which is exactly
+    what CI is. A dependency is legitimate if it is in the repo or some stage
+    generates it; a typo is neither, so the guard still catches what it was
+    written for.
+    """
     stages = _dvc_pipeline()["stages"]
+    produced = _stage_outputs(stages)
 
     for name, stage in stages.items():
         for dependency in stage.get("deps", []):
-            assert (ROOT / dependency).exists(), f"{name} depends on missing {dependency}"
+            assert (ROOT / dependency).exists() or dependency in produced, (
+                f"{name} depends on {dependency}, which is neither in the repo "
+                "nor produced by any stage"
+            )
+
+
+def test_the_typo_guard_still_catches_a_typo() -> None:
+    """The relaxed rule must not have become a rule that passes everything."""
+    stages = {"train": {"deps": ["src/data/warehouse.db", "src/modles/train.py"]},
+              "simulate": {"outs": ["src/data/warehouse.db"]}}
+    produced = _stage_outputs(stages)
+    missing = [d for d in stages["train"]["deps"] if not (ROOT / d).exists() and d not in produced]
+    assert missing == ["src/modles/train.py"]
 
 
 def test_the_stages_form_a_chain_rather_than_two_islands() -> None:
