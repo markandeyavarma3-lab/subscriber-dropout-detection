@@ -101,9 +101,12 @@ def _run(*cmd: str, check: bool = True, capture: bool = True) -> subprocess.Comp
 
 def _http(url: str, payload: Any = None, timeout: float = 5.0) -> tuple[int, Any]:
     data = None if payload is None else json.dumps(payload).encode()
-    request = urllib.request.Request(
-        url, data=data, headers={"Content-Type": "application/json"} if data else {}
-    )
+    # GitHub's API refuses requests without a User-Agent (HTTP 403); curl sends
+    # one by default and urllib does not.
+    headers = {"User-Agent": "subscriber-dropout-demo"}
+    if data:
+        headers["Content-Type"] = "application/json"
+    request = urllib.request.Request(url, data=data, headers=headers)
     try:
         with urllib.request.urlopen(request, timeout=timeout) as response:  # noqa: S310
             body = response.read().decode()
@@ -255,6 +258,26 @@ def _all_targets_up() -> bool:
     return bool(active) and all(t.get("health") == "up" for t in active)
 
 
+def _latest_ci() -> tuple[str, bool, str]:
+    remote = _run("git", "remote", "get-url", "origin", check=False).stdout.strip()
+    repo = remote.removesuffix(".git").split("github.com")[-1].lstrip(":/")
+    if not repo:
+        return "Latest CI run on main is green", False, "no GitHub remote"
+    status, body = _http(f"https://api.github.com/repos/{repo}/actions/runs?branch=main&per_page=1",
+                         timeout=10)
+    runs = (body or {}).get("workflow_runs") or []
+    if status == 403:
+        # Unauthenticated GitHub API calls are capped at 60 an hour per address.
+        return ("Latest CI run on main is green", False,
+                "GitHub rate limit (60/hour without login): retry later, or open Actions")
+    if status != 200 or not runs:
+        return "Latest CI run on main is green", False, f"could not read GitHub (HTTP {status})"
+    run = runs[0]
+    state = run["conclusion"] or run["status"]
+    return ("Latest CI run on main is green", run["conclusion"] == "success",
+            f"{state} on {run['head_sha'][:7]}")
+
+
 def check() -> int:
     results: list[tuple[str, bool, str]] = []
 
@@ -307,6 +330,11 @@ def check() -> int:
     down = [t["labels"].get("job") for t in active if t.get("health") != "up"]
     record("Prometheus scraping every target", bool(active) and not down,
            "all up" if active and not down else f"down: {', '.join(down) or 'no targets'}")
+
+    # The latest CI run on main. It stayed red for 17 days once while every
+    # local test passed, because nothing ever looked; the demo tells the
+    # examiner to open the Actions page, so this is where it gets looked at.
+    record(*_latest_ci())
 
     width = max(len(name) for name, _, _ in results)
     for name, passed, detail in results:
