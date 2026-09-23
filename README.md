@@ -39,7 +39,7 @@ Built to be understood and extended by a single developer in one to two weeks.
 ```bash
 make demo-prepare   # once: build the image and write the drift report
 make demo           # start all 8 services, wait until each is serving, warm them up
-make demo-check     # the pre-demo checklist - must say 18/18
+make demo-check     # the pre-demo checklist - must say 19/19
 make demo-down      # stop everything (keeps all data)
 ```
 

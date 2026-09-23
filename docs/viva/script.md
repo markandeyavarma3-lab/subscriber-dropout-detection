@@ -42,7 +42,7 @@ own way, but keep the order, because each part sets up the next.
 ```bash
 make demo-prepare     # builds the image, writes the drift report (~5 min)
 make demo             # start everything
-make demo-check       # must say 18/18
+make demo-check       # must say 19/19
 ```
 
 Then open every page once in your own browser, so first-visit pop-ups are gone on the day:
@@ -58,7 +58,7 @@ Then `make demo-down`.
 
 1. Plug in the charger. Turn on Do Not Disturb. Quit everything you don't need (Slack,
    mail, anything that pops up).
-2. `make demo`, then `make demo-check`, and wait for **18/18 checks passed**. If anything
+2. `make demo`, then `make demo-check`, and wait for **19/19 checks passed**. If anything
    fails, see "If something breaks" at the bottom.
 3. Open these tabs **in this order**, left to right:
    1. `DEMO_QUERIES_POSTGRES.sql` in any editor, for copying
