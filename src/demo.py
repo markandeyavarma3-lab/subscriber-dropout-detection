@@ -46,6 +46,14 @@ SERVICES = [
     "grafana", "redpanda", "stream-scorer",
 ]
 MLFLOW_PORT = 5050  # 5000 belongs to macOS AirPlay Receiver
+# MLflow rejects requests whose Host header isn't on this list (DNS-rebinding
+# protection). The API container reaches the host as host.docker.internal to
+# record live-replay runs, so that one name is added - not "*", which would
+# switch the protection off.
+MLFLOW_ALLOWED_HOSTS = ",".join(
+    f"{host}{port}" for host in ("localhost", "127.0.0.1", "host.docker.internal")
+    for port in ("", f":{MLFLOW_PORT}")
+)
 
 URLS = {
     "Dashboard": "http://127.0.0.1:8000/",
@@ -196,7 +204,8 @@ def start_mlflow_ui() -> None:
     log = open(STATE / "mlflow.log", "w")  # noqa: SIM115 - handed to the child
     process = subprocess.Popen(
         [sys.executable, "-m", "mlflow", "ui", "--host", "127.0.0.1",
-         "--port", str(MLFLOW_PORT), "--backend-store-uri", f"sqlite:///{ROOT / 'mlflow.db'}"],
+         "--port", str(MLFLOW_PORT), "--allowed-hosts", MLFLOW_ALLOWED_HOSTS,
+         "--backend-store-uri", f"sqlite:///{ROOT / 'mlflow.db'}"],
         cwd=ROOT, stdout=log, stderr=subprocess.STDOUT, start_new_session=True,
     )
     pid_file.write_text(str(process.pid))
@@ -292,8 +301,14 @@ def check() -> int:
     info = info or {}
     local = json.loads((settings.ARTIFACTS_DIR / "metadata.json").read_text())
     same = info.get("trained_at") == local.get("trained_at")
-    record("Serving the promoted KKBox model", same,
-           f"served trained_at={info.get('trained_at')}, artifact={local.get('trained_at')}")
+    if info.get("served_from") == "live":
+        # Not a fault: the dashboard's replay promoted its own model. The
+        # presets below are tuned for the tested one, so they will fail too.
+        detail = (f"the live replay's model (registry v{info.get('registry_version')}) "
+                  "is serving - press Restore on the dashboard's Overview")
+    else:
+        detail = f"served trained_at={info.get('trained_at')}, artifact={local.get('trained_at')}"
+    record("Serving the promoted KKBox model", same, detail)
 
     # A model unpickled by a different scikit-learn than the one that trained
     # it can load cleanly and still score differently. requirements.txt pins

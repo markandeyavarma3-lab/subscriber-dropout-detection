@@ -140,6 +140,24 @@
 <div class="qa"><div class="qa-q">Why does the dashboard show shadow scoring as "IDLE"?</div>
 <p>Because there's currently no distinct challenger: the only registered model is the champion. It's built and tested (CI trains a distinct challenger and checks shadow scoring works); in the demo it honestly reports "no challenger" rather than a misleading 0%.</p></div>
 
+<div class="qa"><div class="qa-q">What happens when I press "Run" on the Overview?<span class="tag core">core</span></div>
+<p>It replays one real month through the whole pipeline: new data arrives, point-in-time features, validation, drift check, training, evaluation, the promotion gate, and, if the new model wins, go-live. It runs in a separate process, and the page follows each stage live. If the model is promoted, the API loads it, and the very next prediction on the Score tab uses it. The run is also logged to MLflow, and the <code>@champion</code> alias moves.</p></div>
+
+<div class="qa"><div class="qa-q">Is the replay real, or an animation?<span class="tag tricky">tricky</span></div>
+<p>Real. It calls the same feature, training, drift and gate code as the scheduled pipeline, on the real warehouse in Postgres. The evidence is on screen: the scores are different each month, month 2 is rejected by the gate (0.0475 vs 0.0474, inside the 0.005 margin), a new MLflow version appears for each run, and the header changes to name the live model. 15 tests check it, including that a promotion really changes the model behind <code>/predict</code>.</p></div>
+
+<div class="qa"><div class="qa-q">How does the replay avoid using the future?<span class="tag tricky">tricky</span></div>
+<p>Each replayed day may only use cutoffs whose 30-day label window has finished by that day, and it tests on the newest such cutoff, which training never saw. On 1 Jan 2017 it trains on 1 Nov 2016 and tests on 1 Dec 2016. Each later month adds the previous test month to training. A test checks this for every month in the schedule.</p></div>
+
+<div class="qa"><div class="qa-q">Why doesn't the replay compete with the production model?</div>
+<p>Production was trained on data from these same months, so comparing against it would be unfair: it has effectively seen the answers. The replay is its own lineage with its own MLflow model name (<code>subscriber-dropout-live</code>). Its first model is promoted because nothing came before it, and each later month must beat the replay's own champion.</p></div>
+
+<div class="qa"><div class="qa-q">Why is the replay's PR-AUC lower than production's?</div>
+<p>It trains on a 50,000-subscriber sample, not 6.8 million, so a month runs in about 30 seconds during a demo. Less data gives a weaker model (about 0.057 vs 0.073). The point of the replay is to show the pipeline and the gate working, not to beat production.</p></div>
+
+<div class="qa"><div class="qa-q">What does "Restore original model" do?</div>
+<p>It stops any run in progress, forgets the replay's state, and loads the tested production model again. <code>make demo-check</code> warns if a replay model is still serving, because the three example subscribers are tuned to the production model and would score differently.</p></div>
+
 <!-- =========================== I ============================ -->
 <h1 id="qa-serving" data-toc="I · Serving and the API"><span class="num">SECTION I</span>Serving and the API</h1>
 

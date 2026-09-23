@@ -12,6 +12,9 @@
   <tr><td><code>POST /predict</code></td><td>Score one subscriber, with an explanation</td></tr>
   <tr><td><code>POST /predict/batch</code></td><td>Score 1 to 1,000 subscribers in one call</td></tr>
   <tr><td><code>GET /overview</code></td><td>Everything the dashboard's Overview page shows, from the live system: warehouse row counts, the model's own test results, the last drift check. A part that can't be read says so rather than failing</td></tr>
+  <tr><td><code>GET /live/status</code></td><td>The live replay's state: which month is next, each pipeline stage's result, every version it trained, and which one is serving</td></tr>
+  <tr><td><code>POST /live/run</code></td><td>Replay the next real month through the whole pipeline, in a separate process. 409 if one is already running, or if every month has run</td></tr>
+  <tr><td><code>POST /live/reset</code></td><td>Stop the replay and put the tested production model back behind <code>/predict</code></td></tr>
   <tr><td><code>GET /metrics</code></td><td>A JSON summary of recent traffic: counts, flagged rate, score percentiles, shift from training</td></tr>
   <tr><td><code>GET /metrics/prometheus</code></td><td>The same, in Prometheus's text format, for scraping</td></tr>
   <tr><td><code>POST /monitoring/drift</code></td><td>Compare a sample (up to 50,000 rows) against the training distribution with PSI</td></tr>
@@ -54,7 +57,7 @@
 <p>A single self-contained page (<code>src/api/static/index.html</code>, no build step) in a light, colour-coded theme, with five tabs, each reachable by link (<code>#overview</code>, <code>#score</code>, <code>#live</code>, <code>#model</code>, <code>#monitoring</code>):</p>
 <table>
   <thead><tr><th>Tab</th><th>What it shows</th></tr></thead>
-  <tr><td>Overview</td><td>Opens first and explains the whole project to someone who has never seen it: the problem, the journey of a prediction in six stages, the warehouse's live row counts, the time-based split, how good the model is, the architecture and tech stack, honest limits, and links to every tool. Every figure marked with a green dot is read live from <code>/overview</code> and <code>/metrics</code>, so it can't go stale when the model is retrained</td></tr>
+  <tr><td>Overview</td><td>Opens first, on the <strong>live MLOps pipeline</strong> (next section): one button replays a real month of data through the whole pipeline and, if the new model wins the gate, puts it live on the same page. Below it, a few live tiles (warehouse rows, the serving model, predictions served, the last drift verdict) and links to every tool</td></tr>
   <tr><td>Score</td><td>A form (sliders and inputs, with three presets), the probability, risk band, distance from the threshold, the SHAP drivers, and "What would change it"</td></tr>
   <tr><td>Live traffic</td><td>Predictions served, flagged rate, risk mix, score spread, and live traffic against the training reference</td></tr>
   <tr><td>Model</td><td>Provenance, library versions, required inputs, and notes on the two surprising behaviours</td></tr>
@@ -63,8 +66,30 @@
 
 <figure>
   <img src="/docs/viva/screenshots/dashboard-overview.png" alt="Dashboard overview tab" style="width:92%">
-  <figcaption>Figure 9.1: The Overview, the first thing anyone sees. Every number with a green dot is read live from the running system.</figcaption>
+  <figcaption>Figure 9.1: The Overview after all three replayed months: promoted, rejected by the gate, promoted. Every number comes from the running system.</figcaption>
 </figure>
+
+<h2>The live MLOps pipeline (the Overview)</h2>
+<p>The rest of the project runs its pipeline on a schedule, which is invisible in a 15-minute demo. The Overview makes it visible. Each click on <strong>Run</strong> pretends it is a specific day in early 2017 and does exactly what the nightly pipeline would have done that day, on the real KKBox data in Postgres:</p>
+<table>
+  <thead><tr><th>Stage</th><th>What happens</th></tr></thead>
+  <tr><td>1 · New data arrives</td><td>Counts the rows that landed in the warehouse since the last replayed day (listening days, subscription events, payments)</td></tr>
+  <tr><td>2 · Build features</td><td>The project's point-in-time feature code, for every cutoff the model may train on, on a fixed sample of 50,000 subscribers. Snapshots are cached, so a cutoff is only built once</td></tr>
+  <tr><td>3 · Validate</td><td>Refuses to train on impossible data: activity before signup, one-class test sets, implausible churn rates</td></tr>
+  <tr><td>4 · Check drift</td><td>PSI of the new month against the serving model's training profile (skipped on the first month: nothing to compare against)</td></tr>
+  <tr><td>5 · Train</td><td>The project's own training pipeline on every month known so far</td></tr>
+  <tr><td>6 · Evaluate</td><td>PR-AUC and ROC-AUC on the newest month whose labels are complete, which training never saw</td></tr>
+  <tr><td>7 · Gate</td><td>The same promotion gate as production: the challenger must beat the champion's PR-AUC, on the same test month, by at least 0.005</td></tr>
+  <tr><td>8 · Go live</td><td>If promoted, the API loads the new model and the very next <code>/predict</code> uses it. The run is logged to MLflow under its own experiment (<code>subscriber-dropout-live-replay</code>) and model name (<code>subscriber-dropout-live</code>), and the <code>@champion</code> alias moves</td></tr>
+</table>
+<p>Three months are replayed: <strong>1 Jan 2017</strong>, <strong>31 Jan 2017</strong> and <strong>28 Feb 2017</strong>. Each one trains on everything before it, including the previous month's test month. On the real data, the result isn't scripted: month 1 is promoted (there is no champion yet), month 2 is <strong>rejected</strong> (0.0475 vs 0.0474, well inside the 0.005 margin), and month 3 is promoted (0.0568 vs 0.0489), with moderate drift in last-activity days. <strong>Restore original model</strong> stops the replay and puts the tested production model back.</p>
+<div class="callout">
+  <div class="callout-title">Why it is honest</div>
+  <p><strong>No future data.</strong> A training label covers the 30 days after its cutoff, so every cutoff a replayed day uses must end on or before that day. A test checks this for every month in the schedule.</p>
+  <p><strong>Its own lineage.</strong> The replay is gated against its own champion, never against the production model. Production was trained on these very months and would win unfairly.</p>
+  <p><strong>It never blocks serving.</strong> The replay runs in a separate process. The API only reads its state file, so predictions keep flowing during a run (a full walkthrough in the containers had zero failed health checks).</p>
+  <p><strong>Smaller, so it is quick.</strong> 50,000 subscribers instead of 6.8 million, so a month takes about 30 seconds. That's why its PR-AUC (about 0.057) is below production's (0.073).</p>
+</div>
 
 <figure>
   <img src="/docs/viva/screenshots/dashboard-score.png" alt="Dashboard score tab" style="width:88%">

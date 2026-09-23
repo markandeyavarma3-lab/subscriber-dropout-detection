@@ -32,6 +32,7 @@ from src.api.schemas import (
     SubscriberFeaturesRequest,
 )
 from src.config import settings
+from src.live import control as live
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 logger = logging.getLogger(__name__)
@@ -171,6 +172,31 @@ def project_overview() -> dict:
     ``available: false`` rather than failing the page.
     """
     return overview.build_overview()
+
+
+@app.get("/live/status", tags=["live replay"])
+def live_status() -> dict:
+    """Where the live replay is, stage by stage, and which model is serving."""
+    return live.sync()
+
+
+@app.post("/live/run", tags=["live replay"])
+def live_run() -> dict:
+    """Replay the next month of real data through the whole pipeline.
+
+    Runs in its own process; poll ``/live/status``. If the new model beats the
+    replay's champion at the gate, it starts serving immediately.
+    """
+    try:
+        return live.start()
+    except (live.ReplayBusy, live.ReplayFinished) as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+
+
+@app.post("/live/reset", tags=["live replay"])
+def live_reset() -> dict:
+    """Stop the replay and put the tested production model back."""
+    return live.restore()
 
 
 @app.get("/monitoring/shadow", response_model=ShadowResponse, tags=["monitoring"])

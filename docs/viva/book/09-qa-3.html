@@ -119,7 +119,7 @@
 <p><strong>Continuous integration:</strong> every change is automatically built and tested, so problems surface immediately. <strong>Continuous delivery:</strong> every change that passes is packaged into a releasable artifact. <strong>Continuous deployment:</strong> that artifact is also released to production automatically.</p></div>
 
 <div class="qa"><div class="qa-q">What does your CI do?<span class="tag core">core</span></div>
-<p>Seven jobs on every push: lint and 441 tests; train and gate on SQLite; train and gate on Postgres plus the demo queries; the full pipeline (idempotent, identical challenger rejected, drift detected); the streaming loop with poison messages; building and smoke-testing the Docker image; and, on <code>main</code>, publishing the image to the GitHub Container Registry.</p></div>
+<p>Seven jobs on every push: lint and 456 tests; train and gate on SQLite; train and gate on Postgres plus the demo queries; the full pipeline (idempotent, identical challenger rejected, drift detected); the streaming loop with poison messages; building and smoke-testing the Docker image; and, on <code>main</code>, publishing the image to the GitHub Container Registry.</p></div>
 
 <div class="qa"><div class="qa-q">Do you have CD?<span class="tag tricky">tricky</span></div>
 <p>Continuous <em>delivery</em>, yes: every merge to <code>main</code> that passes all six test jobs publishes the image, tagged with the commit hash. Continuous <em>deployment</em>, no: nothing automatically releases it to a production cluster, because there's no free cluster that fits the stack. I'd describe it exactly that way.</p></div>
@@ -131,7 +131,7 @@
 <p>A test required that every file a DVC stage depends on exists on disk. One dependency, the warehouse database, is git-ignored and produced by a pipeline stage: present on my machine, absent on every fresh checkout, which is what CI is. So CI failed on every push while local tests passed, and because that job gates the others, four jobs didn't run at all. I found it by running the suite on a fresh clone. The rule is now "in the repo or produced by a stage", and the demo checklist checks CI is green.</p></div>
 
 <div class="qa"><div class="qa-q">How many tests are there, and what do they cover?</div>
-<p>441, across 15 files: monitoring, evaluation, streaming, the API, Prometheus and alerting config, the KKBox loader, point-in-time features, orchestration, training, the registry, shadow scoring, explanations, features, DVC and the Postgres copy.</p></div>
+<p>456, across 17 files: monitoring, evaluation, streaming, the API, Prometheus and alerting config, the KKBox loader, point-in-time features, orchestration, training, the registry, shadow scoring, explanations, features, DVC, the Postgres copy, the Overview, and the live replay.</p></div>
 
 <div class="qa"><div class="qa-q">Which test is most important?<span class="tag core">core</span></div>
 <p>The leakage test: adding events after the cutoff must not change any feature. If it failed, every metric the project reports would be meaningless.</p></div>

@@ -66,30 +66,46 @@ Then `make demo-down`.
    5. Grafana: http://127.0.0.1:3000
    6. Prometheus alerts: http://127.0.0.1:9090/alerts
    7. GitHub: the repo's **Actions** tab, showing the latest green run
-   8. `docs/viva/architecture.md` preview, to show the diagram
+   8. `docs/viva/architecture.md` preview, to show the diagram when you explain the pieces
 4. Browser zoom around 110%, so the examiner can read from across a desk.
 
 ---
 
 ## The talk
 
-### 0:00 – 1:30 · The problem (dashboard → Overview tab)
+### 0:00 – 1:00 · The problem (dashboard → Overview)
 
-Open **http://127.0.0.1:8000**. It opens on the **Overview**, which tells the whole story on
-one page, with live numbers (the green dots). Scroll slowly while you talk: the problem, the
-six-stage journey, the architecture. Everything the rest of the demo shows in detail is
-summarised here first.
+Open **http://127.0.0.1:8000**. It opens on the **Overview**: the live MLOps pipeline. The
+header pill must name `gradient_boosting_classifier` (the tested model). If it says "live
+replay model", press **Restore original model** first.
 
 > "Subscription businesses lose revenue when people cancel. If you can spot who's *about* to
 > cancel, you can act while they're still a customer. I built a system that predicts that
 > for a real music-streaming service. But the model is only a small part of it. Most of
 > the work is everything that keeps a model trustworthy in production: that's what MLOps
-> means."
+> means. Let me show it working before I explain it."
 
-Point at the diagram, left to right: **data → warehouse → features and training → registry →
-serving → monitoring**, with automation underneath.
+### 1:00 – 3:00 · The pipeline, live (Overview → Run)
 
-### 1:30 – 5:00 · The data (TablePlus)
+1. Click **▶ Run 1 Jan 2017**. The eight stage cards light up one by one (about 30 seconds
+   the first time, 10–30 seconds after that). Talk over it:
+   > "It's pretending to be 1 January 2017 and doing what the nightly pipeline did that day,
+   > on the real data in Postgres. New data arrives, features are built only from the past,
+   > the data is validated, checked for drift, a model is trained, tested on a month it
+   > never saw, and then the **gate** decides whether it goes live."
+2. When it finishes, point at **Go live** and the header pill, which now says *live replay
+   model · MLflow vN*:
+   > "It was promoted, because there was no champion yet, and the website is now serving it.
+   > Nothing restarted."
+3. Click **▶ Run 31 Jan 2017**. This one is **rejected**: 0.0475 against 0.0474.
+   > "It's a bit better, but not by the 0.005 margin, so the old model keeps serving. That's
+   > the gate doing its job: a new model has to be *measurably* better, not luckily better."
+4. Leave month 3 for later.
+
+If the examiner asks whether it's real: the scores differ each month, the gate rejected one,
+and every run appears in MLflow. See the book, section H.
+
+### 3:00 – 5:30 · The data (TablePlus)
 
 > "This is real data: KKBox, a music-streaming company, from a Kaggle competition. 31 GB of
 > raw CSV, which I cleaned into a Postgres warehouse."
@@ -109,14 +125,16 @@ serving → monitoring**, with automation underneath.
    > signup dates, because invented dates would make long-standing customers look new, and
    > the model reads 'new' as risky."
 
-### 5:00 – 8:00 · Features, training, and the registry (MLflow)
+### 5:30 – 8:00 · Features, training, and the registry (MLflow)
 
 > "For training I pick a cutoff date. Features only use the 30 days **before** it; the label
 > is whether they cancel in the 30 days **after**. The windows never overlap, so the model
 > can't see the answer. And I split by time, training on Nov–Dec 2016 and testing on
 > January 2017, never randomly."
 
-In MLflow: **Model training → Experiments → subscriber-dropout**, open the latest run.
+In MLflow: **Model training → Experiments → subscriber-dropout**, open the full training run
+from 6 Sep 2026 (the one registered as `subscriber-dropout-classifier` v1). The Overview's
+replay runs have their own experiment, `subscriber-dropout-live-replay`.
 
 > "Every run records its parameters and metrics."
 
@@ -124,6 +142,16 @@ Then **Models → subscriber-dropout-classifier**.
 
 > "The registry holds versions, and the live one carries the **@champion** alias. A new
 > model only takes over if it beats the champion on **PR-AUC**, by a margin."
+
+Then **Models → subscriber-dropout-live**: the versions the Overview just made, one per click,
+with **@champion** on the one that's serving. Back on the dashboard, click **▶ Run 28 Feb
+2017**. It's **promoted** (0.0568 vs 0.0489), and drift is *moderate*: last-activity days
+shifted (PSI 0.153). Refresh MLflow and a new version carries **@champion**.
+
+> "That's the whole loop: data in, a retrained model, a gate, and a deployment, with every
+> step recorded."
+
+Then press **Restore original model**. The Score tab's examples are tuned to the tested model.
 
 Say the key finding. It's the strongest moment of the talk:
 
@@ -197,6 +225,8 @@ Click into the latest run and show the green jobs.
 | Symptom | Do this |
 |---|---|
 | `make demo-check` shows a FAIL | Read the detail column; it says what's wrong. Most failures are a service still starting: wait 30 s and re-run. |
+| The Run button fails or hangs | Press **Restore original model** and carry on. Everything else is independent of it. Say: "it replays a month on the real data; I'll show the gate in MLflow instead." |
+| Score tab gives unexpected numbers | A replay model is still serving. Press **Restore original model** on the Overview. |
 | Docker won't start | Open Docker Desktop by hand, wait for the whale icon to settle, re-run `make demo`. |
 | TablePlus "connection refused" | Postgres isn't up: `docker compose up -d postgres`, wait 10 s, reconnect. |
 | MLflow page blank | `make demo-down` then `make demo`. The MLflow UI is restarted with the stack. |

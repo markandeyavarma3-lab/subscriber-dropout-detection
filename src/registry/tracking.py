@@ -73,6 +73,8 @@ def log_training_run(
     register: bool = True,
     model_name: str | None = None,
     tags: dict[str, str] | None = None,
+    tracking_uri: str | None = None,
+    experiment: str | None = None,
 ) -> tuple[str, ModelVersion | None]:
     """Log one training run and optionally register the resulting model.
 
@@ -86,11 +88,13 @@ def log_training_run(
         register: Whether to create a registered model version.
         model_name: Registry name. Defaults to settings.
         tags: Extra run tags.
+        tracking_uri: MLflow server to log to. Defaults to settings.
+        experiment: Experiment to log under. Defaults to settings.
 
     Returns:
         ``(run_id, model_version)``; the version is ``None`` when not registering.
     """
-    client = configure()
+    client = configure(tracking_uri, experiment)
     name = model_name or settings.REGISTERED_MODEL_NAME
 
     with mlflow.start_run(tags=tags) as run:

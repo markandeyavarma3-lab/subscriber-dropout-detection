@@ -219,6 +219,24 @@ It runs as a full stack of 8 services on Docker Compose, and there are Kubernete
 for the API and scorer. It isn't on a public cloud: a 15 GB warehouse plus MLflow, Kafka and
 Grafana doesn't fit a free tier. That's a deliberate scope decision, stated openly.
 
+**33. What does the Run button on the Overview do?**
+It replays one real month (1 Jan, 31 Jan or 28 Feb 2017) through the whole pipeline: new data
+arrives, point-in-time features, validation, drift check, training, evaluation on a month it
+never saw, and the gate. If the model wins, the API loads it and the next prediction uses it,
+and MLflow records a new version with `@champion` moved. It runs in a separate process, so
+serving never stops.
+
+**34. Is it real or an animation? And doesn't it cheat by using the future?**
+Real: it calls the same feature, training, drift and gate code, on Postgres. The proof is that
+month 2 is *rejected* (0.0475 vs 0.0474, inside the 0.005 margin), which nobody would script.
+It can't see the future: each replayed day only uses cutoffs whose 30-day label window has
+already ended, and a test checks that for every month.
+
+**35. Why is its PR-AUC (about 0.057) lower than production's (0.073)?**
+It trains on a 50,000-subscriber sample so a month runs in about 30 seconds during a demo.
+It's also gated only against its own earlier models, never against production, which was
+trained on these same months and would win unfairly.
+
 ---
 
 ## "Tell us about a problem you found." Three real ones
@@ -253,19 +271,19 @@ and plans joins far better; SQLite is a single file with a simpler planner.
 
 ## Limitations, and the question you should expect
 
-**33. What are the biggest limitations?**
+**39. What are the biggest limitations?**
 1. The model is modest (PR-AUC 0.073) because the data lacks strong signals.
 2. The fairness audit fails for the `standard` plan.
 3. The cost numbers are placeholders, so the cost-optimal threshold is illustrative.
 4. It isn't deployed to a public cloud.
 5. Our churn label is stricter than the competition's.
 
-**34. What would you do next?**
+**40. What would you do next?**
 Add richer behavioural features from the full 392M-row logs (listening trends, skips), try
 the competition's churn definition, collect real offer costs so the threshold can be set by
 money rather than F1, and deploy to a managed Kubernetes cluster.
 
-**35. How did you build this? Did you use AI tools?**
+**41. How did you build this? Did you use AI tools?**
 Answer this truthfully. Many colleges have a policy on AI assistance, so check yours before
 the viva. If you used an AI coding assistant, say so plainly and explain what *you* did:
 chose the problem and data, made or approved the design decisions, ran and verified

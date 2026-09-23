@@ -54,7 +54,7 @@
 <h2>The seven jobs</h2>
 <table>
   <thead><tr><th>Job</th><th>What it proves</th></tr></thead>
-  <tr><td>1 · Lint and test</td><td>ruff finds no problems; all 441 tests pass; a model trains end to end; the decision-quality report is produced and honest</td></tr>
+  <tr><td>1 · Lint and test</td><td>ruff finds no problems; all 456 tests pass; a model trains end to end; the decision-quality report is produced and honest</td></tr>
   <tr><td>2 · Train via the warehouse (SQLite)</td><td>Simulate a warehouse, train on a temporal split, run the gate, serve the promoted model, smoke-test <code>/predict</code> and the Prometheus endpoint</td></tr>
   <tr><td>3 · Train via the warehouse on Postgres</td><td>The same on a real Postgres service container, then all twelve demo queries run against it</td></tr>
   <tr><td>4 · The orchestrated pipeline</td><td>First run promotes; second run is idempotent and <strong>rejects an identical challenger</strong>; a distinct challenger shadow-scores; injected drift is <strong>detected</strong></td></tr>
@@ -87,9 +87,10 @@
   <tr><td>Orchestration</td><td class="num">22</td><td>Pipeline steps, report, needs-attention logic</td></tr>
   <tr><td>Training</td><td class="num">21</td><td>Training, threshold tuning, artifacts, CLI</td></tr>
   <tr><td>Registry</td><td class="num">20</td><td>Logging, aliases, the gate's margin</td></tr>
+  <tr><td>Live replay</td><td class="num">15</td><td>No month uses a label from after its replayed day; every stage runs; promotion really swaps the served model; restore really restores; MLflow runs land in the replay's own experiment</td></tr>
   <tr><td>Shadow, explain, features, DVC, Postgres copy, Overview</td><td class="num">74</td><td>Shadow never affects responses; SHAP additivity; feature building; DVC stage chain; bulk-copy slicing; the Overview's live numbers and graceful degradation</td></tr>
 </table>
-<p>That's 375 test functions, 441 tests once parametrised cases are counted.</p>
+<p>That's 386 test functions, 456 tests once parametrised cases are counted.</p>
 
 <div class="callout say">
   <div class="callout-title">Say this</div>

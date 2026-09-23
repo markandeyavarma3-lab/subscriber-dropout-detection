@@ -113,6 +113,9 @@ def evaluate_promotion(
     metric: str | None = None,
     min_improvement: float | None = None,
     model_name: str | None = None,
+    champion: Pipeline | None = None,
+    champion_label: str | None = None,
+    consult_registry: bool = True,
 ) -> PromotionDecision:
     """Decide whether a challenger should replace the current champion.
 
@@ -127,6 +130,13 @@ def evaluate_promotion(
         metric: Gating metric. Defaults to ``settings.PROMOTION_METRIC``.
         min_improvement: Required margin. Defaults to settings.
         model_name: Registry name. Defaults to settings.
+        champion: Compare against this pipeline instead of the registry's
+            @champion. The live replay keeps its own lineage in memory and
+            gates it with this same function, so the button on the dashboard
+            and the nightly pipeline apply one rule, not two.
+        champion_label: How to name ``champion`` in the decision record.
+        consult_registry: With no ``champion`` given, whether to look one up
+            in the registry. ``False`` means "there is no incumbent".
 
     Returns:
         A :class:`PromotionDecision`. It does **not** move any alias; call
@@ -138,6 +148,20 @@ def evaluate_promotion(
     )
 
     challenger_score = _score(challenger, features, target, gate_metric)
+
+    if champion is not None:
+        return _decide(challenger_score, _score(champion, features, target, gate_metric),
+                       gate_metric, margin, champion_label, challenger_version, len(features))
+    if not consult_registry:
+        return PromotionDecision(
+            promoted=True,
+            reason="no incumbent champion",
+            metric=gate_metric,
+            challenger_score=challenger_score,
+            challenger_version=challenger_version,
+            required_improvement=margin,
+            details={"n_eval_rows": int(len(features))},
+        )
 
     champion_version = tracking.get_alias_version(settings.CHAMPION_ALIAS, model_name)
     if champion_version is None:
@@ -163,6 +187,20 @@ def evaluate_promotion(
         )
 
     champion_score = _score(champion, features, target, gate_metric)
+    return _decide(challenger_score, champion_score, gate_metric, margin,
+                   champion_version.version, challenger_version, len(features))
+
+
+def _decide(
+    challenger_score: float,
+    champion_score: float,
+    gate_metric: str,
+    margin: float,
+    champion_version: str | None,
+    challenger_version: str | None,
+    n_rows: int,
+) -> PromotionDecision:
+    """The rule itself: promote only on a real improvement, by at least the margin."""
     beat_by = challenger_score - champion_score
     promoted = beat_by >= margin
 
@@ -176,10 +214,10 @@ def evaluate_promotion(
         metric=gate_metric,
         challenger_score=challenger_score,
         champion_score=champion_score,
-        champion_version=champion_version.version,
+        champion_version=champion_version,
         challenger_version=challenger_version,
         required_improvement=margin,
-        details={"n_eval_rows": int(len(features))},
+        details={"n_eval_rows": int(n_rows)},
     )
 
 

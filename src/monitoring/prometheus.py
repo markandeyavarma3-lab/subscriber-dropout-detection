@@ -345,7 +345,7 @@ def refresh_serving_gauges(live: dict[str, Any]) -> None:
 
 def refresh_model_source(served_from: str | None) -> None:
     """Expose which source the live model came from, as a one-hot gauge."""
-    for source in ("registry", "local"):
+    for source in ("registry", "local", "live"):
         SERVED_FROM.labels(source=source).set(1 if served_from == source else 0)
 
 

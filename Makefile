@@ -79,7 +79,9 @@ audit:  ## Print the decision-quality report from the last training run
 
 # 5050, not MLflow's default 5000: macOS's AirPlay Receiver owns *:5000.
 mlflow-ui:  ## Browse runs and the registry at http://127.0.0.1:5050
-	$(PYTHON) -m mlflow ui --port 5050 --backend-store-uri $${MLFLOW_TRACKING_URI:-sqlite:///mlflow.db}
+	$(PYTHON) -m mlflow ui --port 5050 \
+		--allowed-hosts localhost,localhost:5050,127.0.0.1,127.0.0.1:5050,host.docker.internal,host.docker.internal:5050 \
+		--backend-store-uri $${MLFLOW_TRACKING_URI:-sqlite:///mlflow.db}
 
 repro:  ## Rerun the DVC pipeline, skipping stages whose inputs did not change
 	dvc repro

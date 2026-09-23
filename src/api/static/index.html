@@ -729,10 +729,9 @@
   footer a { color: var(--accent); }
 
   /* ----------------------------- overview ------------------------------ */
-  /* Every Overview class is prefixed ov- so none can collide with a class the
-     working tabs already use (the .stack clash taught that lesson). Colour is
-     passed in per element through --tone / --tint, so one rule serves every
-     stage of the project in its own colour. */
+  /* Overview classes are prefixed ov- (shared tiles and buttons) and lv- (the
+     live pipeline) so none can collide with a class the working tabs use.
+     Colour arrives per element through --tone / --tint. */
 
   .ov-live {
     display: inline-block;
@@ -743,23 +742,6 @@
     box-shadow: 0 0 0 3px var(--low-soft);
     vertical-align: 1px;
   }
-
-  .ov-hero {
-    display: grid;
-    grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
-    gap: 28px;
-    align-items: stretch;
-    padding: 30px;
-    border-radius: var(--r-hero);
-    background:
-      radial-gradient(520px 260px at 0% 0%, var(--c-data-soft), transparent 70%),
-      radial-gradient(520px 300px at 100% 100%, var(--c-model-soft), transparent 70%),
-      var(--surface);
-    border: 1px solid var(--line);
-    box-shadow: var(--panel-shadow);
-    margin-bottom: 34px;
-  }
-  @media (max-width: 1000px) { .ov-hero { grid-template-columns: minmax(0, 1fr); } }
   .ov-kicker {
     font-family: var(--font-mono);
     font-size: 11.5px;
@@ -768,39 +750,29 @@
     color: var(--c-model);
     font-weight: 500;
   }
-  .ov-statement {
-    font-family: var(--font-display);
-    font-size: clamp(26px, 2.6vw, 34px);
-    line-height: 1.22;
-    margin: 12px 0 14px;
-    color: var(--ink);
-  }
-  .ov-statement em { font-style: italic; color: var(--c-model); }
-  .ov-lede { color: var(--ink-soft); margin: 0 0 20px; font-size: 15.5px; }
-  .ov-live-note { display: block; margin-top: 8px; font-size: 13px; color: var(--muted); }
-  .ov-actions { display: flex; flex-wrap: wrap; gap: 10px; }
   .ov-btn {
     display: inline-block;
-    padding: 10px 18px;
+    padding: 11px 20px;
     border-radius: 999px;
     border: 1px solid var(--line-firm);
     background: var(--surface);
     color: var(--ink);
+    font-family: var(--font-ui);
     font-weight: 600;
-    font-size: 14.5px;
+    font-size: 15px;
     text-decoration: none;
-    transition: transform var(--dur-1), box-shadow var(--dur-1);
+    cursor: pointer;
+    transition: transform var(--dur-1), box-shadow var(--dur-1), opacity var(--dur-1);
   }
-  .ov-btn:hover { transform: translateY(-1px); box-shadow: var(--panel-shadow); }
+  .ov-btn:hover:not(:disabled) { transform: translateY(-1px); box-shadow: var(--panel-shadow); }
+  .ov-btn:disabled { opacity: .45; cursor: not-allowed; }
   .ov-btn-primary { background: var(--accent); border-color: var(--accent); color: #FFFFFF; }
 
-  .ov-stat-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
   .ov-stat {
     display: flex;
     flex-direction: column;
-    justify-content: center;
-    gap: 4px;
-    padding: 16px 18px;
+    gap: 3px;
+    padding: 14px 16px;
     border-radius: 14px;
     background: var(--tint);
     border: 1px solid color-mix(in srgb, var(--tone) 18%, transparent);
@@ -809,209 +781,203 @@
   .ov-stat b {
     font-family: var(--font-display);
     font-weight: 400;
-    font-size: clamp(30px, 3vw, 40px);
+    font-size: 32px;
     line-height: 1.05;
     color: var(--tone);
   }
   .ov-stat-sub { font-size: 12.5px; color: var(--muted); }
 
-  .ov-section { margin: 0 0 38px; }
-  .ov-head { display: flex; gap: 14px; align-items: flex-start; margin-bottom: 16px; }
-  .ov-num {
-    flex: none;
+  /* The hero: what this is, the two buttons, and the months being replayed. */
+  .lv-hero {
     display: grid;
-    place-items: center;
-    width: 34px; height: 34px;
-    border-radius: 50%;
-    background: var(--tone);
-    color: #FFFFFF;
-    font-weight: 700;
-    font-size: 15px;
-    margin-top: 2px;
-  }
-  .ov-title { font-size: 23px; font-weight: 600; letter-spacing: -0.01em; margin: 0; color: var(--ink); }
-  .ov-sub { margin: 2px 0 0; color: var(--muted); font-size: 14.5px; }
-
-  .ov-cards3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
-  @media (max-width: 900px) { .ov-cards3 { grid-template-columns: minmax(0, 1fr); } }
-  .ov-card {
-    padding: 20px 22px;
-    border-radius: var(--r-panel);
-    background: var(--tint, var(--surface));
-    border: 1px solid color-mix(in srgb, var(--tone, var(--line)) 20%, var(--line));
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr);
+    gap: 28px;
+    align-items: center;
+    padding: 28px 30px;
+    border-radius: var(--r-hero);
+    background:
+      radial-gradient(520px 260px at 0% 0%, var(--c-data-soft), transparent 70%),
+      radial-gradient(520px 300px at 100% 100%, var(--c-model-soft), transparent 70%),
+      var(--surface);
+    border: 1px solid var(--line);
     box-shadow: var(--panel-shadow);
+    margin-bottom: 18px;
   }
-  .ov-card p { margin: 6px 0 0; color: var(--ink-soft); font-size: 14.5px; }
-  .ov-plain { background: var(--surface); }
-  .ov-big {
+  @media (max-width: 1000px) { .lv-hero { grid-template-columns: minmax(0, 1fr); } }
+  .lv-title {
     font-family: var(--font-display);
     font-weight: 400;
-    font-size: 42px;
-    line-height: 1;
-    color: var(--tone);
+    font-size: clamp(28px, 2.8vw, 38px);
+    line-height: 1.12;
+    margin: 10px 0 8px;
+    color: var(--ink);
   }
-  .ov-card-title { font-weight: 600; font-size: 14px; color: var(--ink); margin-bottom: 12px; }
-  .ov-muted { color: var(--muted); font-size: 14px; margin: 0; }
-  .ov-note { color: var(--muted); font-size: 13.5px; margin: 12px 0 0; }
+  .lv-lede { color: var(--ink-soft); margin: 0 0 18px; font-size: 15.5px; max-width: 520px; }
+  .lv-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+  .lv-status { margin: 14px 0 0; font-size: 14px; color: var(--ink-soft); min-height: 1.6em; }
+  .lv-status b { color: var(--ink); }
 
-  .ov-flow {
+  .lv-months {
     list-style: none;
-    padding: 0;
     margin: 0;
+    padding: 0;
     display: grid;
-    grid-template-columns: repeat(6, minmax(0, 1fr));
-    gap: 12px;
-    counter-reset: none;
-  }
-  @media (max-width: 1100px) { .ov-flow { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
-  @media (max-width: 640px) { .ov-flow { grid-template-columns: minmax(0, 1fr); } }
-  .ov-flow li {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 10px;
     position: relative;
-    padding: 16px 16px 14px;
+  }
+  .lv-months li {
+    position: relative;
+    padding: 14px 12px 12px;
     border-radius: 14px;
-    background: var(--tint);
-    border-top: 4px solid var(--tone);
+    background: var(--surface);
+    border: 1px solid var(--line);
+    text-align: center;
+    transition: border-color var(--dur-2), background var(--dur-2), transform var(--dur-2);
+  }
+  .lv-months small { display: block; font-size: 11.5px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .06em; }
+  .lv-months b { display: block; font-size: 15.5px; color: var(--ink); margin: 3px 0 2px; }
+  .lv-months em { font-style: normal; font-size: 12.5px; color: var(--muted); }
+  .lv-months li.is-done { background: var(--c-serve-soft); border-color: color-mix(in srgb, var(--c-serve) 35%, transparent); }
+  .lv-months li.is-done em { color: var(--c-serve); font-weight: 600; }
+  .lv-months li.is-next { border: 2px dashed var(--c-model); }
+  .lv-months li.is-next em { color: var(--c-model); font-weight: 600; }
+  .lv-months li.is-running { border: 2px solid var(--c-model); animation: lv-pulse 1.4s var(--ease-inout) infinite; }
+
+  /* Eight stages, in order. Each card's tone is its part of the system. */
+  .lv-stages {
+    list-style: none;
+    margin: 0 0 18px;
+    padding: 0;
+    display: grid;
+    grid-template-columns: repeat(8, minmax(0, 1fr));
+    gap: 10px;
+  }
+  @media (max-width: 1150px) { .lv-stages { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+  @media (max-width: 620px) { .lv-stages { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  .lv-stage {
+    position: relative;
     display: flex;
     flex-direction: column;
     gap: 6px;
+    padding: 14px 12px 12px;
+    border-radius: 14px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    box-shadow: var(--panel-shadow);
+    min-height: 150px;
+    transition: background var(--dur-2), border-color var(--dur-2), opacity var(--dur-2);
   }
-  .ov-flow h3 { margin: 0; font-size: 15.5px; color: var(--ink); }
-  .ov-flow p { margin: 0; font-size: 13.5px; color: var(--ink-soft); flex: 1; }
-  .ov-step {
+  .lv-stage-top { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+  .lv-dot {
     display: grid;
     place-items: center;
-    width: 24px; height: 24px;
+    width: 28px; height: 28px;
     border-radius: 50%;
-    background: var(--tone);
-    color: #FFFFFF;
-    font-size: 12px;
+    background: var(--sunk);
+    color: var(--muted);
+    font-size: 13px;
     font-weight: 700;
+    flex: none;
+    transition: background var(--dur-2), color var(--dur-2);
   }
-  .ov-fact {
+  .lv-time { font-family: var(--font-mono); font-size: 11.5px; color: var(--muted); }
+  .lv-stage h3 { margin: 2px 0 0; font-size: 14.5px; color: var(--ink); line-height: 1.25; }
+  .lv-detail { font-size: 12.5px; color: var(--ink-soft); line-height: 1.4; }
+  .lv-stage.is-pending { opacity: .55; }
+  .lv-stage.is-running { border: 2px solid var(--tone); background: var(--tint); opacity: 1; }
+  .lv-stage.is-running .lv-dot { background: var(--tone); color: #FFFFFF; animation: lv-pulse 1.1s var(--ease-inout) infinite; }
+  .lv-stage.is-done { background: var(--tint); border-color: color-mix(in srgb, var(--tone) 30%, transparent); }
+  .lv-stage.is-done .lv-dot { background: var(--tone); color: #FFFFFF; }
+  .lv-stage.is-skipped .lv-dot { background: var(--sunk); color: var(--muted); }
+  .lv-stage.is-rejected, .lv-stage.is-failed { background: var(--high-soft); border-color: color-mix(in srgb, var(--high) 35%, transparent); }
+  .lv-stage.is-rejected .lv-dot, .lv-stage.is-failed .lv-dot { background: var(--high); color: #FFFFFF; }
+  .lv-stage.is-rejected .lv-detail, .lv-stage.is-failed .lv-detail { color: var(--high); font-weight: 600; }
+
+  @keyframes lv-pulse {
+    0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--c-model) 35%, transparent); }
+    50% { box-shadow: 0 0 0 7px color-mix(in srgb, var(--c-model) 0%, transparent); }
+  }
+
+  .lv-lower { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); gap: 14px; margin-bottom: 18px; }
+  @media (max-width: 1000px) { .lv-lower { grid-template-columns: minmax(0, 1fr); } }
+  .lv-panel { padding: 16px 18px; border-radius: var(--r-panel); background: var(--surface); border: 1px solid var(--line); box-shadow: var(--panel-shadow); }
+  .lv-panel-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 12px; font-weight: 600; font-size: 15px; color: var(--ink); }
+  .lv-hint { font-weight: 400; font-size: 12.5px; color: var(--muted); }
+
+  .lv-versions { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+  @media (max-width: 700px) { .lv-versions { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  .lv-version {
+    position: relative;
+    padding: 12px 12px 10px;
+    border-radius: 12px;
+    background: var(--sunk);
+    border: 1px solid transparent;
+    animation: rise var(--dur-3) var(--ease-out) both;
+  }
+  .lv-version small { display: block; font-size: 11.5px; color: var(--muted); font-weight: 600; }
+  .lv-version b { display: block; font-family: var(--font-display); font-weight: 400; font-size: 28px; line-height: 1.1; color: var(--c-results); }
+  .lv-version span { display: block; font-size: 12px; color: var(--ink-soft); }
+  /* An <i>, not a <span>, so the card's span rule doesn't reach it. */
+  .lv-badge {
+    display: inline-block;
+    margin-top: 6px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-style: normal;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: .04em;
+  }
+  .lv-badge.up { background: var(--low-soft); color: var(--low); }
+  .lv-badge.down { background: var(--high-soft); color: var(--high); }
+  .lv-version.is-serving { background: var(--c-serve-soft); border-color: var(--c-serve); padding-top: 18px; }
+  .lv-serving {
+    position: absolute;
+    top: -9px; right: 10px;
+    padding: 1px 8px;
+    border-radius: 999px;
+    background: var(--c-serve);
+    color: #FFFFFF;
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: .06em;
+  }
+
+  .lv-log {
+    margin: 0;
+    height: 190px;
+    overflow: auto;
+    padding: 12px 14px;
+    border-radius: 10px;
+    background: #0F172A;
+    color: #CBD5E1;
     font-family: var(--font-mono);
     font-size: 12px;
-    font-weight: 500;
-    color: var(--tone);
-    background: var(--surface);
-    border-radius: 999px;
-    padding: 3px 10px;
-    align-self: flex-start;
-  }
-  .ov-auto {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 8px;
-    margin-top: 12px;
-    padding: 12px 14px;
-    border-radius: 14px;
-    background: var(--c-auto-soft);
-  }
-  .ov-auto-label { font-size: 13px; font-weight: 700; color: var(--c-auto); margin-right: 4px; }
-  .ov-chip {
-    font-size: 13px;
-    padding: 4px 11px;
-    border-radius: 999px;
-    background: var(--surface);
-    color: var(--ink-soft);
-    border: 1px solid color-mix(in srgb, var(--c-auto) 20%, transparent);
+    line-height: 1.6;
+    white-space: pre-wrap;
   }
 
-  .ov-split { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; align-items: stretch; }
-  @media (max-width: 900px) { .ov-split { grid-template-columns: minmax(0, 1fr); } }
-
-  .ov-bars { display: grid; gap: 12px; }
-  .ov-bar-row { display: grid; grid-template-columns: 150px minmax(0, 1fr) 96px; gap: 12px; align-items: center; }
-  .ov-bar-name { font-size: 14px; color: var(--ink); }
-  .ov-bar-name small { display: block; font-size: 12px; color: var(--muted); }
-  .ov-bar-track { height: 12px; border-radius: 999px; background: var(--sunk); overflow: hidden; }
-  .ov-bar-track i {
-    display: block;
-    height: 100%;
-    width: 0;
-    border-radius: 999px;
-    background: var(--tone);
-    transition: width var(--dur-3) var(--ease-out);
-  }
-  .ov-bar-value { font-family: var(--font-mono); font-size: 13px; color: var(--ink); text-align: right; }
-
-  .ov-list { margin: 0; padding-left: 18px; color: var(--ink-soft); font-size: 14.5px; }
-  .ov-list li { margin-bottom: 8px; }
-  .ov-list b { color: var(--ink); }
-
-  .ov-timeline { display: grid; grid-template-columns: minmax(0, 1fr) 70px minmax(0, 1fr); align-items: center; gap: 0; }
-  .ov-window {
-    padding: 16px 18px;
-    border-radius: 12px;
-    font-size: 14.5px;
-    text-align: center;
-  }
-  .ov-before { background: var(--c-serve-soft); color: var(--c-serve); }
-  .ov-after { background: var(--high-soft); color: var(--high); }
-  .ov-cut { position: relative; height: 84px; }
-  .ov-cut::before { content: ""; position: absolute; left: 50%; top: 0; bottom: 22px; width: 3px; margin-left: -1.5px; background: var(--ink); border-radius: 2px; }
-  .ov-cut span { position: absolute; bottom: 0; left: 0; right: 0; text-align: center; font-family: var(--font-mono); font-size: 12px; font-weight: 500; }
-  .ov-splits { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
-  @media (max-width: 700px) { .ov-splits { grid-template-columns: minmax(0, 1fr); } }
-  .ov-splits > div { padding: 12px 14px; border-radius: 12px; background: var(--tint); border-left: 4px solid var(--tone); }
-  .ov-splits span { display: block; font-size: 12.5px; font-weight: 600; color: var(--tone); text-transform: uppercase; letter-spacing: .06em; }
-  .ov-splits b { display: block; font-size: 15px; color: var(--ink); margin-top: 2px; }
-  .ov-splits em { font-style: normal; font-size: 12.5px; color: var(--muted); }
-
-  .ov-compare { display: grid; gap: 12px; margin-bottom: 18px; }
-  .ov-cmp-row { display: grid; grid-template-columns: 130px minmax(0, 1fr) 64px; gap: 12px; align-items: center; font-size: 14px; }
-  .ov-cmp-track { height: 16px; border-radius: 999px; background: var(--sunk); overflow: hidden; }
-  .ov-cmp-track i { display: block; height: 100%; width: 0; border-radius: 999px; background: var(--tone); transition: width var(--dur-3) var(--ease-out); }
-  .ov-cmp-row b { font-family: var(--font-mono); font-weight: 500; text-align: right; }
-  .ov-minis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
-  @media (max-width: 700px) { .ov-minis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-  .ov-minis > div { padding: 10px 12px; border-radius: 12px; background: var(--c-results-soft); }
-  .ov-minis b { display: block; font-family: var(--font-display); font-weight: 400; font-size: 26px; color: var(--c-results); line-height: 1.1; }
-  .ov-minis span { font-size: 12px; color: var(--ink-soft); }
-  .ov-finding { margin-top: 16px; background: var(--c-results-soft); border-color: color-mix(in srgb, var(--c-results) 25%, var(--line)); }
-  .ov-finding .ov-card-title { color: var(--c-results); margin-bottom: 4px; }
-  .ov-finding p { color: var(--ink); }
-
-  .ov-arch { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; }
-  @media (max-width: 1000px) { .ov-arch { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-  .ov-arch > div {
-    display: flex;
-    flex-direction: column;
-    gap: 7px;
-    padding: 16px;
-    border-radius: 14px;
-    background: var(--tint);
-    border-top: 4px solid var(--tone);
-  }
-  .ov-arch h3 { margin: 0 0 4px; font-size: 16px; color: var(--tone); }
-  .ov-arch span {
-    font-size: 13.5px;
-    padding: 5px 10px;
-    border-radius: 8px;
-    background: var(--surface);
-    color: var(--ink);
-  }
-
-  .ov-limits { background: var(--medium-soft); border-color: color-mix(in srgb, var(--medium) 30%, var(--line)); }
+  .lv-glance { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 18px; }
+  @media (max-width: 900px) { .lv-glance { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 
   .ov-links { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
-  @media (max-width: 1000px) { .ov-links { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  @media (max-width: 900px) { .ov-links { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
   .ov-links a {
     display: flex;
     flex-direction: column;
-    gap: 4px;
-    padding: 16px 18px;
-    border-radius: 14px;
+    gap: 3px;
+    padding: 12px 16px;
+    border-radius: 12px;
     background: var(--surface);
     border: 1px solid var(--line);
     border-left: 4px solid var(--tone);
     text-decoration: none;
-    box-shadow: var(--panel-shadow);
     transition: transform var(--dur-1);
   }
   .ov-links a:hover { transform: translateY(-2px); }
-  .ov-links b { color: var(--tone); font-size: 15.5px; }
-  .ov-links span { color: var(--muted); font-size: 13.5px; }
+  .ov-links b { color: var(--tone); font-size: 14.5px; }
+  .ov-links span { color: var(--muted); font-size: 12.5px; }
 
   /* ------------------------------ motion ------------------------------- */
 
@@ -1076,231 +1042,64 @@
   </nav>
 
   <!-- ========================== OVERVIEW ========================== -->
-  <!-- The page someone sees first, and the one that answers "what is this
-       project?" without the person who built it standing beside them. Every
-       figure marked live is read from /overview and /metrics at load time. -->
+  <!-- The first page is the pipeline itself, running. Each click replays one
+       real month from the Postgres warehouse through every stage - the same
+       code the nightly pipeline runs - and a model that wins at the gate
+       starts answering on this site. The long explanations live in the book. -->
   <section class="view is-active" data-view="overview">
 
-    <div class="ov-hero">
-      <div class="ov-hero-text">
-        <div class="ov-kicker">The project on one page</div>
-        <p class="ov-statement">A music-streaming service loses money every time a subscriber cancels.
-          This system predicts <em>who is about to</em>, explains <em>why</em>, and keeps that prediction
-          trustworthy after it ships.</p>
-        <p class="ov-lede">Built on real data from KKBox (a Taiwanese music-streaming service), as a
-          complete MLOps system: warehouse, training, registry, serving, streaming, monitoring and CI/CD.
-          <span class="ov-live-note"><i class="ov-live"></i> marks a number read live from the running system.</span></p>
-        <div class="ov-actions">
-          <a class="ov-btn ov-btn-primary" href="#score">Score a subscriber →</a>
-          <a class="ov-btn" href="#live">See live traffic</a>
+    <div class="lv-hero">
+      <div class="lv-intro">
+        <div class="ov-kicker">Live MLOps pipeline · real KKBox data</div>
+        <h2 class="lv-title">Watch the model learn as each month arrives</h2>
+        <p class="lv-lede">One click replays a real month from the warehouse through the whole pipeline.
+          If the new model beats the one serving, it goes live on this site.</p>
+        <div class="lv-actions">
+          <button type="button" class="ov-btn ov-btn-primary lv-run" id="lvRun">▶ Run next month</button>
+          <button type="button" class="ov-btn" id="lvReset">Restore original model</button>
         </div>
+        <p class="lv-status" id="lvStatus">Connecting…</p>
       </div>
-      <div class="ov-stat-grid">
-        <div class="ov-stat" style="--tone: var(--c-data); --tint: var(--c-data-soft)">
-          <span class="ov-stat-label"><i class="ov-live"></i>Rows in the warehouse</span>
-          <b id="ovRows">—</b><span class="ov-stat-sub" id="ovRowsSub">Postgres</span>
-        </div>
-        <div class="ov-stat" style="--tone: var(--c-model); --tint: var(--c-model-soft)">
-          <span class="ov-stat-label"><i class="ov-live"></i>Model quality (PR-AUC)</span>
-          <b id="ovPrauc">—</b><span class="ov-stat-sub" id="ovPraucSub">vs random</span>
-        </div>
-        <div class="ov-stat" style="--tone: var(--c-serve); --tint: var(--c-serve-soft)">
-          <span class="ov-stat-label"><i class="ov-live"></i>Predictions served</span>
-          <b id="ovServed">—</b><span class="ov-stat-sub" id="ovServedSub">since the service started</span>
-        </div>
-        <div class="ov-stat" style="--tone: var(--c-watch); --tint: var(--c-watch-soft)">
-          <span class="ov-stat-label"><i class="ov-live"></i>Data drift</span>
-          <b id="ovDrift">—</b><span class="ov-stat-sub" id="ovDriftSub">last check</span>
-        </div>
+      <ol class="lv-months" id="lvMonths"></ol>
+    </div>
+
+    <ol class="lv-stages" id="lvStages"></ol>
+
+    <div class="lv-lower">
+      <div class="lv-panel">
+        <div class="lv-panel-head"><span>Model versions</span><span class="lv-hint">the gate decides who serves</span></div>
+        <div class="lv-versions" id="lvVersions"></div>
+      </div>
+      <div class="lv-panel">
+        <div class="lv-panel-head"><span>Pipeline log</span><span class="lv-hint" id="lvLogHint">live</span></div>
+        <pre class="lv-log" id="lvLog">Waiting for the first run.</pre>
       </div>
     </div>
 
-    <!-- 1 · The problem -->
-    <div class="ov-section">
-      <div class="ov-head"><span class="ov-num" style="--tone: var(--high)">1</span>
-        <div><h2 class="ov-title">The problem: churn is rare, so it's hard</h2>
-        <p class="ov-sub">Why this isn't a simple classification exercise.</p></div></div>
-      <div class="ov-cards3">
-        <div class="ov-card" style="--tone: var(--high); --tint: var(--high-soft)">
-          <b class="ov-big" id="ovRate">—</b>
-          <p><i class="ov-live"></i><strong>of subscribers cancel</strong> in any 30-day window. Churners are needles in a haystack.</p>
-        </div>
-        <div class="ov-card" style="--tone: var(--medium); --tint: var(--medium-soft)">
-          <b class="ov-big" id="ovTrap">—</b>
-          <p><strong>accuracy</strong> from a "model" that predicts nobody ever cancels. It's useless, which is why this project never judges a model by accuracy.</p>
-        </div>
-        <div class="ov-card" style="--tone: var(--c-serve); --tint: var(--c-serve-soft)">
-          <b class="ov-big">3 jobs</b>
-          <p><strong>Predict</strong> who will cancel in the next 30 days, <strong>explain</strong> why for each person, and <strong>operate</strong> it safely: serve, monitor, retrain.</p>
-        </div>
+    <div class="lv-glance">
+      <div class="ov-stat" style="--tone: var(--c-data); --tint: var(--c-data-soft)">
+        <span class="ov-stat-label"><i class="ov-live"></i>Warehouse</span>
+        <b id="ovRows">—</b><span class="ov-stat-sub" id="ovRowsSub">rows in Postgres</span>
+      </div>
+      <div class="ov-stat" style="--tone: var(--c-model); --tint: var(--c-model-soft)">
+        <span class="ov-stat-label"><i class="ov-live"></i>Serving model</span>
+        <b id="ovServing">—</b><span class="ov-stat-sub" id="ovServingSub">PR-AUC on its test month</span>
+      </div>
+      <div class="ov-stat" style="--tone: var(--c-serve); --tint: var(--c-serve-soft)">
+        <span class="ov-stat-label"><i class="ov-live"></i>Predictions served</span>
+        <b id="ovServed">—</b><span class="ov-stat-sub" id="ovServedSub">since the service started</span>
+      </div>
+      <div class="ov-stat" style="--tone: var(--c-watch); --tint: var(--c-watch-soft)">
+        <span class="ov-stat-label"><i class="ov-live"></i>Data drift</span>
+        <b id="ovDrift">—</b><span class="ov-stat-sub" id="ovDriftSub">latest check</span>
       </div>
     </div>
 
-    <!-- 2 · The journey -->
-    <div class="ov-section">
-      <div class="ov-head"><span class="ov-num" style="--tone: var(--c-results)">2</span>
-        <div><h2 class="ov-title">How it works: the journey of a prediction</h2>
-        <p class="ov-sub">Six stages, left to right. The coloured bands match the architecture below.</p></div></div>
-      <ol class="ov-flow">
-        <li style="--tone: var(--c-data); --tint: var(--c-data-soft)">
-          <span class="ov-step">1</span><h3>Raw data</h3>
-          <p>KKBox export from Kaggle: members, transactions, daily listening logs.</p>
-          <span class="ov-fact">31.3 GB of CSV</span></li>
-        <li style="--tone: var(--c-data); --tint: var(--c-data-soft)">
-          <span class="ov-step">2</span><h3>Clean &amp; load</h3>
-          <p>Validated, cleaned, and stored as timestamped events in Postgres.</p>
-          <span class="ov-fact"><i class="ov-live"></i><span id="ovFlowRows">—</span> rows</span></li>
-        <li style="--tone: var(--c-model); --tint: var(--c-model-soft)">
-          <span class="ov-step">3</span><h3>Leak-free features</h3>
-          <p>Built only from the 30 days <em>before</em> a date; the answer comes from the 30 days <em>after</em>.</p>
-          <span class="ov-fact">9 inputs → 21 model columns</span></li>
-        <li style="--tone: var(--c-model); --tint: var(--c-model-soft)">
-          <span class="ov-step">4</span><h3>Train &amp; gate</h3>
-          <p>Gradient boosting, tested on a later month. Goes live only if it beats the current model.</p>
-          <span class="ov-fact"><i class="ov-live"></i>trained <span id="ovTrained">—</span></span></li>
-        <li style="--tone: var(--c-serve); --tint: var(--c-serve-soft)">
-          <span class="ov-step">5</span><h3>Serve &amp; explain</h3>
-          <p>An API and a Kafka stream scorer. Every answer comes with its reasons (SHAP).</p>
-          <span class="ov-fact">threshold <span id="ovThreshold">—</span></span></li>
-        <li style="--tone: var(--c-watch); --tint: var(--c-watch-soft)">
-          <span class="ov-step">6</span><h3>Watch</h3>
-          <p>Prometheus, 15 alert rules, Grafana, and drift checks against the training data.</p>
-          <span class="ov-fact"><i class="ov-live"></i>drift <span id="ovFlowDrift">—</span></span></li>
-      </ol>
-      <div class="ov-auto">
-        <span class="ov-auto-label">Automated underneath</span>
-        <span class="ov-chip">Prefect · nightly retrain</span>
-        <span class="ov-chip">DVC · versioned pipeline</span>
-        <span class="ov-chip">GitHub Actions · 7 CI/CD jobs</span>
-        <span class="ov-chip">Docker · 8 services, one command</span>
-      </div>
-    </div>
-
-    <!-- 3 · The data -->
-    <div class="ov-section">
-      <div class="ov-head"><span class="ov-num" style="--tone: var(--c-data)">3</span>
-        <div><h2 class="ov-title">The data: a real warehouse</h2>
-        <p class="ov-sub">Events with timestamps, not running totals, so any subscriber can be rebuilt exactly as they were on any past date.</p></div></div>
-      <div class="ov-split">
-        <div class="ov-card ov-plain">
-          <div class="ov-card-title"><i class="ov-live"></i>Rows per table, in Postgres</div>
-          <div class="ov-bars" id="ovTables"><p class="ov-muted">Loading…</p></div>
-        </div>
-        <div class="ov-card ov-plain">
-          <div class="ov-card-title">What cleaning the real data took</div>
-          <ul class="ov-list">
-            <li><b>2.66M orphan rows dropped:</b> payments for 432,623 people missing from the members file. Dropped, not invented: a made-up signup date would make loyal customers look new.</li>
-            <li><b>IDs widened 32 → 64 characters:</b> real IDs are 44. SQLite ignored it; Postgres would have rejected every row.</li>
-            <li><b>Prices normalised to monthly:</b> plans run 7 to 410 days.</li>
-            <li><b>Listening log bounded:</b> 392M rows → the 38.2M the features actually use.</li>
-          </ul>
-        </div>
-      </div>
-    </div>
-
-    <!-- 4 · No peeking -->
-    <div class="ov-section">
-      <div class="ov-head"><span class="ov-num" style="--tone: var(--c-model)">4</span>
-        <div><h2 class="ov-title">No peeking at the future</h2>
-        <p class="ov-sub">The most common way churn models cheat, and how this one can't.</p></div></div>
-      <div class="ov-card ov-plain">
-        <div class="ov-timeline">
-          <div class="ov-window ov-before">Features: the 30 days <b>before</b> date T</div>
-          <div class="ov-cut"><span>date T</span></div>
-          <div class="ov-window ov-after">Answer: did they cancel in the 30 days <b>after</b>?</div>
-        </div>
-        <p class="ov-note">The two windows never overlap, so nothing after T can reach a feature. A test adds future events and checks no feature changes.</p>
-        <div class="ov-card-title" style="margin-top:18px"><i class="ov-live"></i>Split by time, never randomly</div>
-        <div class="ov-splits">
-          <div style="--tone: var(--c-serve); --tint: var(--c-serve-soft)"><span>Train on</span><b id="ovTrain">—</b><em id="ovTrainRows"></em></div>
-          <div style="--tone: var(--medium); --tint: var(--medium-soft)"><span>Tune on</span><b id="ovVal">—</b><em id="ovValRows"></em></div>
-          <div style="--tone: var(--high); --tint: var(--high-soft)"><span>Test on</span><b id="ovTest">—</b><em id="ovTestRows"></em></div>
-        </div>
-      </div>
-    </div>
-
-    <!-- 5 · Results -->
-    <div class="ov-section">
-      <div class="ov-head"><span class="ov-num" style="--tone: var(--c-results)">5</span>
-        <div><h2 class="ov-title">How good is the model?</h2>
-        <p class="ov-sub">Measured on a month it never saw. Compared with guessing, not with perfection.</p></div></div>
-      <div class="ov-split">
-        <div class="ov-card ov-plain">
-          <div class="ov-card-title"><i class="ov-live"></i>Finding churners (PR-AUC)</div>
-          <div class="ov-compare">
-            <div class="ov-cmp-row"><span>This model</span><div class="ov-cmp-track"><i id="ovCmpModel" style="--tone: var(--c-model)"></i></div><b id="ovCmpModelV">—</b></div>
-            <div class="ov-cmp-row"><span>Random guessing</span><div class="ov-cmp-track"><i id="ovCmpRandom" style="--tone: var(--muted)"></i></div><b id="ovCmpRandomV">—</b></div>
-          </div>
-          <div class="ov-minis">
-            <div><b id="ovRoc">—</b><span>ROC-AUC</span></div>
-            <div><b id="ovRecall">—</b><span>of churners caught</span></div>
-            <div><b id="ovPrecision">—</b><span>of flags correct</span></div>
-            <div><b id="ovEce">—</b><span>calibration error</span></div>
-          </div>
-        </div>
-        <div class="ov-card ov-plain">
-          <div class="ov-card-title"><i class="ov-live"></i>What drives the predictions</div>
-          <div class="ov-bars" id="ovFeatures"><p class="ov-muted">Loading…</p></div>
-        </div>
-      </div>
-      <div class="ov-card ov-finding">
-        <div class="ov-card-title">The finding that shaped the project</div>
-        <p>Moving from synthetic to real data, <b>ROC-AUC went up</b> (0.674 → 0.835) while
-          <b>PR-AUC fell</b> (0.345 → 0.073). ROC-AUC barely notices how rare churn is; PR-AUC does.
-          A gate built on ROC-AUC would have reported an improvement just as the model became harder to act on,
-          so <b>the promotion gate uses PR-AUC</b>.</p>
-      </div>
-    </div>
-
-    <!-- 6 · Architecture & stack -->
-    <div class="ov-section">
-      <div class="ov-head"><span class="ov-num" style="--tone: var(--c-auto)">6</span>
-        <div><h2 class="ov-title">Architecture and tech stack</h2>
-        <p class="ov-sub">Every tool is free and open source, and each has one job.</p></div></div>
-      <div class="ov-arch">
-        <div style="--tone: var(--c-data); --tint: var(--c-data-soft)"><h3>Data</h3>
-          <span>PostgreSQL 16</span><span>SQLAlchemy</span><span>pandas</span><span>Data contract</span><span>SQLite (dev)</span></div>
-        <div style="--tone: var(--c-model); --tint: var(--c-model-soft)"><h3>Model</h3>
-          <span>scikit-learn</span><span>Gradient boosting</span><span>MLflow registry</span><span>PR-AUC gate</span><span>Fairness &amp; cost audit</span></div>
-        <div style="--tone: var(--c-serve); --tint: var(--c-serve-soft)"><h3>Serve</h3>
-          <span>FastAPI</span><span>SHAP</span><span>Redpanda (Kafka)</span><span>Dead-letter queue</span><span>This dashboard</span></div>
-        <div style="--tone: var(--c-watch); --tint: var(--c-watch-soft)"><h3>Watch</h3>
-          <span>Prometheus</span><span>Alertmanager</span><span>Grafana</span><span>PSI drift</span><span>Shadow scoring</span></div>
-        <div style="--tone: var(--c-auto); --tint: var(--c-auto-soft)"><h3>Automate</h3>
-          <span>Prefect</span><span>DVC</span><span>GitHub Actions</span><span>Docker Compose</span><span>Kubernetes manifests</span></div>
-      </div>
-    </div>
-
-    <!-- 7 · Honest limits -->
-    <div class="ov-section">
-      <div class="ov-head"><span class="ov-num" style="--tone: var(--medium)">7</span>
-        <div><h2 class="ov-title">Honest limits</h2>
-        <p class="ov-sub">What this system doesn't do well, stated plainly.</p></div></div>
-      <div class="ov-card ov-limits">
-        <ul class="ov-list">
-          <li><b>The model is modest.</b> <span id="ovLimitModel">It beats guessing but misses most churners</span>: the data has few strong signals.</li>
-          <li><b>The fairness audit fails.</b> <span id="ovLimitFair">It is weaker for one plan type.</span> Reported and alerted on, not hidden.</li>
-          <li><b>Costs are placeholders.</b> <span id="ovLimitCost">The cost audit prefers a stricter threshold</span> under assumed costs; real figures would decide.</li>
-          <li><b>Runs locally, not in the cloud.</b> A 15 GB warehouse fits no free tier; Kubernetes manifests are written but not deployed.</li>
-        </ul>
-      </div>
-    </div>
-
-    <!-- 8 · Explore -->
-    <div class="ov-section">
-      <div class="ov-head"><span class="ov-num" style="--tone: var(--c-serve)">8</span>
-        <div><h2 class="ov-title">Explore it yourself</h2>
-        <p class="ov-sub">Every part of the running system, one click away.</p></div></div>
-      <div class="ov-links">
-        <a href="#score" style="--tone: var(--c-serve)"><b>Score a subscriber</b><span>Change inputs, see the risk and the reasons</span></a>
-        <a href="#live" style="--tone: var(--c-data)"><b>Live traffic</b><span>What the model is seeing right now</span></a>
-        <a href="#model" style="--tone: var(--c-model)"><b>The model</b><span>Which version is serving, and how it was built</span></a>
-        <a href="#monitoring" style="--tone: var(--c-watch)"><b>Monitoring</b><span>Champion vs challenger, and a live drift test</span></a>
-        <a href="/docs" style="--tone: var(--c-results)"><b>API docs</b><span>Every endpoint, try it in the browser</span></a>
-        <a data-port="3000" href="#" style="--tone: var(--c-watch)"><b>Grafana</b><span>Dashboards and alerts over time</span></a>
-        <a data-port="5050" href="#" style="--tone: var(--c-model)"><b>MLflow</b><span>Every training run and the model registry</span></a>
-        <a data-port="9090" data-path="/alerts" href="#" style="--tone: var(--high)"><b>Alerts</b><span>Prometheus alert rules and what's firing</span></a>
-      </div>
+    <div class="ov-links">
+      <a href="#score" style="--tone: var(--c-serve)"><b>Score a subscriber</b><span>Try the serving model yourself</span></a>
+      <a data-port="5050" href="#" style="--tone: var(--c-model)"><b>MLflow</b><span>Every run and model version</span></a>
+      <a data-port="3000" href="#" style="--tone: var(--c-watch)"><b>Grafana</b><span>Monitoring over time</span></a>
+      <a href="/docs" style="--tone: var(--c-results)"><b>API docs</b><span>Every endpoint</span></a>
     </div>
   </section>
 
@@ -2145,38 +1944,10 @@
 
   /* ------------------------------ overview ----------------------------- */
 
-  // Big numbers are compact ("82.8M"); the exact figure goes in the title.
   function compact(n) {
     if (n >= 1e6) return (n / 1e6).toFixed(1) + "M";
     if (n >= 1e4) return Math.round(n / 1e3) + "k";
     return Number(n).toLocaleString();
-  }
-
-  // One decimal, always: these are the figures quoted in the talk (98.5%,
-  // 16.8%), and rounding them to 98% / 17% would contradict it.
-  const pct1 = (v) => (v * 100).toFixed(1) + "%";
-
-  function monthYear(iso) {
-    return new Date(iso + "T00:00:00").toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
-  }
-
-  function barRows(host, rows, tone) {
-    host.replaceChildren();
-    const peak = Math.max(...rows.map((r) => r.value), 1e-9);
-    rows.forEach((r) => {
-      const row = el("div", "ov-bar-row");
-      const name = el("div", "ov-bar-name", r.name);
-      if (r.note) name.appendChild(el("small", "", r.note));
-      const track = el("div", "ov-bar-track");
-      const fill = el("i", "");
-      fill.style.setProperty("--tone", tone);
-      track.appendChild(fill);
-      row.append(name, track, el("div", "ov-bar-value", r.label));
-      host.appendChild(row);
-      const width = (r.value / peak) * 100 + "%";
-      if (REDUCED) fill.style.width = width;
-      else requestAnimationFrame(() => requestAnimationFrame(() => { fill.style.width = width; }));
-    });
   }
 
   function setText(id, text, title) {
@@ -2186,112 +1957,215 @@
     if (title) node.title = title;
   }
 
-  const TABLE_NOTES = {
-    subscribers: "one per person",
-    subscription_events: "signups, renewals, cancels",
-    payments: "one per payment",
-    sessions: "one per listening day",
-    support_tickets: "none in KKBox",
+  // Which part of the system each stage belongs to - the same colours as the
+  // architecture everywhere else.
+  const STAGE_TONE = {
+    arrive: "data", features: "data", validate: "data", drift: "watch",
+    train: "model", evaluate: "model", gate: "results", deploy: "serve",
   };
+  const STAGE_MARK = { done: "✓", skipped: "–", rejected: "✕", failed: "!" };
+
+  let liveState = null;
+  let originalReport = null;
+  let livePoll = null;
+
+  function renderMonths(state) {
+    const host = $("lvMonths");
+    host.replaceChildren();
+    const start = el("li", state.next_step === 0 && !state.running ? "is-done" : "is-done");
+    start.append(el("small", "", "Start"), el("b", "", "Original model"), el("em", "", "tested, in production"));
+    host.appendChild(start);
+    state.months.forEach((label, i) => {
+      let cls = "";
+      let note = "not yet";
+      if (i < state.next_step) { cls = "is-done"; note = "replayed"; }
+      else if (i === state.next_step && state.running) { cls = "is-running"; note = "running now…"; }
+      else if (i === state.next_step) { cls = "is-next"; note = "next"; }
+      const li = el("li", cls);
+      li.append(el("small", "", `Month ${i + 1}`), el("b", "", label), el("em", "", note));
+      host.appendChild(li);
+    });
+  }
+
+  function renderStages(state) {
+    const host = $("lvStages");
+    if (host.children.length !== state.stages.length) {
+      host.replaceChildren(...state.stages.map((_, i) => {
+        const li = el("li", "lv-stage");
+        const top = el("div", "lv-stage-top");
+        top.append(el("span", "lv-dot", String(i + 1)), el("span", "lv-time", ""));
+        li.append(top, el("h3", ""), el("div", "lv-detail", ""));
+        return li;
+      }));
+    }
+    state.stages.forEach((stage, i) => {
+      const li = host.children[i];
+      const tone = STAGE_TONE[stage.key] || "results";
+      li.style.setProperty("--tone", `var(--c-${tone})`);
+      li.style.setProperty("--tint", `var(--c-${tone}-soft)`);
+      li.className = "lv-stage is-" + stage.status;
+      li.querySelector(".lv-dot").textContent = STAGE_MARK[stage.status] || String(i + 1);
+      li.querySelector(".lv-time").textContent = stage.seconds === null ? "" : stage.seconds + "s";
+      li.querySelector("h3").textContent = stage.title;
+      li.querySelector(".lv-detail").textContent =
+        stage.detail || (stage.status === "pending" ? "waiting" : stage.status === "running" ? "working…" : "");
+    });
+  }
+
+  function versionCard(title, score, lines, badge, serving) {
+    const card = el("div", "lv-version" + (serving ? " is-serving" : ""));
+    if (serving) card.appendChild(el("span", "lv-serving", "SERVING"));
+    card.append(el("small", "", title), el("b", "", score));
+    lines.forEach((line) => card.appendChild(el("span", "", line)));
+    if (badge) card.appendChild(el("i", "lv-badge " + badge[1], badge[0]));
+    return card;
+  }
+
+  function renderVersions(state) {
+    const host = $("lvVersions");
+    host.replaceChildren();
+    const o = originalReport && originalReport.available ? originalReport.test : null;
+    host.appendChild(versionCard(
+      "Original · production",
+      o ? o.pr_auc.toFixed(3) : "—",
+      ["PR-AUC on its test month", "trained on the full sample"],
+      null, !state.serving,
+    ));
+    state.versions.forEach((v) => {
+      const lines = [`${v.month} · ${v.train_rows.toLocaleString()} rows`];
+      if (v.champion_score !== null && v.champion_score !== undefined) {
+        const diff = v.pr_auc - v.champion_score;
+        lines.push(`vs champion ${v.champion_score.toFixed(4)} (${diff >= 0 ? "+" : ""}${diff.toFixed(4)})`);
+      } else {
+        lines.push("first model of the replay");
+      }
+      if (v.registry_version) lines.push(`MLflow version ${v.registry_version}`);
+      host.appendChild(versionCard(
+        `v${v.version}`, v.pr_auc.toFixed(3), lines,
+        v.promoted ? ["PROMOTED", "up"] : ["REJECTED", "down"], v.serving,
+      ));
+    });
+  }
+
+  function renderLive(state) {
+    // A promotion or a restore changes the model behind /predict; the header
+    // names the serving model, so it has to follow.
+    if (liveState && liveState.serving !== state.serving) refreshStatus();
+    liveState = state;
+    renderMonths(state);
+    renderStages(state);
+    renderVersions(state);
+
+    const log = $("lvLog");
+    const atBottom = log.scrollTop + log.clientHeight >= log.scrollHeight - 8;
+    log.textContent = state.log.length ? state.log.join("\n") : "Waiting for the first run.";
+    if (atBottom) log.scrollTop = log.scrollHeight;
+    setText("lvLogHint", state.running ? "running…" : "live");
+
+    const finished = state.next_step >= state.total_steps;
+    $("lvRun").disabled = state.running || finished;
+    $("lvRun").textContent = state.running ? "Running…"
+      : finished ? "Replay complete"
+      : `▶ Run ${state.months[state.next_step]}`;
+    $("lvReset").disabled = state.running || (!state.versions.length && !state.error);
+
+    const status = $("lvStatus");
+    status.replaceChildren();
+    const serving = state.versions.find((v) => v.serving);
+    if (state.error && !state.running) {
+      status.textContent = state.error;
+    } else if (state.running) {
+      status.append("Replaying ", el("b", "", state.current), " — the pipeline is running. Watch the stages below.");
+    } else if (serving) {
+      status.append("Serving ", el("b", "", `v${serving.version}`),
+        `, trained by the replay on ${serving.month}. Restore puts the tested model back.`);
+    } else {
+      status.append("Serving the ", el("b", "", "original tested model"), ". Press run to replay the first month.");
+    }
+
+    // The glance tiles follow whichever model is actually serving.
+    if (serving) {
+      setText("ovServing", serving.pr_auc.toFixed(3));
+      setText("ovServingSub", `v${serving.version} · PR-AUC on ${serving.test_cutoff}`);
+    } else if (originalReport && originalReport.available) {
+      setText("ovServing", originalReport.test.pr_auc.toFixed(3));
+      setText("ovServingSub", "original · PR-AUC on its test month");
+    }
+    const drifted = [...state.versions].reverse().find((v) => v.drift);
+    if (drifted) {
+      setText("ovDrift", drifted.drift.verdict.charAt(0).toUpperCase() + drifted.drift.verdict.slice(1));
+      setText("ovDriftSub", `replay, ${drifted.month}`);
+    }
+  }
+
+  async function refreshLive() {
+    let state;
+    try {
+      state = await fetch("/live/status").then((r) => r.json());
+    } catch (err) {
+      setText("lvStatus", "The live pipeline isn't reachable.");
+      return;
+    }
+    const wasRunning = liveState && liveState.running;
+    renderLive(state);
+    // A run just finished: the served model may have changed, so refresh
+    // the header and the tiles that describe it.
+    if (wasRunning && !state.running) refreshStatus();
+    scheduleLive();
+  }
+
+  function scheduleLive() {
+    clearTimeout(livePoll);
+    const onOverview = document.querySelector('.view[data-view="overview"]').classList.contains("is-active");
+    if (!onOverview) return;
+    livePoll = setTimeout(refreshLive, liveState && liveState.running ? 1000 : 5000);
+  }
+
+  async function liveAction(path) {
+    $("lvRun").disabled = true;
+    $("lvReset").disabled = true;
+    try {
+      const response = await fetch(path, { method: "POST" });
+      const body = await response.json();
+      if (!response.ok) { setText("lvStatus", body.detail || "That didn't work."); return; }
+      renderLive(body);
+      refreshStatus();
+    } catch (err) {
+      setText("lvStatus", `Could not reach the API: ${err.message}`);
+    } finally {
+      scheduleLive();
+    }
+  }
+
+  $("lvRun").addEventListener("click", () => liveAction("/live/run"));
+  $("lvReset").addEventListener("click", () => liveAction("/live/reset"));
 
   async function refreshOverview() {
-    let data, live;
     try {
-      [data, live] = await Promise.all([
+      const [data, live] = await Promise.all([
         fetch("/overview").then((r) => r.json()),
         fetch("/metrics").then((r) => r.json()),
       ]);
+      originalReport = data.model;
+      const wh = data.warehouse || {};
+      if (wh.available) {
+        setText("ovRows", compact(wh.total_rows), wh.total_rows.toLocaleString() + " rows");
+        setText("ovRowsSub", `rows in ${wh.backend === "postgresql" ? "PostgreSQL" : wh.backend}`);
+      } else {
+        setText("ovRowsSub", "warehouse not connected");
+      }
+      const d = data.drift || {};
+      if (d.available) {
+        setText("ovDrift", d.verdict.charAt(0).toUpperCase() + d.verdict.slice(1));
+        setText("ovDriftSub", `${d.n_samples.toLocaleString()} subscribers, ${d.cutoff}`);
+      }
+      setText("ovServed", (live.served_total || 0).toLocaleString());
+      setText("ovServedSub", live.served_total
+        ? `${pct(live.flagged_rate || 0)} flagged as at risk` : "score one on the next tab");
     } catch (err) {
       return;
     }
-
-    // Warehouse
-    const wh = data.warehouse || {};
-    if (wh.available) {
-      setText("ovRows", compact(wh.total_rows), wh.total_rows.toLocaleString() + " rows");
-      setText("ovRowsSub", `in ${wh.tables.length} tables · ${wh.backend === "postgresql" ? "PostgreSQL" : wh.backend}`);
-      setText("ovFlowRows", compact(wh.total_rows));
-      barRows($("ovTables"), wh.tables.map((t) => ({
-        name: t.name, note: TABLE_NOTES[t.name], value: t.rows, label: t.rows.toLocaleString(),
-      })), "var(--c-data)");
-    } else {
-      setText("ovRowsSub", "warehouse not connected");
-      $("ovTables").replaceChildren(el("p", "ov-muted",
-        "The warehouse isn't reachable from this API process, so its row counts can't be shown."));
-    }
-
-    // Model
-    const m = data.model || {};
-    if (m.available) {
-      const t = m.test, rate = t.positive_rate_actual;
-      const lift = t.pr_auc / rate;
-      setText("ovPrauc", t.pr_auc.toFixed(3));
-      setText("ovPraucSub", `${lift.toFixed(1)}× better than guessing (${rate.toFixed(3)})`);
-      setText("ovRate", pct1(rate));
-      setText("ovTrap", pct1(1 - rate));
-      setText("ovTrained", monthYear(m.trained_at.slice(0, 10)));
-      setText("ovThreshold", String(t.threshold));
-
-      const cut = (m.dataset || {}).cutoffs || {};
-      const fmt = (list) => (list || []).map(monthYear).join(" + ");
-      setText("ovTrain", fmt(cut.train));
-      setText("ovVal", fmt(cut.validation));
-      setText("ovTest", fmt(cut.test));
-      const ds = m.dataset || {};
-      if (ds.train_rows) setText("ovTrainRows", ds.train_rows.toLocaleString() + " subscriber-months");
-      if (ds.validation_rows) setText("ovValRows", ds.validation_rows.toLocaleString() + " subscribers");
-      if (ds.test_rows) setText("ovTestRows", ds.test_rows.toLocaleString() + " subscribers");
-
-      const scale = Math.max(t.pr_auc, rate) * 1.15;
-      const model = $("ovCmpModel"), random = $("ovCmpRandom");
-      const widths = [(t.pr_auc / scale) * 100 + "%", (rate / scale) * 100 + "%"];
-      if (REDUCED) { model.style.width = widths[0]; random.style.width = widths[1]; }
-      else requestAnimationFrame(() => requestAnimationFrame(() => {
-        model.style.width = widths[0]; random.style.width = widths[1];
-      }));
-      setText("ovCmpModelV", t.pr_auc.toFixed(3));
-      setText("ovCmpRandomV", rate.toFixed(3));
-      setText("ovRoc", t.roc_auc.toFixed(3));
-      setText("ovRecall", pct1(t.recall));
-      setText("ovPrecision", pct1(t.precision));
-      if (m.calibration_error !== null && m.calibration_error !== undefined) {
-        setText("ovEce", m.calibration_error.toFixed(3));
-      }
-
-      barRows($("ovFeatures"), (m.top_features || []).map((f) => ({
-        name: f.feature.replaceAll("_", " "), value: f.importance, label: (f.importance * 100).toFixed(1) + "%",
-      })), "var(--c-model)");
-
-      setText("ovLimitModel",
-        `It finds churners ${lift.toFixed(1)}× better than guessing but catches only ${pct1(t.recall)} of them`);
-      const fair = m.fairness || {};
-      if (fair.passes === false && fair.weakest_group) {
-        setText("ovLimitFair", `On the "${fair.weakest_group.group}" plan (${fair.weakest_group.n.toLocaleString()} people) it is close to random: ROC-AUC ${fair.weakest_group.roc_auc.toFixed(2)}.`);
-      }
-      if (m.cost_optimal_threshold) {
-        setText("ovLimitCost", `The cost audit prefers a threshold of ${m.cost_optimal_threshold} over the ${t.threshold} in use`);
-      }
-    } else {
-      setText("ovPraucSub", "no evaluation report found");
-    }
-
-    // Drift
-    const d = data.drift || {};
-    if (d.available) {
-      setText("ovDrift", d.verdict.charAt(0).toUpperCase() + d.verdict.slice(1));
-      setText("ovDriftSub", `${d.n_samples.toLocaleString()} subscribers as of ${monthYear(d.cutoff)}`);
-      setText("ovFlowDrift", d.verdict);
-    } else {
-      setText("ovDrift", "Not run");
-      setText("ovDriftSub", "no drift check has run yet");
-      setText("ovFlowDrift", "not run");
-    }
-
-    // Traffic
-    setText("ovServed", (live.served_total || 0).toLocaleString());
-    setText("ovServedSub", live.served_total
-      ? `${pct(live.flagged_rate || 0)} of them flagged as at risk`
-      : "score one on the next tab");
+    refreshLive();
   }
 
   // Links to the other tools: same machine as this page, their own ports.
@@ -2340,8 +2214,10 @@
       $("statusDot").className = "dot " + (info.model_loaded ? "ok" : "bad");
       if (info.model_loaded) {
         const meta = await fetch("/model-info").then((r) => r.json());
-        $("statusText").textContent =
-          `${meta.model_name} · threshold ${meta.decision_threshold}`;
+        const name = meta.served_from === "live"
+          ? "live replay model" + (meta.registry_version ? ` · MLflow v${meta.registry_version}` : "")
+          : meta.model_name;
+        $("statusText").textContent = `${name} · threshold ${meta.decision_threshold}`;
       } else {
         $("statusText").textContent = info.detail || "no model loaded";
       }

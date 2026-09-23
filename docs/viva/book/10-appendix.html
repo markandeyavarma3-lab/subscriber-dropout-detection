@@ -15,7 +15,7 @@
   <tr><td><strong>Registry</strong></td><td>MLflow. Live model = <code>@champion</code>. A challenger is promoted only if it beats the champion on PR-AUC, on the same data, by ≥ 0.005. Rollback = move the alias back.</td></tr>
   <tr><td><strong>Serving</strong></td><td>FastAPI with SHAP explanations that add up exactly to the prediction; a dashboard with counterfactual levers; a Kafka stream scorer, at-least-once, with a dead-letter queue.</td></tr>
   <tr><td><strong>Monitoring</strong></td><td>Prometheus (15 alert rules), Alertmanager (routing, inhibition), Grafana. PSI drift on real Feb 2017 data: stable, every feature under 0.06.</td></tr>
-  <tr><td><strong>Automation</strong></td><td>Prefect pipeline (ingest → drift → train and gate → report), idempotent. DVC + params.yaml. GitHub Actions: 7 jobs, 441 tests, image published to ghcr.io.</td></tr>
+  <tr><td><strong>Automation</strong></td><td>Prefect pipeline (ingest → drift → train and gate → report), idempotent. DVC + params.yaml. GitHub Actions: 7 jobs, 456 tests, image published to ghcr.io.</td></tr>
   <tr><td><strong>Deployment</strong></td><td>8 Docker services, <code>make demo</code> + 19-point <code>make demo-check</code>. Kubernetes manifests written, not deployed.</td></tr>
   <tr><td><strong>Limitations</strong></td><td>Modest model; fairness failure; placeholder costs; stricter churn label than Kaggle's; not on a public cloud.</td></tr>
 </table>
@@ -54,7 +54,7 @@
   <tr><td>PSI stable / significant</td><td class="num">&lt; 0.10 / &gt; 0.25</td></tr>
   <tr><td>Real drift (Feb 2017)</td><td class="num">max PSI 0.058</td></tr>
   <tr><td>Alert rules</td><td class="num">15</td></tr>
-  <tr><td>Tests · CI jobs</td><td class="num">441 · 7</td></tr>
+  <tr><td>Tests · CI jobs</td><td class="num">456 · 7</td></tr>
   <tr><td>Docker services</td><td class="num">8</td></tr>
   <tr><td>Demo checks</td><td class="num">19</td></tr>
 </table>

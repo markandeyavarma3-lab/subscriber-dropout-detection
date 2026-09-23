@@ -85,6 +85,11 @@ services:
       # Nothing else in the API touches the database; if it's down, the
       # Overview says so and every other endpoint carries on.
       SDD_DATABASE_URL: postgresql+psycopg://subscriber:subscriber@postgres:5432/warehouse
+      # The dashboard's live replay records each run it trains in the MLflow that
+      # `make demo` serves on the host (port 5050), under its own model name,
+      # beside the real training history. If that isn't running, the replay
+      # still trains, gates and serves - it just can't record the run there.
+      SDD_LIVE_MLFLOW_URI: http://host.docker.internal:5050
     healthcheck:
       test:
         - CMD

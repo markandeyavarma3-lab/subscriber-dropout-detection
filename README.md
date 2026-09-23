@@ -53,6 +53,23 @@ For a walkthrough, see [`docs/viva/`](docs/viva/): the
 [18-minute demo script](docs/viva/script.md), and [likely questions with
 answers](docs/viva/questions.md).
 
+### The live pipeline on the dashboard
+
+The dashboard opens on the pipeline itself. **Run** replays one real month of the KKBox data
+(1 Jan, 31 Jan, then 28 Feb 2017) through the project's own code: arrival counts,
+point-in-time features, validation, PSI drift against the serving model, training, evaluation
+on a month training never saw, and the PR-AUC promotion gate. If the new model wins, the API
+loads it and the next `/predict` uses it, and the run is logged to MLflow under its own
+experiment (`subscriber-dropout-live-replay`) and model name (`subscriber-dropout-live`), with
+`@champion` moved. On the real data, month 1 is promoted, month 2 is rejected by the gate
+(+0.0001, needs +0.005), and month 3 is promoted. **Restore original model** puts the tested
+model back.
+
+It runs in a separate process (`python -m src.live.replay run`), so serving never waits on
+training. It uses a 50,000-subscriber sample so a month takes about 30 seconds, and only
+cutoffs whose 30-day labels are complete by the replayed day. Endpoints: `GET /live/status`,
+`POST /live/run`, `POST /live/reset`.
+
 ## Quick start
 
 ```bash
@@ -1279,7 +1296,7 @@ verdict — in either direction.
 
 ### Tests
 
-418 tests across fourteen files, all runnable with `pytest`:
+456 tests across seventeen files, all runnable with `pytest`:
 
 - `test_features.py` — derived-column presence, row-count preservation, input immutability,
   finiteness, zero-denominator edge cases, hand-computed formula checks, output shape,
@@ -1329,6 +1346,12 @@ verdict — in either direction.
   in `settings.py` and every key `settings.py` reads must exist in the file, both extracted
   from the AST rather than by regex — the first version reported `model.joblib` as a missing
   parameter
+- `test_live.py` — the live replay: no replayed month uses a label that isn't complete by its
+  "today"; every stage runs end to end on a simulated warehouse; a promotion really changes
+  the model behind `/predict` and restore really puts the original back; replay runs land in
+  their own MLflow experiment. Two of these are regressions found in a live run: an integer
+  registry version that made `/model-info` return 500, and runs filed under the main
+  experiment
 
 The suite trains one small model per session into a temporary directory, so it runs in
 under a second and never writes into the repository or depends on your working tree.
