@@ -373,6 +373,75 @@ def test_the_stream_scorer_is_scraped_as_its_own_job() -> None:
     assert "stream-scorer" in jobs
 
 
+# The gauges that describe the API's own state. The stream scorer shares the
+# metric registry (it records its predictions through the same counters) but
+# never refreshes these, so it exports their untouched defaults.
+API_STATE_GAUGES = (
+    "subscriber_model_loaded", "subscriber_decision_threshold", "subscriber_flagged_rate",
+    "subscriber_probability_mean_shift", "subscriber_model_served_from",
+    "subscriber_pipeline_last_run_timestamp_seconds", "subscriber_pipeline_needs_attention",
+    "subscriber_pipeline_promoted", "subscriber_drift_verdict", "subscriber_drift_psi",
+    "subscriber_drift_sample_size", "subscriber_shadow_active",
+    "subscriber_shadow_agreement_rate", "subscriber_shadow_flagged_rate_delta",
+    "subscriber_model_calibration_ece", "subscriber_model_fairness_passes",
+    "subscriber_model_fairness_ratio", "subscriber_model_cost_savings_available",
+    "subscriber_model_offers_required", "subscriber_model_capacity_binding",
+    "subscriber_model_capacity_shortfall", "subscriber_model_capacity_cost",
+)
+_API_GAUGE = re.compile(r"\b(" + "|".join(API_STATE_GAUGES) + r")\b(\{[^}]*\})?")
+
+
+def _unscoped(expr: str) -> list[str]:
+    return [m.group(1) for m in _API_GAUGE.finditer(expr)
+            if 'job="subscriber-api"' not in (m.group(2) or "")]
+
+
+def test_api_state_queries_are_scoped_to_the_api() -> None:
+    """Found on the live dashboard, not in any test that existed.
+
+    Unscoped, every one of these returned two series - the API's real value
+    and the stream scorer's untouched default. Grafana drew them side by side
+    ("LOADED | NO MODEL", "2.20 mins | 56.7 years"), and worse, the alert
+    rules matched the scorer's zeros: PipelineStale fired and ModelNotLoaded
+    went pending on a system where nothing was wrong.
+    """
+    rules = yaml.safe_load((DEPLOY / "prometheus" / "alerts.yml").read_text())
+    exprs = [rule["expr"] for group in rules["groups"] for rule in group["rules"]]
+
+    dashboard = json.loads(
+        (DEPLOY / "grafana" / "dashboards" / "subscriber-dropout.json").read_text()
+    )
+    exprs += [t["expr"] for panel in dashboard["panels"] for t in panel.get("targets", [])]
+
+    offenders = {name for expr in exprs for name in _unscoped(expr)}
+    assert not offenders, f'query these with {{job="subscriber-api"}}: {sorted(offenders)}'
+
+
+def test_no_two_dashboard_panels_overlap() -> None:
+    """Two sections once both started at y=30, and Grafana resolved the clash
+    by pushing panels down one at a time - a staircase of shadow-scoring and
+    decision-quality panels mixed together."""
+    dashboard = json.loads(
+        (DEPLOY / "grafana" / "dashboards" / "subscriber-dropout.json").read_text()
+    )
+    taken: dict[tuple[int, int], str] = {}
+    for panel in dashboard["panels"]:
+        grid = panel["gridPos"]
+        for y in range(grid["y"], grid["y"] + grid["h"]):
+            for x in range(grid["x"], grid["x"] + grid["w"]):
+                assert (y, x) not in taken, f"{panel['title']!r} overlaps {taken[(y, x)]!r}"
+                taken[(y, x)] = panel["title"]
+
+
+def test_a_gauge_for_something_that_never_happened_is_not_zero() -> None:
+    """0 would claim "rejected" or "0% agreement"; NaN says "not run"."""
+    import math
+
+    prometheus.refresh_shadow_gauges({"active": False})
+    assert math.isnan(prometheus.SHADOW_AGREEMENT_RATE._value.get())  # noqa: SLF001
+    assert math.isnan(prometheus.SHADOW_FLAGGED_RATE_DELTA._value.get())  # noqa: SLF001
+
+
 def test_every_exposed_metric_is_graphed_or_alerted_on() -> None:
     """The reverse of the dead-alert guard.
 

@@ -15,7 +15,7 @@ groups:
   - name: serving
     rules:
       - alert: ModelNotLoaded
-        expr: subscriber_model_loaded == 0
+        expr: subscriber_model_loaded{job="subscriber-api"} == 0
         for: 5m
         labels:
           severity: critical
@@ -39,7 +39,7 @@ groups:
         # either the population changed sharply or the threshold is wrong.
         # Either way, retention outreach is about to be sent to far too many
         # people, which is expensive and annoys customers.
-        expr: subscriber_flagged_rate > 0.5
+        expr: subscriber_flagged_rate{job="subscriber-api"} > 0.5
         for: 15m
         labels:
           severity: warning
@@ -53,7 +53,7 @@ groups:
       - alert: ScoreDistributionShift
         # The single most alertable number in the system: it moves when the
         # model's behaviour changes, whether or not anyone deployed anything.
-        expr: abs(subscriber_probability_mean_shift) > 0.15
+        expr: abs(subscriber_probability_mean_shift{job="subscriber-api"}) > 0.15
         for: 30m
         labels:
           severity: warning
@@ -69,7 +69,7 @@ groups:
         # 2 == significant. See VERDICT_CODES in src/monitoring/prometheus.py:
         # Prometheus has no string values, so the verdict is encoded numerically
         # to make "worse than moderate" expressible as a threshold.
-        expr: subscriber_drift_verdict >= 2
+        expr: subscriber_drift_verdict{job="subscriber-api"} >= 2
         for: 10m
         labels:
           severity: warning
@@ -83,7 +83,7 @@ groups:
       - alert: PipelineStale
         # The nightly schedule is 03:00, so 36h means at least one run was
         # missed entirely rather than merely running late.
-        expr: time() - subscriber_pipeline_last_run_timestamp_seconds > 129600
+        expr: time() - subscriber_pipeline_last_run_timestamp_seconds{job="subscriber-api"} > 129600
         labels:
           severity: warning
         annotations:
@@ -97,7 +97,7 @@ groups:
       - alert: FairnessDisparity
         # The audit runs at training time and writes a verdict. Alerting on it
         # is the difference between an audit and a file nobody opens.
-        expr: subscriber_model_fairness_passes == 0
+        expr: subscriber_model_fairness_passes{job="subscriber-api"} == 0
         for: 30m
         labels:
           severity: warning
@@ -142,7 +142,7 @@ groups:
             before trusting the absence of alerts.
 
       - alert: PipelineNeedsAttention
-        expr: subscriber_pipeline_needs_attention == 1
+        expr: subscriber_pipeline_needs_attention{job="subscriber-api"} == 1
         for: 1h
         labels:
           severity: info
@@ -159,7 +159,7 @@ groups:
         # because it changes what the cost numbers mean: while this is 1, the
         # "cost-optimal threshold" on the dashboard is not the threshold
         # anybody is operating at.
-        expr: subscriber_model_capacity_binding == 1
+        expr: subscriber_model_capacity_binding{job="subscriber-api"} == 1
         for: 6h
         labels:
           severity: info
@@ -178,7 +178,7 @@ groups:
         # configured a capacity cap at all and the model is nonetheless asking
         # for a campaign nobody could staff. The cost analysis is then a wish,
         # not a plan.
-        expr: subscriber_model_offers_required > 5000
+        expr: subscriber_model_offers_required{job="subscriber-api"} > 5000
         for: 6h
         labels:
           severity: info
@@ -210,7 +210,7 @@ groups:
         # Agreement below 70% means promoting rewrites nearly a third of all
         # decisions. That may still be correct, but it should be a decision
         # somebody makes knowingly rather than discovers afterwards.
-        expr: subscriber_shadow_active == 1 and subscriber_shadow_agreement_rate < 0.7
+        expr: subscriber_shadow_active{job="subscriber-api"} == 1 and subscriber_shadow_agreement_rate{job="subscriber-api"} < 0.7
         for: 30m
         labels:
           severity: info
@@ -223,7 +223,7 @@ groups:
             volume before deciding.
 
       - alert: ShadowOutreachVolumeShift
-        expr: subscriber_shadow_active == 1 and abs(subscriber_shadow_flagged_rate_delta) > 0.1
+        expr: subscriber_shadow_active{job="subscriber-api"} == 1 and abs(subscriber_shadow_flagged_rate_delta{job="subscriber-api"}) > 0.1
         for: 30m
         labels:
           severity: info

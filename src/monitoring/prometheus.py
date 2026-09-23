@@ -208,6 +208,17 @@ SHADOW_FLAGGED_RATE_DELTA = Gauge(
     registry=REGISTRY,
 )
 
+# A Gauge starts at 0, and for these three 0 is a *claim*: "the challenger was
+# rejected", "the models agree 0% of the time", "promotion would change
+# nothing". Before any pipeline run or with no challenger loaded, none of those
+# is true - nothing happened. NaN is Prometheus's "no value": it renders as
+# "not run" / "no challenger" through the dashboard's value mappings, and every
+# comparison against it is false, so no alert can fire on an absence.
+NOT_APPLICABLE = float("nan")
+PIPELINE_PROMOTED.set(NOT_APPLICABLE)
+SHADOW_AGREEMENT_RATE.set(NOT_APPLICABLE)
+SHADOW_FLAGGED_RATE_DELTA.set(NOT_APPLICABLE)
+
 
 # --------------------------------------------------------------------------- #
 # Decision quality - calibration, cost and fairness from the last training run
@@ -308,12 +319,11 @@ def refresh_shadow_gauges(report: dict[str, Any]) -> None:
     SHADOW_ACTIVE.set(1 if report.get("active") else 0)
 
     agreement = report.get("agreement_rate")
-    if agreement is not None:
-        SHADOW_AGREEMENT_RATE.set(float(agreement))
-
     delta = report.get("flagged_rate_delta")
-    if delta is not None:
-        SHADOW_FLAGGED_RATE_DELTA.set(float(delta))
+    # With no challenger there is nothing to agree with. Leaving the last
+    # value in place would show a stale rate for a comparison no longer running.
+    SHADOW_AGREEMENT_RATE.set(NOT_APPLICABLE if agreement is None else float(agreement))
+    SHADOW_FLAGGED_RATE_DELTA.set(NOT_APPLICABLE if delta is None else float(delta))
 
 
 def refresh_serving_gauges(live: dict[str, Any]) -> None:
@@ -360,9 +370,9 @@ def refresh_pipeline_gauges(report_path: Path | None = None) -> bool:
 
     PIPELINE_NEEDS_ATTENTION.set(1 if report.get("needs_attention") else 0)
 
+    # A monitoring-only run trains nothing, so it neither promoted nor rejected.
     promoted = (report.get("training") or {}).get("promoted")
-    if promoted is not None:
-        PIPELINE_PROMOTED.set(1 if promoted else 0)
+    PIPELINE_PROMOTED.set(NOT_APPLICABLE if promoted is None else (1 if promoted else 0))
 
     finished = report.get("finished_at")
     if finished:
