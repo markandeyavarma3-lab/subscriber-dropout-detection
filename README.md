@@ -34,6 +34,25 @@ Built to be understood and extended by a single developer in one to two weeks.
 
 ---
 
+## Live demo in one command
+
+```bash
+make demo-prepare   # once: build the image and write the drift report
+make demo           # start all 8 services, wait until each is serving, warm them up
+make demo-check     # the pre-demo checklist - must say 18/18
+make demo-down      # stop everything (keeps all data)
+```
+
+`make demo` serves the real KKBox model and the full 82.8M-row warehouse in Postgres
+(loaded once with `make warehouse-postgres`). Browse the warehouse in any Postgres client at
+`postgres://subscriber:subscriber@localhost:5432/warehouse`, using the queries in
+[`DEMO_QUERIES_POSTGRES.sql`](DEMO_QUERIES_POSTGRES.sql).
+
+For a walkthrough, see [`docs/viva/`](docs/viva/): the
+[architecture](docs/viva/architecture.md) with the *why* behind every component, an
+[18-minute demo script](docs/viva/script.md), and [likely questions with
+answers](docs/viva/questions.md).
+
 ## Quick start
 
 ```bash
