@@ -1,5 +1,5 @@
 # Shortcuts for the common workflows. Run `make help` for the list.
-.PHONY: help install data simulate ingest ingest-check warehouse-up train train-warehouse train-promote pipeline pipeline-drift backfill schedule stream stream-up stream-events stream-poison audit observability-up metrics mlflow-ui evaluate repro params metrics-diff dag serve test lint format docker-build docker-run docker-up clean
+.PHONY: help install data simulate ingest ingest-check warehouse-up train train-warehouse train-promote pipeline pipeline-drift backfill schedule stream stream-up stream-events stream-poison audit observability-up metrics mlflow-ui evaluate repro params metrics-diff dag serve test lint format docker-build docker-run docker-up clean warehouse-postgres monitor demo-prepare demo demo-check demo-down
 
 # python3, not python: macOS has shipped python3 via Xcode's Command Line
 # Tools for years and dropped the bare `python` symlink long ago, so on any
@@ -26,10 +26,10 @@ simulate:  ## Populate the event warehouse with simulated subscriber events
 	$(PYTHON) -m src.warehouse.simulate
 
 ingest-check:  ## Validate an external dataset without writing (SRC=path/to/kkbox)
-	python -m src.data.external.ingest --dataset kkbox --source-dir $(SRC) --dry-run
+	$(PYTHON) -m src.data.external.ingest --dataset kkbox --source-dir $(SRC) --dry-run
 
 ingest:  ## Load an external dataset into the warehouse (SRC=path/to/kkbox)
-	python -m src.data.external.ingest --dataset kkbox --source-dir $(SRC)
+	$(PYTHON) -m src.data.external.ingest --dataset kkbox --source-dir $(SRC)
 
 warehouse-up:  ## Start the Postgres warehouse only
 	docker compose up -d postgres
@@ -77,8 +77,9 @@ metrics:  ## Show the raw Prometheus exposition from a running API
 audit:  ## Print the decision-quality report from the last training run
 	@$(PYTHON) -c "import json;d=json.load(open('src/models/artifacts/metrics.json'))['decision_quality'];print(json.dumps(d,indent=2))"
 
-mlflow-ui:  ## Browse runs and the registry at http://127.0.0.1:5000
-	$(PYTHON) -m mlflow ui --backend-store-uri $${MLFLOW_TRACKING_URI:-sqlite:///mlflow.db}
+# 5050, not MLflow's default 5000: macOS's AirPlay Receiver owns *:5000.
+mlflow-ui:  ## Browse runs and the registry at http://127.0.0.1:5050
+	$(PYTHON) -m mlflow ui --port 5050 --backend-store-uri $${MLFLOW_TRACKING_URI:-sqlite:///mlflow.db}
 
 repro:  ## Rerun the DVC pipeline, skipping stages whose inputs did not change
 	dvc repro
@@ -121,3 +122,32 @@ clean:  ## Remove generated data, artifacts and caches
 	rm -f src/models/artifacts/*.joblib src/models/artifacts/*.json
 	rm -rf .pytest_cache .ruff_cache __pycache__
 	find . -type d -name __pycache__ -prune -exec rm -rf {} +
+
+# --------------------------------------------------------------------------- #
+# Postgres and the live demo
+# --------------------------------------------------------------------------- #
+
+PG_URL ?= postgresql+psycopg://subscriber:subscriber@localhost:5432/warehouse
+
+warehouse-postgres:  ## Copy the SQLite warehouse into the compose Postgres (82.8M rows)
+	docker compose up -d postgres
+	$(PYTHON) -m src.warehouse.to_postgres
+
+# The drift step of the nightly pipeline, run against Postgres, without
+# retraining. Feeds Grafana's drift panels. CUTOFF is the last month of data.
+monitor:  ## Check drift on the Postgres warehouse and write the pipeline report
+	SDD_DATABASE_URL=$(PG_URL) SDD_MAX_SUBSCRIBERS=$(or $(N),35000) \
+		$(PYTHON) -m src.orchestration.flows monitor --cutoff $(or $(CUTOFF),2017-02-28)
+
+demo-prepare:  ## Once, the day before: build the image and write the drift report
+	docker compose build subscriber-api
+	$(MAKE) monitor
+
+demo:  ## Start everything for a live demo, warm it up, print the URLs
+	$(PYTHON) -m src.demo up
+
+demo-check:  ## The pre-demo checklist: every service, the model, the presets, the rows
+	$(PYTHON) -m src.demo check
+
+demo-down:  ## Stop the demo stack (keeps every volume and all data)
+	$(PYTHON) -m src.demo down

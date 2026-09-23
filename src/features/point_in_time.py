@@ -52,7 +52,10 @@ WITH base AS (
         s.signup_date,
         s.acquisition_channel
     FROM subscribers s
-    WHERE s.signup_date < :cutoff
+    -- A DATE column, so compared against a date: against the datetime
+    -- cutoff, SQLite's text comparison admitted same-day signups. (No colon
+    -- before parameter names in comments - SQLAlchemy binds them anyway.)
+    WHERE s.signup_date < :cutoff_date
     {subscriber_limit}
 ),
 -- The subscription state as of the cutoff: the most recent lifecycle event
@@ -264,6 +267,11 @@ def build_training_snapshot(
     cutoff_dt = _as_datetime(window.cutoff)
     params = {
         "cutoff": cutoff_dt,
+        # signup_date is a DATE. SQLite stores both as text, and
+        # '2016-12-01' < '2016-12-01 00:00:00' is true as strings, so binding the
+        # datetime here admitted everyone who signed up *on* the cutoff day.
+        # Postgres compared real dates and did not - the backends disagreed.
+        "cutoff_date": window.cutoff,
         "window_start": _as_datetime(window.window_start),
         # Billing and support signals are slower-moving than usage, so they get
         # longer lookbacks; the column names carry the period they cover.

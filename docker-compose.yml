@@ -15,6 +15,8 @@ services:
       - "5432:5432"
     volumes:
       - warehouse-data:/var/lib/postgresql/data
+      # Creates MLflow's own database on a fresh volume (see the file for why).
+      - ./deploy/postgres/init:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U subscriber -d warehouse"]
       interval: 10s
@@ -51,7 +53,7 @@ services:
     # only replaces the one step that was going wrong.
     command: >
       sh -c "pip install --no-cache-dir psycopg2-binary &&
-             export _MLFLOW_SERVER_FILE_STORE=postgresql://subscriber:subscriber@postgres:5432/warehouse &&
+             export _MLFLOW_SERVER_FILE_STORE=postgresql://subscriber:subscriber@postgres:5432/mlflow &&
              export _MLFLOW_SERVER_ARTIFACT_ROOT=/mlflow/artifacts &&
              python -m gunicorn -b 0.0.0.0:5000 -w 4 mlflow.server:app"
     ports:
@@ -77,6 +79,8 @@ services:
       # Override any SDD_* setting from src/config/settings.py here.
       SDD_API_PORT: "8000"
       # SDD_DECISION_THRESHOLD: "0.35"
+      # Serve the mounted artifact below, never the image's own. See there.
+      SDD_MODEL_SOURCE: local
     healthcheck:
       test:
         - CMD
@@ -89,10 +93,14 @@ services:
       start_period: 10s
     restart: unless-stopped
 
-    # The image already contains a trained model.joblib. To serve a model you
-    # trained on the host instead (retrain without rebuilding), uncomment:
-    # volumes:
-    #   - ./src/models/artifacts:/app/src/models/artifacts:ro
+    # The image bakes in a model trained at build time on *synthetic* data -
+    # it has to, because the real KKBox artifact is gitignored and the build
+    # must work from a clean checkout. Serving that one would put a different
+    # model behind the dashboard and under Grafana than the one the registry
+    # promoted. So the promoted artifact is mounted over it, read-only: the
+    # registry chooses the champion, and this is that exact file.
+    volumes:
+      - ./src/models/artifacts:/app/src/models/artifacts:ro
 
   # Scrapes the API's /metrics/prometheus and keeps the history the
   # in-process window cannot: it resets on every restart.
@@ -206,6 +214,10 @@ services:
       - "8001:8001"
     environment:
       SDD_STREAM_BROKERS: redpanda:9092
+      SDD_MODEL_SOURCE: local
+    # Same model as subscriber-api, for the same reason - see the comment there.
+    volumes:
+      - ./src/models/artifacts:/app/src/models/artifacts:ro
     # The Dockerfile bakes a HEALTHCHECK that curls :8000/health into the
     # shared image - correct for subscriber-api, meaningless here, since this
     # container runs the Kafka consumer and never binds 8000. Left inherited,

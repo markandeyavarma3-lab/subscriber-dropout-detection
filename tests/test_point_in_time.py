@@ -192,6 +192,48 @@ def test_already_cancelled_subscribers_are_excluded(warehouse: Engine) -> None:
     assert not set(frame["subscriber_id"]) & set(cancelled["subscriber_id"])
 
 
+def test_a_signup_on_the_cutoff_day_is_not_before_the_cutoff(empty_warehouse: Engine) -> None:
+    """Found by comparing the same snapshot built from SQLite and from Postgres.
+
+    SQLite stores dates as text, and the cutoff is bound as a datetime, so the
+    filter compared '2016-12-01' < '2016-12-01 00:00:00' as strings - which is
+    true, because a prefix sorts first. Everyone who signed up *on* the cutoff
+    day was admitted to the base population as if they had signed up before
+    it. Postgres compares real dates and correctly excluded them, so the two
+    backends disagreed about which subscribers a capped snapshot contained.
+
+    The same-day signups had no event strictly before the cutoff and were
+    dropped by a later join, so no future data reached a feature. What they did
+    was occupy slots under ``max_subscribers``, displacing real subscribers -
+    which is exactly what this checks, with a cap of one.
+    """
+    engine = empty_warehouse
+    cutoff = date(2024, 6, 1)
+    insert_rows(
+        schema.subscribers,
+        [
+            # Sorts first, so under the bug it takes the only slot.
+            {"subscriber_id": "A-same-day", "signup_date": cutoff, "acquisition_channel": "organic"},
+            {"subscriber_id": "B-long-ago", "signup_date": date(2023, 1, 1),
+             "acquisition_channel": "organic"},
+        ],
+        engine=engine,
+    )
+    insert_rows(
+        schema.subscription_events,
+        [
+            {"subscriber_id": sid, "event_type": schema.SIGNUP, "plan_type": "basic",
+             "monthly_fee": 9.99, "is_auto_renew_enabled": True, "occurred_at": when}
+            for sid, when in [("A-same-day", datetime(2024, 6, 1)),
+                              ("B-long-ago", datetime(2023, 1, 1))]
+        ],
+        engine=engine,
+    )
+
+    frame, _ = build_training_snapshot(cutoff, max_subscribers=1, engine=engine)
+    assert list(frame["subscriber_id"]) == ["B-long-ago"]
+
+
 def test_subscribers_who_signed_up_after_the_cutoff_are_absent(warehouse: Engine) -> None:
     """A subscriber who does not yet exist cannot be scored."""
     frame = _snapshot(warehouse, date(2024, 3, 1))

@@ -22,8 +22,9 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 WORKDIR /app
 
 # Dependency layer first so it is cached across source-only changes.
-COPY requirements.txt ./
-RUN pip install --prefix=/install -r requirements.txt
+COPY requirements.txt constraints-model.txt ./
+# Constrained to the versions the served model was trained with - see the file.
+RUN pip install --prefix=/install -r requirements.txt -c constraints-model.txt
 
 COPY src/ ./src/
 

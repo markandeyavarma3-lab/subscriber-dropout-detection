@@ -139,6 +139,67 @@ jobs:
           path: src/models/artifacts/
           retention-days: 7
 
+  postgres:
+    name: Train via the event warehouse on Postgres
+    runs-on: ubuntu-latest
+    needs: test
+
+    # The same train-and-gate run as the `warehouse` job, pointed at a real
+    # Postgres instead of the SQLite fallback. Until this job existed the
+    # Postgres path - the one the compose stack and the demo actually use -
+    # had never been exercised by anything: SQLite forgives type and length
+    # mistakes that Postgres rejects, which is how a 44-character id once
+    # sailed through every test into a VARCHAR(32).
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: subscriber
+          POSTGRES_PASSWORD: subscriber
+          POSTGRES_DB: warehouse
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U subscriber -d warehouse"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      SDD_DATABASE_URL: postgresql+psycopg://subscriber:subscriber@localhost:5432/warehouse
+      PGPASSWORD: subscriber
+
+    steps:
+      - name: Check out the code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
+      - name: Simulate into Postgres, train on a temporal split, and gate promotion
+        run: python -m src.models.train --source warehouse --promote
+
+      - name: The demo queries run on Postgres
+        run: |
+          # warehouse_summary is built by hand for the real KKBox load, so a
+          # stand-in is derived here from the simulated tables' own counts.
+          psql -h localhost -U subscriber -d warehouse -v ON_ERROR_STOP=1 -c "
+            CREATE TABLE warehouse_summary AS
+            SELECT 'subscribers' AS table_name, COUNT(*) AS row_count,
+                   'people' AS what_it_holds, 'simulated' AS source FROM subscribers
+            UNION ALL SELECT 'sessions', COUNT(*), 'listening', 'simulated' FROM sessions;"
+          psql -h localhost -U subscriber -d warehouse -v ON_ERROR_STOP=1 \
+               -f DEMO_QUERIES_POSTGRES.sql > /tmp/demo-queries.txt
+          echo "All $(grep -cE '^-- [0-9]+\.' DEMO_QUERIES_POSTGRES.sql) demo queries ran."
+
   pipeline:
     name: Run the orchestrated retraining pipeline
     runs-on: ubuntu-latest
@@ -357,3 +418,45 @@ jobs:
                  "discounts_used_last_6m":1,"is_auto_renew_enabled":false}'
 
           docker rm -f api
+
+  publish:
+    name: Publish the image (CD)
+    runs-on: ubuntu-latest
+    # Only a push to main, and only once every other job has passed: an image
+    # that fails a test never becomes `latest`.
+    needs: [test, warehouse, postgres, pipeline, streaming, docker]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Check out the code
+        uses: actions/checkout@v4
+
+      - name: Log in to the GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          # Tagged with the commit as well as `latest`, so any deployment can
+          # be traced back to exactly the code that built it - and rolled back
+          # by pinning the previous sha.
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/subscriber-dropout-api:latest
+            ghcr.io/${{ github.repository_owner }}/subscriber-dropout-api:${{ github.sha }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

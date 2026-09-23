@@ -1,0 +1,15 @@
+# The libraries a pickled model depends on, pinned to exactly the versions the
+# served model was trained with (see library_versions in
+# src/models/artifacts/metadata.json).
+#
+# requirements.txt gives ranges, which is right for development and wrong for
+# serving: every image rebuild would otherwise pull whatever is newest, and a
+# scikit-learn one patch newer than the one that trained the model can load it
+# without complaint and still score differently. The image installs with
+# `-c constraints-model.txt`; `make demo-check` compares these against what is
+# actually running in the container.
+#
+# When you retrain, update these to match the new metadata.json.
+scikit-learn==1.9.0
+pandas==2.3.3
+numpy==2.4.6

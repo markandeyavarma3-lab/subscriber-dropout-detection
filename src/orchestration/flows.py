@@ -119,6 +119,10 @@ def report_task(
         # job, and drift means the world moved. Neither is a broken pipeline,
         # and failing the run would train whoever is on call to ignore it.
         run_logger.warning("Run needs attention: %s", "; ".join(report["attention_reasons"]))
+    elif training.get("skipped"):
+        # A monitoring-only run promotes nothing; saying it did would be the
+        # one line in the log that is simply false.
+        run_logger.info("Run clean: no significant drift (training skipped).")
     else:
         run_logger.info("Run clean: model promoted and no significant drift.")
     run_logger.info("Report written to %s", destination)
@@ -246,6 +250,22 @@ def _drift_scenario() -> Any:
     )
 
 
+@flow(name="subscriber-dropout-monitoring", log_prints=True)
+def monitoring_flow(cutoff: str | None = None) -> dict[str, Any]:
+    """The pipeline's drift step on its own: check, report, never retrain.
+
+    For a warehouse loaded from outside the pipeline - the KKBox export was
+    ingested by ``src.data.external.ingest`` and the serving model trained by
+    hand - running the full flow would retrain and could replace the champion.
+    This asks the question the nightly run asks ("has the world moved since the
+    serving model was fitted?") and writes the same report, with the steps it
+    did not run marked as skipped rather than silently absent.
+    """
+    skipped = {"skipped": True, "reason": "monitoring-only run"}
+    drift = drift_task(cutoff=cutoff)
+    return report_task(dict(skipped), dict(skipped), drift)
+
+
 def main(argv: list[str] | None = None) -> Any:  # pragma: no cover - CLI wiring
     """Entry point for running or serving the flows."""
     parser = argparse.ArgumentParser(description="Run the retraining pipeline.")
@@ -267,6 +287,9 @@ def main(argv: list[str] | None = None) -> Any:  # pragma: no cover - CLI wiring
     back.add_argument("--step-days", type=int, default=30)
     back.add_argument("--promote", action="store_true")
 
+    monitor = sub.add_parser("monitor", help="Check drift and write the report, no retraining.")
+    monitor.add_argument("--cutoff", default=None, help="As-of date for the live sample.")
+
     serve = sub.add_parser("serve", help="Serve the flow on a schedule (blocks).")
     serve.add_argument("--cron", default="0 3 * * *", help="Cron schedule. Default: 03:00 daily.")
 
@@ -278,6 +301,8 @@ def main(argv: list[str] | None = None) -> Any:  # pragma: no cover - CLI wiring
             force_ingest=args.force_ingest or args.drift,
             scenario=_drift_scenario() if args.drift else None,
         )
+    if args.command == "monitor":
+        return monitoring_flow(cutoff=args.cutoff)
     if args.command == "backfill":
         return backfill_flow(
             start=args.start, end=args.end, step_days=args.step_days, promote=args.promote

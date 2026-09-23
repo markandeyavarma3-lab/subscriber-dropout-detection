@@ -60,3 +60,5 @@ src/models/artifacts/last_pipeline_run.json
 # re-downloadable, so they never belong in git.
 data/kkbox/
 data/*.zip
+backups/
+.demo/
