@@ -100,10 +100,19 @@ def health() -> HealthResponse:
     return HealthResponse(status="ok")
 
 
-@app.get("/ready", response_model=ReadinessResponse, tags=["operations"])
-def ready() -> ReadinessResponse:
-    """Readiness probe: confirms the model artifact is loaded and servable."""
+@app.get(
+    "/ready", response_model=ReadinessResponse, tags=["operations"],
+    responses={503: {"model": ReadinessResponse, "description": "No model is loaded"}},
+)
+def ready(response: Response) -> ReadinessResponse:
+    """Readiness probe: confirms the model artifact is loaded and servable.
+
+    503 when it isn't. Probes read only the status code: a 200 that says
+    "degraded" in its body sent traffic to a pod that could not predict.
+    """
     loaded = service.is_model_loaded()
+    if not loaded:
+        response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
     return ReadinessResponse(
         status="ok" if loaded else "degraded",
         model_loaded=loaded,

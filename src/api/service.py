@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -105,6 +106,9 @@ def _read_metadata(metadata_path: Path) -> dict[str, Any]:
         return {}
 
 
+REGISTRY_FAIL_FAST = {"MLFLOW_HTTP_REQUEST_MAX_RETRIES": "2", "MLFLOW_HTTP_REQUEST_TIMEOUT": "10"}
+
+
 def _load_from_registry(model_name: str | None = None) -> LoadedModel:
     """Load the ``@champion`` model directly from the MLflow registry.
 
@@ -118,6 +122,14 @@ def _load_from_registry(model_name: str | None = None) -> LoadedModel:
             is set for this model name, or the aliased version fails to load.
     """
     from src.registry import tracking
+
+    # MLflow's client retries 7 times with exponential backoff by default, so
+    # an unreachable registry held startup for minutes with /health silent.
+    # Kubernetes' startup probe then killed the pod and restarted it into the
+    # same wait forever - the crash loop the readiness split exists to avoid.
+    # Fail fast instead; an operator's explicit values still win.
+    for variable, value in REGISTRY_FAIL_FAST.items():
+        os.environ.setdefault(variable, value)
 
     name = model_name or settings.REGISTERED_MODEL_NAME
     try:

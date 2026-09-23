@@ -551,3 +551,23 @@ def test_load_model_local_mode_ignores_a_registered_champion(
     assert loaded.metadata.get("served_from", "local") == "local"
     assert "registry_version" not in loaded.metadata
     service.reset_model()
+
+
+def test_an_unreachable_registry_fails_fast_instead_of_hanging_startup(monkeypatch) -> None:
+    """Found deploying the manifests: with MLflow down, the API's startup sat in
+    MLflow's retry backoff for minutes with /health silent, so Kubernetes'
+    startup probe killed the pod and restarted it into the same wait forever."""
+    import time
+
+    from src.api import service
+
+    for variable in service.REGISTRY_FAIL_FAST:
+        monkeypatch.setenv(variable, "unset-by-test")
+        monkeypatch.delenv(variable)
+    # Port 9 (discard) is closed: every connection attempt is refused.
+    monkeypatch.setattr(settings, "MLFLOW_TRACKING_URI", "http://127.0.0.1:9")
+
+    started = time.monotonic()
+    with pytest.raises(service.ModelNotLoadedError, match="unreachable"):
+        service._load_from_registry()
+    assert time.monotonic() - started < 30

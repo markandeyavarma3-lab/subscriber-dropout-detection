@@ -219,8 +219,11 @@ def test_health_ok_without_model(client_without_model: TestClient) -> None:
 
 
 def test_ready_reports_degraded_without_model(client_without_model: TestClient) -> None:
-    """Readiness makes the missing artifact explicit."""
-    payload = client_without_model.get("/ready").json()
+    """Readiness makes the missing artifact explicit - in the status code too,
+    because that is all a Kubernetes readiness probe reads."""
+    response = client_without_model.get("/ready")
+    assert response.status_code == 503
+    payload = response.json()
     assert payload["status"] == "degraded"
     assert payload["model_loaded"] is False
     assert payload["detail"]

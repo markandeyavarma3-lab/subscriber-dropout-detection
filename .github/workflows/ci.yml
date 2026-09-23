@@ -419,12 +419,90 @@ jobs:
 
           docker rm -f api
 
+  kubernetes:
+    name: Deploy to a throwaway Kubernetes cluster
+    runs-on: ubuntu-latest
+    needs: test
+    # The manifests in deploy/kubernetes/ make claims - probes that tell
+    # "alive" from "able to serve", a Service in front - that only a real
+    # cluster can check. kind runs one inside this job, for free.
+
+    steps:
+      - name: Check out the code
+        uses: actions/checkout@v4
+
+      - name: Create the cluster
+        uses: helm/kind-action@v1
+        with:
+          cluster_name: ci
+
+      - name: Build the image and load it into the cluster
+        run: |
+          docker build -t subscriber-dropout-api:ci .
+          kind load docker-image subscriber-dropout-api:ci --name ci
+
+      # The manifests deploy `:latest`, which Kubernetes always tries to pull
+      # from a registry. The cluster already holds the image under `:ci`.
+      - name: Deploy the manifests exactly as written
+        run: |
+          kubectl apply -f deploy/kubernetes/config.yaml
+          sed 's#subscriber-dropout-api:latest#subscriber-dropout-api:ci#' deploy/kubernetes/api.yaml \
+            | kubectl apply -f -
+          kubectl get hpa,pdb,svc subscriber-api
+
+      # There is no MLflow in this cluster, and the config only accepts a
+      # model from the registry. The pods must stay alive but not ready:
+      # out of the Service, and never restarted into a crash loop.
+      - name: "Without a registry: alive, not ready, not restarting"
+        run: |
+          for _ in $(seq 1 30); do [ -n "$(kubectl get pods -l app=subscriber-api -o name)" ] && break; sleep 2; done
+          kubectl wait pod -l app=subscriber-api --for=jsonpath='{.status.phase}'=Running --timeout=180s
+          # Long enough for the startup probe (150 s) to have killed a pod
+          # stuck in MLflow's retry backoff, which it used to be.
+          sleep 170
+          kubectl get pods -l app=subscriber-api -o wide
+          ready=$(kubectl get pods -l app=subscriber-api -o jsonpath='{.items[*].status.containerStatuses[0].ready}')
+          restarts=$(kubectl get pods -l app=subscriber-api -o jsonpath='{.items[*].status.containerStatuses[0].restartCount}')
+          echo "ready: $ready / restarts: $restarts"
+          [[ "$ready" != *true* ]] || { echo "a pod with no model was marked ready"; exit 1; }
+          [[ "$restarts" =~ ^[0\ ]+$ ]] || { echo "pods restarted"; kubectl logs -l app=subscriber-api --tail=30; exit 1; }
+          [ -z "$(kubectl get endpoints subscriber-api -o jsonpath='{.subsets[*].addresses[*].ip}')" ] \
+            || { echo "the Service routes to pods that cannot serve"; exit 1; }
+
+      # This throwaway cluster has no registry, so give it the model built
+      # into the image, the same one the Docker smoke test uses.
+      - name: With a model available, the rollout completes
+        run: |
+          kubectl patch configmap subscriber-config --type merge -p '{"data":{"SDD_MODEL_SOURCE":"local"}}'
+          kubectl rollout restart deployment/subscriber-api
+          kubectl rollout status deployment/subscriber-api --timeout=240s
+          kubectl get pods -l app=subscriber-api
+
+      - name: Predict through the Service
+        run: |
+          kubectl port-forward service/subscriber-api 8080:80 > /dev/null 2>&1 &
+          for _ in $(seq 1 30); do curl -sf http://localhost:8080/ready > /dev/null && break; sleep 1; done
+          curl -sf http://localhost:8080/ready
+          curl -sf -X POST http://localhost:8080/predict \
+            -H 'Content-Type: application/json' \
+            -d '{"tenure_days":95,"plan_type":"standard","monthly_fee":19.99,
+                 "avg_session_count_last_30d":2.0,"last_activity_days_ago":34,
+                 "support_tickets_last_90d":3,"payment_failures_last_6m":2,
+                 "discounts_used_last_6m":1,"is_auto_renew_enabled":false}'
+
+      - name: Show the cluster's state if anything failed
+        if: failure()
+        run: |
+          kubectl get all
+          kubectl describe pods -l app=subscriber-api | tail -60
+          kubectl logs -l app=subscriber-api --tail=50
+
   publish:
     name: Publish the image (CD)
     runs-on: ubuntu-latest
     # Only a push to main, and only once every other job has passed: an image
-    # that fails a test never becomes `latest`.
-    needs: [test, warehouse, postgres, pipeline, streaming, docker]
+    # that fails a test, or fails to deploy, never becomes `latest`.
+    needs: [test, warehouse, postgres, pipeline, streaming, docker, kubernetes]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     permissions:
       contents: read
