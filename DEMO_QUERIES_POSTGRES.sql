@@ -123,3 +123,55 @@ FROM subscribers
 GROUP BY acquisition_channel
 ORDER BY subscribers DESC
 LIMIT 10;
+
+
+-- ===========================================================================
+--  EXTRA QUERIES - for when the examiner asks something unplanned.
+-- ===========================================================================
+
+
+-- ---------------------------------------------------------------------------
+-- 9. HOW BIG IS IT?
+--    Size on disk, indexes included. sessions alone is about 7.3 GB.
+-- ---------------------------------------------------------------------------
+SELECT relname AS table_name,
+       pg_size_pretty(pg_total_relation_size(relid)) AS total_size
+FROM pg_statio_user_tables
+ORDER BY pg_total_relation_size(relid) DESC;
+
+
+-- ---------------------------------------------------------------------------
+-- 10. WHY IS IT FAST? THE INDEXES
+--     Every event table has an index on (subscriber_id, occurred_at): "this
+--     subscriber's events before this date" is the question nearly every
+--     feature asks.
+-- ---------------------------------------------------------------------------
+SELECT tablename, indexname, indexdef
+FROM pg_indexes
+WHERE schemaname = 'public'
+ORDER BY tablename, indexname;
+
+
+-- ---------------------------------------------------------------------------
+-- 11. PROOF THE INDEX IS USED
+--     Look for "Index Scan using ix_sessions_sub_time" and the execution time:
+--     63 sessions found among 38 million rows in well under a millisecond.
+-- ---------------------------------------------------------------------------
+EXPLAIN ANALYZE
+SELECT occurred_at, duration_minutes
+FROM sessions
+WHERE subscriber_id = '++/9R3sX37CjxbY/AaGvbwr3QkwElKBCtSvVzhCBDOk='
+ORDER BY occurred_at;
+
+
+-- ---------------------------------------------------------------------------
+-- 12. CANCELLATIONS PER MONTH
+--     A count, not a rate: it also grows as the subscriber base grows.
+-- ---------------------------------------------------------------------------
+SELECT date_trunc('month', occurred_at)::date AS month,
+       COUNT(*)                               AS cancellations
+FROM subscription_events
+WHERE event_type = 'cancellation'
+  AND occurred_at >= '2016-06-01'
+GROUP BY 1
+ORDER BY 1;

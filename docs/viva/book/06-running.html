@@ -35,27 +35,74 @@
   <tr><td><strong>Postgres</strong></td><td><code>localhost:5432</code>, database <code>warehouse</code>, user and password <code>subscriber</code></td></tr>
 </table>
 
-<h2>Showing the database in TablePlus</h2>
+<h2>Using the database, step by step</h2>
+<p><strong>TablePlus</strong> is a window onto the Postgres database. It doesn't store any data itself: the 82.8 million rows live in Postgres, inside Docker. TablePlus shows them, and lets you run SQL against them. It's free (the trial never expires; it limits you to 2 tabs and 2 windows), and the copy on this Mac is signed by TablePlus Inc and notarized by Apple.</p>
+
+<h3>1 · Connect (once)</h3>
 <ol>
-  <li>Download TablePlus <strong>only from tableplus.com</strong>, open the <code>.dmg</code>, and drag it into Applications. The free version never expires; it limits you to 2 tabs and 2 windows.</li>
-  <li><strong>Create a new connection → PostgreSQL</strong>. Host <code>127.0.0.1</code>, port <code>5432</code>, user <code>subscriber</code>, password <code>subscriber</code>, database <code>warehouse</code>. Click <strong>Test</strong> (the stack must be running), then <strong>Save</strong> and <strong>Connect</strong>.</li>
-  <li>The sidebar shows six tables: the five warehouse tables and <code>warehouse_summary</code>.</li>
-  <li>Press <strong>⌘E</strong> for a SQL tab, paste one block from <code>DEMO_QUERIES_POSTGRES.sql</code>, put the cursor inside it, and press <strong>⌘↵</strong> to run just that query.</li>
+  <li>Make sure the stack is running: <code>make demo</code>, or check Docker Desktop shows <code>postgres</code> running.</li>
+  <li>Open TablePlus, click <strong>Create Connection</strong>, choose <strong>PostgreSQL</strong>, then <strong>Create</strong>.</li>
+  <li>Fill in, leaving everything else as it is: Name <code>Subscriber Warehouse</code>, Host <code>127.0.0.1</code>, Port <code>5432</code>, User <code>subscriber</code>, Password <code>subscriber</code>, Database <code>warehouse</code>.</li>
+  <li>Click <strong>Test</strong> (the fields turn green), then <strong>Connect</strong>. Next time, double-click the saved connection.</li>
 </ol>
 
-<h3>The eight demo queries</h3>
+<figure>
+  <img src="/docs/viva/screenshots/tableplus-query.png" alt="TablePlus running a query" style="width:96%">
+  <figcaption>Figure 15.1: TablePlus connected to the warehouse, running query 4: one subscriber's full history, 40 rows in 19 ms.</figcaption>
+</figure>
+
+<h3>2 · What you're looking at</h3>
+<table>
+  <thead><tr><th>Part of the screen</th><th>What it is</th></tr></thead>
+  <tr><td>Blue bar at the top</td><td>Where you are: <code>PostgreSQL 16.15 : Subscriber Warehouse : warehouse</code>. Postgres version, connection name, database</td></tr>
+  <tr><td>Left sidebar → Tables</td><td>The six tables. Click one to open it</td></tr>
+  <tr><td>Tabs above the editor</td><td>A table tab (e.g. <code>subscribers</code>) and a <strong>SQL Query</strong> tab. The free version allows two</td></tr>
+  <tr><td>Editor (middle)</td><td>Where you type or paste SQL</td></tr>
+  <tr><td><strong>Run Current ⌘↵</strong></td><td>Runs only the query your cursor is in. The one to use in a demo</td></tr>
+  <tr><td>Results grid (bottom)</td><td>The rows the query returned. Scroll or drag column edges to widen</td></tr>
+  <tr><td>Bottom bar</td><td><strong>Data</strong> (the grid), <strong>Message</strong> (errors), <strong>Chart</strong>; the query time (<em>19 ms</em>); the row count (<em>40 rows</em>); <strong>Export</strong></td></tr>
+  <tr><td>Right panel · Details</td><td>Click any row to see all its fields listed vertically: handy for long values</td></tr>
+</table>
+
+<h3>3 · Browse a table</h3>
+<p>Click a table in the sidebar to see its rows. Switch the table view to <strong>Structure</strong> (at the bottom of the table tab) to see its columns, their types and its indexes, the proof the schema is what the book describes. Use the filter bar above the rows to narrow them, for example <code>event_type = cancellation</code>.</p>
+
+<div class="callout warn">
+  <div class="callout-title">The one thing that can freeze TablePlus</div>
+  <p>The query editor has a row-limit dropdown ("No limit" in the screenshot). <strong>Never run <code>SELECT * FROM sessions</code> without a <code>LIMIT</code></strong>: that asks TablePlus to fetch and draw 38 million rows. Always end a query on a big table with <code>LIMIT 20</code>, or set the dropdown to a limit before browsing.</p>
+</div>
+
+<h3>4 · Run the demo queries</h3>
+<ol>
+  <li>Press <strong>⌘E</strong> (or click the SQL Query tab).</li>
+  <li>Open <code>DEMO_QUERIES_POSTGRES.sql</code> in VS Code and copy one numbered block.</li>
+  <li>Paste it in TablePlus, click anywhere inside it, press <strong>⌘↵</strong>.</li>
+  <li>For the next query: <strong>⌘A</strong> to select everything in the editor, paste over it, <strong>⌘↵</strong>.</li>
+</ol>
 <table>
   <thead><tr><th>#</th><th>Query</th><th>What it shows</th></tr></thead>
   <tr><td>1</td><td>Warehouse summary</td><td>82.8 million rows across the tables</td></tr>
   <tr><td>2</td><td>Subscribers</td><td>44-character anonymised IDs</td></tr>
   <tr><td>3</td><td>The event log</td><td>Timestamped lifecycle events</td></tr>
-  <tr><td>4</td><td>One subscriber's history</td><td>Events, payments and sessions for one person, assembled from three tables in milliseconds</td></tr>
-  <tr><td>5</td><td>The cleaning log</td><td>The five cleaning decisions and why</td></tr>
+  <tr><td>4</td><td>One subscriber's history</td><td>Events, payments and sessions for one person, from three tables, in milliseconds</td></tr>
+  <tr><td>5</td><td>The cleaning log</td><td>The cleaning decisions and why</td></tr>
   <tr><td>6</td><td>Plan mix</td><td>Events, average fee and auto-renew by plan</td></tr>
   <tr><td>7</td><td>Lifecycle breakdown</td><td>Signups, renewals, cancellations</td></tr>
   <tr><td>8</td><td>Acquisition channels</td><td>The opaque <code>via_n</code> codes, carried through honestly</td></tr>
+  <tr><td>9</td><td>Table sizes</td><td>16 GB on disk; <code>sessions</code> alone is 7.3 GB</td></tr>
+  <tr><td>10</td><td>Indexes</td><td>The <code>(subscriber_id, occurred_at)</code> index behind the fast lookups</td></tr>
+  <tr><td>11</td><td>EXPLAIN ANALYZE</td><td>Proof the index is used: 63 sessions found among 38 million in about 0.2 ms</td></tr>
+  <tr><td>12</td><td>Cancellations per month</td><td>Cancellations each month: 19,477 in June 2016 up to 26,967 in February 2017. A count, not a rate, so it grows with the subscriber base too</td></tr>
 </table>
-<p>The slowest runs in about 1.5 seconds on the full data. The Postgres versions differ from the SQLite ones in two places, because Postgres is stricter: <code>ROUND</code> needs a <code>numeric</code> value, and booleans are counted with <code>FILTER</code> rather than summed as integers.</p>
+<p>Queries 1–8 are the planned demo; 9–12 are ready for when an examiner asks something unplanned, such as "how big is it?", "why is it fast?", or "is churn changing over time?". The Postgres versions differ from the SQLite ones in two places, because Postgres is stricter: <code>ROUND</code> needs a <code>numeric</code> value, and booleans are counted with <code>FILTER</code> rather than summed as integers.</p>
+
+<h3>5 · Safe habits</h3>
+<ul>
+  <li><strong>Only run <code>SELECT</code> queries in a demo.</strong> Never <code>DELETE</code>, <code>UPDATE</code>, <code>DROP</code> or <code>TRUNCATE</code>.</li>
+  <li>TablePlus lets you edit a cell by double-clicking it. Edits aren't saved until <strong>⌘S</strong>, so if you change something by accident, press ⌘Z or close without saving.</li>
+  <li>If a query seems stuck, click the stop button in the toolbar rather than quitting.</li>
+  <li>Ignore <em>Purchase</em> and <em>Activate</em>; the free version is enough.</li>
+</ul>
 
 <h2>If something breaks</h2>
 <table>
