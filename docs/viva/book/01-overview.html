@@ -55,12 +55,12 @@
 <div class="stats">
   <div><b>8</b><span>Docker services, started by <code>make demo</code></span></div>
   <div><b>15</b><span>Prometheus alert rules</span></div>
-  <div><b>456</b><span>automated tests</span></div>
+  <div><b>457</b><span>automated tests</span></div>
   <div><b>7</b><span>CI/CD jobs on every push</span></div>
 </div>
 
 <h2>What was built, in one paragraph</h2>
-<p>The KKBox churn dataset (real, public, 31.3 GB) is validated, cleaned and loaded into an <strong>event warehouse</strong> in Postgres. A <strong>point-in-time feature pipeline</strong> builds training data for any past date without leaking the future. A <strong>gradient-boosting model</strong> is trained on a time-based split, audited for calibration, cost and fairness, and registered in <strong>MLflow</strong>. It only becomes the live <code>@champion</code> by beating the current one on <strong>PR-AUC</strong>. The champion is served by a <strong>FastAPI</strong> service with <strong>SHAP</strong> explanations and a dashboard, and by a <strong>Kafka stream scorer</strong> with a dead-letter queue. <strong>Prometheus, Alertmanager and Grafana</strong> watch it, with <strong>PSI drift detection</strong>. A <strong>Prefect</strong> pipeline retrains on a schedule, <strong>DVC</strong> versions the data pipeline, and <strong>GitHub Actions</strong> runs seven jobs on every push, including training on two databases and publishing the Docker image.</p>
+<p>The KKBox churn dataset (real, public, 31.3 GB) is validated, cleaned and loaded into an <strong>event warehouse</strong> in Postgres. A <strong>point-in-time feature pipeline</strong> builds training data for any past date without leaking the future. A <strong>gradient-boosting model</strong> is trained on a time-based split, audited for calibration, cost and fairness, and registered in <strong>MLflow</strong>. It only becomes the live <code>@champion</code> by beating the current one on <strong>PR-AUC</strong>. The champion is served by a <strong>FastAPI</strong> service with <strong>SHAP</strong> explanations and a dashboard, and by a <strong>Kafka stream scorer</strong> with a dead-letter queue. <strong>Prometheus, Alertmanager and Grafana</strong> watch it, with <strong>PSI drift detection</strong>. A <strong>Prefect</strong> pipeline retrains on a schedule, <strong>DVC</strong> versions the data pipeline, and <strong>GitHub Actions</strong> runs eight jobs on every push, including training on two databases, deploying to a throwaway Kubernetes cluster, and publishing the Docker image.</p>
 
 <div class="callout say">
   <div class="callout-title">Say this</div>
@@ -134,10 +134,10 @@
   <tr><td>Orchestration</td><td>Prefect 3</td><td>Turns pipeline steps into tasks with retries, logging and a run history; can schedule nightly.</td></tr>
   <tr><td>Data versioning</td><td>DVC</td><td>Declares pipeline stages with inputs, parameters and outputs; reruns only what changed.</td></tr>
   <tr><td>Containers</td><td>Docker + Docker Compose</td><td>Eight services start identically on any machine with one command.</td></tr>
-  <tr><td>Orchestrated deployment</td><td>Kubernetes manifests</td><td>Deployments with health probes, an autoscaler and a disruption budget: the step after Compose.</td></tr>
-  <tr><td>CI/CD</td><td>GitHub Actions + GitHub Container Registry</td><td>Free for public repos; seven jobs test the system, and the image is published on every merge to <code>main</code>.</td></tr>
+  <tr><td>Orchestrated deployment</td><td>Kubernetes manifests</td><td>Deployments with health probes, an autoscaler and a disruption budget, deployed to a throwaway cluster by CI on every push.</td></tr>
+  <tr><td>CI/CD</td><td>GitHub Actions + GitHub Container Registry</td><td>Free for public repos; eight jobs test the system, and the image is published on every merge to <code>main</code>.</td></tr>
   <tr><td>Database browser</td><td>TablePlus (free version)</td><td>A clear window into the Postgres warehouse for the demo.</td></tr>
-  <tr><td>Quality</td><td>pytest, ruff</td><td>456 tests; ruff for linting and consistent style.</td></tr>
+  <tr><td>Quality</td><td>pytest, ruff</td><td>457 tests; ruff for linting and consistent style.</td></tr>
 </table>
 
 <div class="callout">
@@ -170,7 +170,7 @@
 │   │                             prometheus.py (metrics), tracker.py (rolling window)
 │   ├── orchestration/            pipeline.py (steps), flows.py (Prefect flows)
 │   └── demo.py                   make demo / demo-check / demo-down
-├── tests/                        456 tests in 17 files
+├── tests/                        457 tests in 17 files
 ├── deploy/
 │   ├── prometheus/               prometheus.yml (scrape targets), alerts.yml (15 rules)
 │   ├── alertmanager/             alertmanager.yml (routing, inhibition)
@@ -178,7 +178,7 @@
 │   ├── kubernetes/               api.yaml, stream-scorer.yaml, config.yaml
 │   └── postgres/init/            creates MLflow's own database
 ├── docs/viva/                    architecture, demo script, questions, slides, this book
-├── .github/workflows/ci.yml      7 CI/CD jobs
+├── .github/workflows/ci.yml      8 CI/CD jobs
 ├── docker-compose.yml            8 services
 ├── Dockerfile                    multi-stage image, non-root user
 ├── dvc.yaml, params.yaml         pipeline stages and every tunable parameter

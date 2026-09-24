@@ -208,15 +208,19 @@ the model the registry promoted is mounted in read-only, so the container serves
 champion.
 
 **31. What does your CI/CD do?**
-Seven GitHub Actions jobs on every push: lint and 400+ tests; train and gate on SQLite; train
+Eight GitHub Actions jobs on every push: lint and 400+ tests; train and gate on SQLite; train
 and gate on Postgres, plus run the demo queries; the full pipeline (idempotency, challenger
 rejection, injected drift detected); the streaming loop with poison messages; build and
-smoke-test the Docker image; and on `main`, **publish the image to GitHub's container
+smoke-test the Docker image; deploy it to a throwaway Kubernetes cluster; and on `main`,
+**publish the image to GitHub's container
 registry**, tagged with the commit so any deployment can be traced back and rolled back.
 
 **32. Is it deployed?**
-It runs as a full stack of 8 services on Docker Compose, and there are Kubernetes manifests
-for the API and scorer. It isn't on a public cloud: a 15 GB warehouse plus MLflow, Kafka and
+It runs as a full stack of 8 services on Docker Compose. CI also deploys the API to a real,
+throwaway Kubernetes cluster (`kind`) on every push, and checks that a pod with no model
+stays alive but gets no traffic. That test found two real bugs: startup hung for minutes
+when MLflow was down (a crash loop in Kubernetes), and `/ready` said 200 even with no model.
+Both are fixed. It isn't on a public cloud: a 15 GB warehouse plus MLflow, Kafka and
 Grafana doesn't fit a free tier. That's a deliberate scope decision, stated openly.
 
 **33. What does the Run button on the Overview do?**

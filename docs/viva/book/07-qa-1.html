@@ -23,7 +23,7 @@
 <p>A retention team. Each day they'd get the subscribers flagged as at risk, with the reasons, and decide who gets an offer. Engineers would use the monitoring to know whether the model can still be trusted, and the pipeline would retrain it on a schedule.</p></div>
 
 <div class="qa"><div class="qa-q">What makes this more than a Jupyter-notebook project?<span class="tag core">core</span></div>
-<p>A notebook trains a model once. This system runs continuously and safely: data is validated before loading; training is reproducible and can't leak the future; a new model can't go live unless it's measurably better; predictions are served with explanations and graceful failure; the model is monitored for drift and alerts fire; and 456 tests plus seven CI jobs check the whole system on every change.</p></div>
+<p>A notebook trains a model once. This system runs continuously and safely: data is validated before loading; training is reproducible and can't leak the future; a new model can't go live unless it's measurably better; predictions are served with explanations and graceful failure; the model is monitored for drift and alerts fire; and 457 tests plus eight CI jobs check the whole system on every change.</p></div>
 
 <div class="qa"><div class="qa-q">What is your single most important design decision?<span class="tag core">core</span></div>
 <p>Storing data as timestamped events and building features point-in-time. It's what makes every metric trustworthy: the model is trained only on information it would really have had at prediction time. Without it, every number in the project could be inflated by leakage.</p></div>

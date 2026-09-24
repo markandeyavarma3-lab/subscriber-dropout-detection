@@ -199,11 +199,12 @@ On the **Score** tab (it's already scored the at-risk example):
 
 ### 15:00 – 17:00 · Automation (GitHub Actions)
 
-> "Every push runs 7 jobs. Beyond unit tests, CI proves the **system** behaves: it trains on
+> "Every push runs 8 jobs. Beyond unit tests, CI proves the **system** behaves: it trains on
 > SQLite *and* on Postgres; runs the pipeline twice and checks the second run changes
 > nothing; checks that an identical challenger is **rejected**; injects drift and checks
 > it's **detected**; sends broken messages to the streaming scorer and checks they go to a
-> dead-letter queue; and on `main` it publishes the Docker image to GitHub's registry,
+> dead-letter queue; deploys to a real, throwaway Kubernetes cluster and checks the health
+> probes; and on `main` it publishes the Docker image to GitHub's registry,
 > tagged with the commit."
 
 Click into the latest run and show the green jobs.

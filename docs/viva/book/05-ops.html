@@ -49,18 +49,19 @@
 <!-- =================================================================== -->
 
 <h1 id="ch-cicd" data-toc="CI/CD: testing the system, not just the code" data-num="13"><span class="num">CHAPTER 13</span>CI/CD: testing the system, not just the code</h1>
-<p class="lede">Seven GitHub Actions jobs run on every push. Most CI proves the code compiles and the unit tests pass; this CI proves the system behaves.</p>
+<p class="lede">Eight GitHub Actions jobs run on every push. Most CI proves the code compiles and the unit tests pass; this CI proves the system behaves.</p>
 
-<h2>The seven jobs</h2>
+<h2>The eight jobs</h2>
 <table>
   <thead><tr><th>Job</th><th>What it proves</th></tr></thead>
-  <tr><td>1 · Lint and test</td><td>ruff finds no problems; all 456 tests pass; a model trains end to end; the decision-quality report is produced and honest</td></tr>
+  <tr><td>1 · Lint and test</td><td>ruff finds no problems; all 457 tests pass; a model trains end to end; the decision-quality report is produced and honest</td></tr>
   <tr><td>2 · Train via the warehouse (SQLite)</td><td>Simulate a warehouse, train on a temporal split, run the gate, serve the promoted model, smoke-test <code>/predict</code> and the Prometheus endpoint</td></tr>
   <tr><td>3 · Train via the warehouse on Postgres</td><td>The same on a real Postgres service container, then all twelve demo queries run against it</td></tr>
   <tr><td>4 · The orchestrated pipeline</td><td>First run promotes; second run is idempotent and <strong>rejects an identical challenger</strong>; a distinct challenger shadow-scores; injected drift is <strong>detected</strong></td></tr>
   <tr><td>5 · Streaming scorer</td><td>The consume–score–produce loop, including <strong>poison messages</strong> that must be dead-lettered</td></tr>
   <tr><td>6 · Build Docker image</td><td>The image builds and serves: <code>/health</code>, the dashboard and <code>/predict</code> all answer</td></tr>
-  <tr><td>7 · Publish (CD)</td><td>On a push to <code>main</code>, once all six pass: build and push the image to the GitHub Container Registry</td></tr>
+  <tr><td>7 · Deploy to Kubernetes</td><td>A throwaway <code>kind</code> cluster: the real manifests are applied; with no registry the pods must stay <strong>alive but not ready</strong> and never restart; with a model the rollout completes and <code>/predict</code> answers through the Service</td></tr>
+  <tr><td>8 · Publish (CD)</td><td>On a push to <code>main</code>, once all seven pass: build and push the image to the GitHub Container Registry</td></tr>
 </table>
 
 <h2>Continuous delivery</h2>
@@ -86,15 +87,15 @@
   <tr><td>Point-in-time</td><td class="num">24</td><td><strong>Leakage</strong>: future events can't change features; same-day signups</td></tr>
   <tr><td>Orchestration</td><td class="num">22</td><td>Pipeline steps, report, needs-attention logic</td></tr>
   <tr><td>Training</td><td class="num">21</td><td>Training, threshold tuning, artifacts, CLI</td></tr>
-  <tr><td>Registry</td><td class="num">20</td><td>Logging, aliases, the gate's margin</td></tr>
+  <tr><td>Registry</td><td class="num">21</td><td>Logging, aliases, the gate's margin, an unreachable registry failing fast</td></tr>
   <tr><td>Live replay</td><td class="num">15</td><td>No month uses a label from after its replayed day; every stage runs; promotion really swaps the served model; restore really restores; MLflow runs land in the replay's own experiment</td></tr>
   <tr><td>Shadow, explain, features, DVC, Postgres copy, Overview</td><td class="num">74</td><td>Shadow never affects responses; SHAP additivity; feature building; DVC stage chain; bulk-copy slicing; the Overview's live numbers and graceful degradation</td></tr>
 </table>
-<p>That's 386 test functions, 456 tests once parametrised cases are counted.</p>
+<p>That's 387 test functions, 457 tests once parametrised cases are counted.</p>
 
 <div class="callout say">
   <div class="callout-title">Say this</div>
-  <p>"Seven jobs on every push. Beyond unit tests, CI trains on SQLite and on Postgres, runs the pipeline twice to prove it's idempotent, checks an identical challenger is rejected, injects drift and checks it's caught, and sends poison messages to the stream scorer. On main it publishes the image, tagged with the commit. And honestly: CI was once red for 17 days without anyone noticing, so now the demo checklist checks it."</p>
+  <p>"Eight jobs on every push. Beyond unit tests, CI trains on SQLite and on Postgres, runs the pipeline twice to prove it's idempotent, checks an identical challenger is rejected, injects drift and checks it's caught, and sends poison messages to the stream scorer. On main it publishes the image, tagged with the commit. And honestly: CI was once red for 17 days without anyone noticing, so now the demo checklist checks it."</p>
 </div>
 
 <!-- =================================================================== -->
@@ -131,9 +132,14 @@
   <li>A <strong>PodDisruptionBudget</strong>: at least one API pod stays up during node maintenance.</li>
   <li>A <strong>ConfigMap</strong> for settings, so the same image runs everywhere and only configuration changes.</li>
 </ul>
-<p>These manifests are <strong>provided, not deployed</strong>: there's no free cluster large enough for the full stack. That's stated openly, and deploying to a managed cluster is listed as future work.</p>
+<p><strong>CI deploys them on every push</strong> to a throwaway <code>kind</code> cluster (Kubernetes inside Docker, free on GitHub's runners) and checks the probe design really works. Doing that found two bugs the manifests' comments claimed couldn't happen:</p>
+<ul>
+  <li><strong>A crash loop.</strong> With MLflow unreachable, startup waited minutes in MLflow's retry backoff with <code>/health</code> silent, so the startup probe (150 s) would kill the pod and restart it into the same wait forever. Registry loading now fails fast.</li>
+  <li><strong>Traffic to a pod with no model.</strong> <code>/ready</code> answered 200 with "degraded" in the body, but probes read only the status code. It now returns 503.</li>
+</ul>
+<p>It isn't deployed to a <em>cloud</em> cluster: the full stack doesn't fit a free tier. The stream scorer's manifest isn't part of the CI test, because it needs a Kafka broker in the cluster.</p>
 
 <div class="callout say">
   <div class="callout-title">Say this</div>
-  <p>"Everything runs in Docker: eight services from one Compose file, images pinned to exact versions. The serving image runs as a non-root user, and the promoted model is mounted into it read-only, with its libraries pinned to the training versions. For the next step there are Kubernetes manifests with health probes, an autoscaler and a disruption budget; they're written but not deployed, because no free cluster fits the stack."</p>
+  <p>"Everything runs in Docker: eight services from one Compose file, images pinned to exact versions. The serving image runs as a non-root user, and the promoted model is mounted into it read-only, with its libraries pinned to the training versions. For the next step there are Kubernetes manifests with health probes, an autoscaler and a disruption budget, and CI deploys them to a throwaway cluster on every push. That test found two real bugs in how the probes behaved. It isn't on a cloud cluster, because no free one fits the stack."</p>
 </div>

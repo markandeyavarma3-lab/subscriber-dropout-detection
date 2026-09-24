@@ -1181,8 +1181,19 @@ than partitions, so an HPA on the stream scorer would just schedule idle pods �
 means repartitioning the topic first. The manifests say so rather than leaving it to be
 discovered.
 
-> **Never applied.** No cluster and no Docker on the development machine, so these are
-> structurally validated by tests and nothing more. See [ROADMAP.md](ROADMAP.md).
+**Applied on every push.** CI's `kubernetes` job builds the image, loads it into a
+throwaway [kind](https://kind.sigs.k8s.io/) cluster and applies `config.yaml` and `api.yaml`.
+With no MLflow in the cluster, the pods must stay alive but not ready, unrestarted and out
+of the Service. With the image's built-in model, the rollout must complete and `/predict`
+must answer through the Service. The first attempt at this found both claims above false:
+
+- with MLflow unreachable, startup sat in MLflow's retry backoff for minutes with `/health`
+  silent, so the startup probe would have killed the pod forever. Registry loading now fails
+  fast (2 retries, 10 s timeout) unless `MLFLOW_HTTP_REQUEST_*` say otherwise;
+- `/ready` answered **200** with `"degraded"` in the body. Probes read only the status code,
+  so a pod with no model would have taken traffic. It now answers **503**.
+
+The stream scorer's manifest isn't applied in CI: it needs a Kafka broker in the cluster.
 
 ### Is the model fit for the decision it drives?
 
@@ -1296,7 +1307,7 @@ verdict — in either direction.
 
 ### Tests
 
-456 tests across seventeen files, all runnable with `pytest`:
+457 tests across seventeen files, all runnable with `pytest`:
 
 - `test_features.py` — derived-column presence, row-count preservation, input immutability,
   finiteness, zero-denominator edge cases, hand-computed formula checks, output shape,
@@ -1377,6 +1388,10 @@ logic passes in isolation.
 polls `/health`, and posts a real request to `/predict`. Building an image proves it
 compiles; the smoke test proves it *serves*. Any failing step fails the workflow.
 
+**Job — Kubernetes:** runs only after job 1 passes. Deploys the image to a throwaway `kind`
+cluster with the real manifests and checks the probes (see "Kubernetes" above). Publishing
+the image waits for it, so an image that can't deploy never becomes `latest`.
+
 ---
 
 ## Future work
@@ -1386,10 +1401,9 @@ items that stood here previously — real data, SHAP, Alertmanager, a capacity c
 data versioning — are now done. What is left is mostly *verification*, which is a more
 uncomfortable list than a feature backlog.
 
-- **Kubernetes remains unverified.** The manifests need a real cluster (`kind`, or Docker
-  Desktop's built-in one) to apply against, which is a separate exercise from bringing up
-  compose. The eight-service compose stack itself has now been run end to end — see
-  "Running with Docker" below, including the two bugs that only surfaced once it was.
+- **Kubernetes is verified on a throwaway cluster, not a real one.** CI deploys the API's
+  manifests to `kind` on every push (see "Kubernetes" above); the stream scorer's, the HPA
+  under real load, and any cloud cluster remain untested.
 - **The KKBox load is bounded, not complete.** The loader has now met the real dataset and
   the six mismatches it found are fixed. What is loaded is every subscriber, transaction and
   payment, plus usage sessions from 2016-10-01 onward — five months, chosen to overlap the

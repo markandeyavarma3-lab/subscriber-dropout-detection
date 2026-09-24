@@ -119,7 +119,7 @@
 <p><strong>Continuous integration:</strong> every change is automatically built and tested, so problems surface immediately. <strong>Continuous delivery:</strong> every change that passes is packaged into a releasable artifact. <strong>Continuous deployment:</strong> that artifact is also released to production automatically.</p></div>
 
 <div class="qa"><div class="qa-q">What does your CI do?<span class="tag core">core</span></div>
-<p>Seven jobs on every push: lint and 456 tests; train and gate on SQLite; train and gate on Postgres plus the demo queries; the full pipeline (idempotent, identical challenger rejected, drift detected); the streaming loop with poison messages; building and smoke-testing the Docker image; and, on <code>main</code>, publishing the image to the GitHub Container Registry.</p></div>
+<p>Eight jobs on every push: lint and 457 tests; train and gate on SQLite; train and gate on Postgres plus the demo queries; the full pipeline (idempotent, identical challenger rejected, drift detected); the streaming loop with poison messages; building and smoke-testing the Docker image; and, on <code>main</code>, publishing the image to the GitHub Container Registry.</p></div>
 
 <div class="qa"><div class="qa-q">Do you have CD?<span class="tag tricky">tricky</span></div>
 <p>Continuous <em>delivery</em>, yes: every merge to <code>main</code> that passes all six test jobs publishes the image, tagged with the commit hash. Continuous <em>deployment</em>, no: nothing automatically releases it to a production cluster, because there's no free cluster that fits the stack. I'd describe it exactly that way.</p></div>
@@ -131,7 +131,7 @@
 <p>A test required that every file a DVC stage depends on exists on disk. One dependency, the warehouse database, is git-ignored and produced by a pipeline stage: present on my machine, absent on every fresh checkout, which is what CI is. So CI failed on every push while local tests passed, and because that job gates the others, four jobs didn't run at all. I found it by running the suite on a fresh clone. The rule is now "in the repo or produced by a stage", and the demo checklist checks CI is green.</p></div>
 
 <div class="qa"><div class="qa-q">How many tests are there, and what do they cover?</div>
-<p>456, across 17 files: monitoring, evaluation, streaming, the API, Prometheus and alerting config, the KKBox loader, point-in-time features, orchestration, training, the registry, shadow scoring, explanations, features, DVC, the Postgres copy, the Overview, and the live replay.</p></div>
+<p>457, across 17 files: monitoring, evaluation, streaming, the API, Prometheus and alerting config, the KKBox loader, point-in-time features, orchestration, training, the registry, shadow scoring, explanations, features, DVC, the Postgres copy, the Overview, and the live replay.</p></div>
 
 <div class="qa"><div class="qa-q">Which test is most important?<span class="tag core">core</span></div>
 <p>The leakage test: adding events after the cutoff must not change any feature. If it failed, every metric the project reports would be meaningless.</p></div>
@@ -170,7 +170,7 @@
 <p>A pickled scikit-learn model should be loaded by the same version that trained it; a different version can load it without complaint and score differently. One rebuild quietly moved scikit-learn from 1.9.0 to 1.9.1. Now <code>constraints-model.txt</code> pins them, and the checklist compares the container's versions with the model's metadata.</p></div>
 
 <div class="qa"><div class="qa-q">What is Kubernetes, and how does your project use it?<span class="tag core">core</span></div>
-<p>A system for running containers across a cluster of machines: it keeps the requested number of copies running, restarts failures, scales, and rolls out updates. The project has manifests for the API and stream scorer: Deployments with 2 replicas, resource limits, health probes, an autoscaler (2–10 replicas at 70% CPU), a PodDisruptionBudget and a ConfigMap. They're written but not deployed, since no free cluster fits the stack.</p></div>
+<p>A system for running containers across a cluster of machines: it keeps the requested number of copies running, restarts failures, scales, and rolls out updates. The project has manifests for the API and stream scorer: Deployments with 2 replicas, resource limits, health probes, an autoscaler (2–10 replicas at 70% CPU), a PodDisruptionBudget and a ConfigMap. CI deploys the API's manifests to a throwaway <code>kind</code> cluster on every push and checks the probes behave; that test found two real bugs (a startup crash loop and a readiness probe that always passed).</p></div>
 
 <div class="qa"><div class="qa-q">What are liveness, readiness and startup probes?</div>
 <p><strong>Liveness</strong>: if it fails, Kubernetes restarts the container. <strong>Readiness</strong>: if it fails, traffic stops being sent to it (without a restart). <strong>Startup</strong>: gives a slow-starting container time, so a long model load isn't mistaken for a crash. Here they use <code>/health</code>, <code>/ready</code> and <code>/health</code> respectively.</p></div>
@@ -179,7 +179,7 @@
 <p>An HPA adds or removes replicas to keep a metric (here CPU at 70%) near its target, between a minimum and maximum (2 and 10). A PDB limits voluntary disruptions, such as node maintenance, so at least a set number of pods (here 1) stays running.</p></div>
 
 <div class="qa"><div class="qa-q">Why isn't it deployed to the cloud?<span class="tag tricky">tricky</span></div>
-<p>Cost and size. The full stack (a 15 GB warehouse, MLflow, Kafka, Prometheus, Grafana) doesn't fit any free tier, and the project was built on free resources only. It runs in Docker locally, the image is published on every merge, and the Kubernetes manifests are ready. Deploying to a managed cluster is the stated next step.</p></div>
+<p>Cost and size. The full stack (a 15 GB warehouse, MLflow, Kafka, Prometheus, Grafana) doesn't fit any free tier, and the project was built on free resources only. It runs in Docker locally, the image is published on every merge, and CI deploys the Kubernetes manifests to a throwaway cluster on every push. A managed cloud cluster is the stated next step.</p></div>
 
 <!-- =========================== O ============================ -->
 <h1 id="qa-theory" data-toc="O · General ML and MLOps theory"><span class="num">SECTION O</span>General ML and MLOps theory</h1>

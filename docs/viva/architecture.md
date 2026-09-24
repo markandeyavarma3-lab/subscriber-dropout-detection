@@ -49,7 +49,7 @@ flowchart LR
 
     subgraph OPS["8 · Automation"]
         PF[Prefect flows<br/>src/orchestration/flows.py]
-        CI[GitHub Actions<br/>7 jobs]
+        CI[GitHub Actions<br/>8 jobs]
         GH[(ghcr.io image)]
     end
 
@@ -91,7 +91,7 @@ flowchart LR
 | 7 | **PSI drift** | `src/monitoring/drift.py` | Compares each feature's live distribution against its training distribution. PSI > 0.25 is significant drift: a sign the model may be going stale. |
 | 8 | **Prefect** | `src/orchestration/flows.py` | The nightly pipeline: ingest → check drift → retrain → gate → report. Drift is checked *before* retraining, because afterwards it would compare data with itself and always say "stable". |
 | 8 | **CI/CD** | `.github/workflows/ci.yml` | Lint and tests; training on SQLite *and* Postgres; the pipeline proven idempotent; an identical challenger rejected; injected drift detected; the streaming loop with poison messages; the image built and smoke-tested, then **published to ghcr.io** on every merge to `main`. |
-| 8 | **Kubernetes** | `deploy/kubernetes/` | Manifests for the API and scorer, the step after compose. Not deployed to a cloud cluster (no free tier fits a 15 GB warehouse); this is stated, not hidden. |
+| 8 | **Kubernetes** | `deploy/kubernetes/` | Manifests for the API and scorer, the step after compose. CI deploys the API's to a throwaway `kind` cluster on every push. Not deployed to a cloud cluster (no free tier fits a 15 GB warehouse); this is stated, not hidden. |
 
 ## Numbers worth knowing by heart
 

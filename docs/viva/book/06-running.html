@@ -128,7 +128,7 @@
   <li>A registry with a promotion gate, proven in CI to reject an identical challenger.</li>
   <li>Explained predictions, a dashboard, and streaming inference with a dead-letter queue.</li>
   <li>Monitoring with PSI drift, 15 alert rules and a Grafana dashboard that reports only true things.</li>
-  <li>Seven CI/CD jobs, 456 tests, and a published, commit-tagged image.</li>
+  <li>Eight CI/CD jobs, 457 tests, and a published, commit-tagged image.</li>
   <li>The whole stack started and verified with two commands.</li>
 </ul>
 
@@ -140,7 +140,7 @@
   <tr><td>Cost figures are placeholders</td><td>The cost-optimal threshold (0.43) is illustrative; the served threshold (0.05) is the F1 choice.</td></tr>
   <tr><td>Stricter churn label than Kaggle's</td><td>Explicit cancellations only, not quiet lapses. Results aren't comparable with the competition's leaderboard.</td></tr>
   <tr><td>Calibration is reported, not applied</td><td>Isotonic calibration would shave 0.003 off an already-small error; the pipeline tries it on every run but doesn't switch it on.</td></tr>
-  <tr><td>Not deployed to a public cloud</td><td>A 15 GB warehouse plus MLflow, Kafka and Grafana fits no free tier. It runs on Docker locally; Kubernetes manifests are written but not deployed.</td></tr>
+  <tr><td>Not deployed to a public cloud</td><td>A 15 GB warehouse plus MLflow, Kafka and Grafana fits no free tier. It runs on Docker locally; CI deploys the Kubernetes manifests to a throwaway cluster, not a cloud one.</td></tr>
   <tr><td>Continuous delivery, not deployment</td><td>Every merge publishes a tested image; nothing deploys it to production automatically.</td></tr>
   <tr><td>No real challenger yet</td><td>Shadow scoring is built and tested in CI, but idle in the demo.</td></tr>
 </table>
