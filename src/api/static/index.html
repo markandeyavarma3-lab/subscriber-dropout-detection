@@ -844,22 +844,24 @@
   .lv-months li.is-next em { color: var(--c-model); font-weight: 600; }
   .lv-months li.is-running { border: 2px solid var(--c-model); animation: lv-pulse 1.4s var(--ease-inout) infinite; }
 
-  /* Eight stages, in order. Each card's tone is its part of the system. */
+  /* Eight stages, in order, drawn as a connected pipeline. Each card's tone
+     is its part of the system; the connectors between them fill in as the
+     stage before them finishes, so the diagram reads as a live hand-off. */
   .lv-stages {
     list-style: none;
     margin: 0 0 18px;
     padding: 0;
-    display: grid;
-    grid-template-columns: repeat(8, minmax(0, 1fr));
-    gap: 10px;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
   }
-  @media (max-width: 1150px) { .lv-stages { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
-  @media (max-width: 620px) { .lv-stages { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
   .lv-stage {
     position: relative;
     display: flex;
     flex-direction: column;
     gap: 6px;
+    flex: 1 1 0;
+    min-width: 120px;
     padding: 14px 12px 12px;
     border-radius: 14px;
     background: var(--surface);
@@ -867,6 +869,37 @@
     box-shadow: var(--panel-shadow);
     min-height: 150px;
     transition: background var(--dur-2), border-color var(--dur-2), opacity var(--dur-2);
+  }
+  .lv-connector {
+    flex: 0 0 22px;
+    align-self: center;
+    height: 3px;
+    margin: 0 -1px;
+    border-radius: 2px;
+    background: var(--line);
+    position: relative;
+    overflow: visible;
+    transition: background var(--dur-2);
+  }
+  .lv-connector.is-filled { background: var(--tone); }
+  .lv-connector .lv-connector-dot {
+    position: absolute;
+    top: 50%; left: 0;
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--tone);
+    transform: translate(-50%, -50%);
+    opacity: 0;
+    pointer-events: none;
+  }
+  @media (max-width: 1150px) {
+    .lv-stage { flex-basis: calc(25% - 16px); }
+    .lv-connector { flex-basis: 12px; }
+    .lv-connector:nth-of-type(8n) { flex-basis: 100%; height: 12px; }
+  }
+  @media (max-width: 620px) {
+    .lv-stage { flex-basis: calc(50% - 12px); }
+    .lv-connector:nth-of-type(4n) { flex-basis: 100%; height: 12px; }
   }
   .lv-stage-top { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
   .lv-dot {
@@ -1055,7 +1088,7 @@
         <p class="lv-lede">One click replays a real month from the warehouse through the whole pipeline.
           If the new model beats the one serving, it goes live on this site.</p>
         <div class="lv-actions">
-          <button type="button" class="ov-btn ov-btn-primary lv-run" id="lvRun">▶ Run next month</button>
+          <button type="button" class="ov-btn ov-btn-primary lv-run" id="lvRun">▶ Run replay</button>
           <button type="button" class="ov-btn" id="lvReset">Restore original model</button>
         </div>
         <p class="lv-status" id="lvStatus">Connecting…</p>
@@ -1450,6 +1483,7 @@
 
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
 <script>
   // Retuned for the model trained on real KKBox data. The previous values were
   // set against the simulator and had gone quietly wrong: "at-risk" scored
@@ -1964,10 +1998,14 @@
     train: "model", evaluate: "model", gate: "results", deploy: "serve",
   };
   const STAGE_MARK = { done: "✓", skipped: "–", rejected: "✕", failed: "!" };
+  // Last status seen per stage, so a transition animation fires once - not
+  // on every poll tick while a stage sits in the same status.
+  const lastStageStatus = {};
 
   let liveState = null;
   let originalReport = null;
   let livePoll = null;
+  let autoPlay = false; // true from the moment Run is clicked until Reset or the schedule is exhausted
 
   function renderMonths(state) {
     const host = $("lvMonths");
@@ -1987,28 +2025,81 @@
     });
   }
 
+  // Bigger, better hand-offs: a stage pops in as it starts, flashes and
+  // hands a pulse down the connector as it finishes, and shakes if the gate
+  // rejects it. Steady-state colouring stays plain CSS (the is-* classes);
+  // GSAP only drives the one-shot transition moment.
+  function animateStageStart(li) {
+    if (!window.gsap) return;
+    gsap.fromTo(li, { scale: .85, opacity: .6 }, { scale: 1, opacity: 1, duration: .4, ease: "back.out(2)" });
+  }
+  function animateStageDone(li) {
+    if (!window.gsap) return;
+    gsap.fromTo(li, { boxShadow: "0 0 0 0 var(--tint)" }, { boxShadow: "0 0 0 6px var(--tint)", duration: .3, yoyo: true, repeat: 1, ease: "power1.inOut" });
+  }
+  function animateStageFailed(li) {
+    if (!window.gsap) return;
+    gsap.fromTo(li, { x: -6 }, { x: 0, duration: .4, ease: "elastic.out(1, .3)" });
+  }
+  function animateConnector(connector) {
+    connector.classList.add("is-filled");
+    if (!window.gsap) return;
+    const dot = connector.querySelector(".lv-connector-dot");
+    if (!dot) return;
+    gsap.fromTo(dot, { left: "0%", opacity: 1 }, { left: "100%", opacity: 0, duration: .5, ease: "power1.inOut" });
+  }
+
   function renderStages(state) {
     const host = $("lvStages");
-    if (host.children.length !== state.stages.length) {
-      host.replaceChildren(...state.stages.map((_, i) => {
+    const wantChildren = state.stages.length * 2 - 1;
+    if (host.children.length !== wantChildren) {
+      const children = [];
+      state.stages.forEach((_, i) => {
+        if (i > 0) {
+          const connector = el("li", "lv-connector");
+          connector.appendChild(el("span", "lv-connector-dot"));
+          children.push(connector);
+        }
         const li = el("li", "lv-stage");
         const top = el("div", "lv-stage-top");
         top.append(el("span", "lv-dot", String(i + 1)), el("span", "lv-time", ""));
         li.append(top, el("h3", ""), el("div", "lv-detail", ""));
-        return li;
-      }));
+        children.push(li);
+      });
+      host.replaceChildren(...children);
     }
     state.stages.forEach((stage, i) => {
-      const li = host.children[i];
+      const li = host.children[i * 2];
+      const connector = i > 0 ? host.children[i * 2 - 1] : null;
       const tone = STAGE_TONE[stage.key] || "results";
       li.style.setProperty("--tone", `var(--c-${tone})`);
       li.style.setProperty("--tint", `var(--c-${tone}-soft)`);
+      if (connector) {
+        connector.style.setProperty("--tone", `var(--c-${STAGE_TONE[state.stages[i - 1].key] || "results"})`);
+        // A fresh month (or a Reset) puts this stage back to pending - the
+        // hand-off into it hasn't happened yet in this run, so the connector
+        // leading into it must not still show filled from a previous run.
+        if (stage.status === "pending") connector.classList.remove("is-filled");
+      }
       li.className = "lv-stage is-" + stage.status;
       li.querySelector(".lv-dot").textContent = STAGE_MARK[stage.status] || String(i + 1);
       li.querySelector(".lv-time").textContent = stage.seconds === null ? "" : stage.seconds + "s";
       li.querySelector("h3").textContent = stage.title;
       li.querySelector(".lv-detail").textContent =
         stage.detail || (stage.status === "pending" ? "waiting" : stage.status === "running" ? "working…" : "");
+
+      if (lastStageStatus[stage.key] !== stage.status) {
+        if (stage.status === "running") animateStageStart(li);
+        else if (stage.status === "done") animateStageDone(li);
+        else if (stage.status === "rejected" || stage.status === "failed") animateStageFailed(li);
+        // The connector marks a completed hand-off into this stage, not a
+        // verdict on it - fill it whenever the stage resolves at all (done,
+        // skipped, rejected or failed all mean data reached it), so a real
+        // gate rejection or a mid-pipeline failure doesn't leave the line in
+        // front of it looking like nothing ever arrived.
+        if (connector && stage.status !== "pending" && stage.status !== "running") animateConnector(connector);
+        lastStageStatus[stage.key] = stage.status;
+      }
     });
   }
 
@@ -2066,7 +2157,8 @@
     $("lvRun").disabled = state.running || finished;
     $("lvRun").textContent = state.running ? "Running…"
       : finished ? "Replay complete"
-      : `▶ Run ${state.months[state.next_step]}`;
+      : autoPlay ? `Advancing to ${state.months[state.next_step]}…`
+      : "▶ Run replay";
     $("lvReset").disabled = state.running || (!state.versions.length && !state.error);
 
     const status = $("lvStatus");
@@ -2076,6 +2168,12 @@
       status.textContent = state.error;
     } else if (state.running) {
       status.append("Replaying ", el("b", "", state.current), " — the pipeline is running. Watch the stages below.");
+    } else if (finished) {
+      if (serving) {
+        status.append("Replay complete — serving ", el("b", "", `v${serving.version}`), `, trained on ${serving.month}.`);
+      } else {
+        status.textContent = "Replay complete — all three months played.";
+      }
     } else if (serving) {
       status.append("Serving ", el("b", "", `v${serving.version}`),
         `, trained by the replay on ${serving.month}. Restore puts the tested model back.`);
@@ -2110,7 +2208,18 @@
     renderLive(state);
     // A run just finished: the served model may have changed, so refresh
     // the header and the tiles that describe it.
-    if (wasRunning && !state.running) refreshStatus();
+    if (wasRunning && !state.running) {
+      refreshStatus();
+      // One click plays the whole replay: chain straight into the next
+      // month instead of waiting for another click, until the schedule
+      // runs out or Reset cancels it.
+      if (autoPlay) {
+        // A real backend failure must stop the loop, not retry forever -
+        // state.error is surfaced to the user instead.
+        if (state.next_step >= state.total_steps || state.error) autoPlay = false;
+        else { liveAction("/live/run"); return; }
+      }
+    }
     scheduleLive();
   }
 
@@ -2127,18 +2236,24 @@
     try {
       const response = await fetch(path, { method: "POST" });
       const body = await response.json();
-      if (!response.ok) { setText("lvStatus", body.detail || "That didn't work."); return; }
+      if (!response.ok) {
+        autoPlay = false; // a stray 409 (busy/finished) should never leave the auto-play loop spinning
+        setText("lvStatus", body.detail || "That didn't work.");
+        return;
+      }
+      if (path === "/live/reset") Object.keys(lastStageStatus).forEach((k) => delete lastStageStatus[k]);
       renderLive(body);
       refreshStatus();
     } catch (err) {
+      autoPlay = false; // a dropped request mid-chain shouldn't leave a stale loop armed
       setText("lvStatus", `Could not reach the API: ${err.message}`);
     } finally {
       scheduleLive();
     }
   }
 
-  $("lvRun").addEventListener("click", () => liveAction("/live/run"));
-  $("lvReset").addEventListener("click", () => liveAction("/live/reset"));
+  $("lvRun").addEventListener("click", () => { autoPlay = true; liveAction("/live/run"); });
+  $("lvReset").addEventListener("click", () => { autoPlay = false; liveAction("/live/reset"); });
 
   async function refreshOverview() {
     try {
