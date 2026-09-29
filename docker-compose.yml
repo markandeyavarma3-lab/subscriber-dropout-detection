@@ -1,6 +1,13 @@
 # Bring the API up with:  docker compose up --build
 # Then open http://localhost:8000/docs
 
+# Pinned so the project's containers, networks and volumes always resolve to
+# the same names regardless of what the checkout folder is called on disk -
+# Compose otherwise derives that prefix from the directory name, so a rename
+# (e.g. subscriber-dropout-detection -> MLOps) silently starts a brand new,
+# empty set of volumes next to the real ones instead of reusing them.
+name: subscriber-dropout-detection
+
 services:
   # The event warehouse. Locally the project falls back to SQLite, so this is
   # only needed once you want the full stack; SDD_DATABASE_URL switches it.

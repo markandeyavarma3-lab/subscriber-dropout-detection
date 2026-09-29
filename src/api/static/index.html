@@ -670,63 +670,6 @@
   .track i { position: absolute; top: -6px; width: 2px; height: 22px; background: var(--accent); border-radius: 1px; }
   .track i::after { content: attr(data-l); position: absolute; top: -20px; left: 50%; transform: translateX(-50%); font-family: var(--font-mono); font-size: 11px; color: var(--muted); white-space: nowrap; }
 
-  /* ---------------------------- key/value ------------------------------ */
-
-  .kv { display: grid; grid-template-columns: minmax(150px, auto) 1fr; gap: 12px 22px; }
-  @media (max-width: 560px) { .kv { grid-template-columns: 1fr; gap: 4px 0; } }
-  .kv dt { font-size: 14px; color: var(--muted); }
-  .kv dd { margin: 0; font-family: var(--font-mono); font-size: 13px; color: var(--ink-soft); word-break: break-word; }
-  @media (max-width: 560px) { .kv dd { margin-bottom: 10px; } }
-
-  .chips { display: flex; flex-wrap: wrap; gap: 7px; }
-  .chip { font-family: var(--font-mono); font-size: 12px; background: var(--sunk); border: 1px solid var(--line); border-radius: var(--r-chip); padding: 4px 9px; color: var(--ink-soft); }
-
-  /* ------------------------------ drift -------------------------------- */
-
-  .row-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 18px; }
-  .ghost {
-    appearance: none;
-    background: var(--sunk);
-    border: 1px solid var(--line-firm);
-    border-radius: var(--r-input);
-    padding: 10px 16px;
-    font-family: var(--font-ui);
-    font-size: 14px;
-    font-weight: 500;
-    color: var(--ink-soft);
-    cursor: pointer;
-    transition: border-color var(--dur-1), color var(--dur-1);
-  }
-  .ghost:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
-  .ghost:disabled { opacity: .55; cursor: default; }
-  .ghost:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-
-  .method-line { font-family: var(--font-mono); font-size: 12px; color: var(--muted); background: var(--sunk); border: 1px solid var(--line); border-radius: var(--r-input); padding: 12px 15px; margin-bottom: 18px; line-height: 1.8; }
-  .finding { font-size: 16px; color: var(--ink-soft); border-left: 3px solid var(--accent); background: var(--accent-dim); border-radius: 0 var(--r-input) var(--r-input) 0; padding: 14px 17px; margin-bottom: 22px; }
-
-  .axis { position: relative; height: 22px; margin: 0 0 8px 190px; border-bottom: 1px solid var(--line); }
-  @media (max-width: 620px) { .axis { margin-left: 0; } }
-  .axis i { position: absolute; top: 0; bottom: 0; width: 1px; border-left: 1px dashed var(--line-firm); }
-  .axis i::after { content: attr(data-l); position: absolute; top: 1px; left: 5px; font-family: var(--font-mono); font-size: 10.5px; color: var(--muted); white-space: nowrap; }
-
-  .dumb { display: grid; grid-template-columns: 190px 1fr; gap: 5px 0; margin-bottom: 16px; }
-  @media (max-width: 620px) { .dumb { grid-template-columns: 1fr; } }
-  .dumb.pinned { padding-bottom: 16px; border-bottom: 1px solid var(--line); margin-bottom: 20px; }
-  .dumb-name { font-family: var(--font-mono); font-size: 13px; color: var(--ink-soft); padding-right: 12px; }
-  .dumb-sub { grid-column: 1 / -1; font-family: var(--font-mono); font-size: 11px; color: var(--muted); }
-  @media (min-width: 621px) { .dumb-sub { grid-column: 2; } }
-  .dumb-track { position: relative; height: 22px; }
-  .dumb-track .link { position: absolute; top: 10px; height: 2px; border-radius: 1px; }
-  .dumb-track .pt { position: absolute; top: 6px; width: 11px; height: 11px; border-radius: 50%; margin-left: -5.5px; transition: left var(--dur-3) var(--ease-out); }
-  .dumb-track .pt.from { background: var(--surface); border: 2px solid var(--line-firm); }
-  .dumb-track .pt.to.stable { background: var(--low); }
-  .dumb-track .pt.to.moderate { background: var(--medium); }
-  .dumb-track .pt.to.significant { background: var(--high); }
-
-  .progress { font-family: var(--font-mono); font-size: 13px; color: var(--muted); }
-
-  footer { margin-top: 44px; padding-top: 22px; border-top: 1px solid var(--line); font-size: 14px; color: var(--muted); }
-  footer a { color: var(--accent); }
 
   /* ----------------------------- overview ------------------------------ */
   /* Overview classes are prefixed ov- (shared tiles and buttons) and lv- (the
@@ -859,23 +802,23 @@
     position: relative;
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 8px;
     flex: 1 1 0;
-    min-width: 120px;
-    padding: 14px 12px 12px;
-    border-radius: 14px;
+    min-width: 128px;
+    padding: 20px 16px 16px;
+    border-radius: 18px;
     background: var(--surface);
     border: 1px solid var(--line);
     box-shadow: var(--panel-shadow);
-    min-height: 150px;
+    min-height: 196px;
     transition: background var(--dur-2), border-color var(--dur-2), opacity var(--dur-2);
   }
   .lv-connector {
     flex: 0 0 22px;
     align-self: center;
-    height: 3px;
+    height: 5px;
     margin: 0 -1px;
-    border-radius: 2px;
+    border-radius: 3px;
     background: var(--line);
     position: relative;
     overflow: visible;
@@ -885,40 +828,41 @@
   .lv-connector .lv-connector-dot {
     position: absolute;
     top: 50%; left: 0;
-    width: 8px; height: 8px;
+    width: 13px; height: 13px;
     border-radius: 50%;
     background: var(--tone);
+    box-shadow: 0 0 0 4px var(--tint);
     transform: translate(-50%, -50%);
     opacity: 0;
     pointer-events: none;
   }
   @media (max-width: 1150px) {
-    .lv-stage { flex-basis: calc(25% - 16px); }
-    .lv-connector { flex-basis: 12px; }
-    .lv-connector:nth-of-type(8n) { flex-basis: 100%; height: 12px; }
+    .lv-stage { flex-basis: calc(25% - 18px); }
+    .lv-connector { flex-basis: 16px; }
+    .lv-connector:nth-of-type(8n) { flex-basis: 100%; height: 14px; }
   }
   @media (max-width: 620px) {
-    .lv-stage { flex-basis: calc(50% - 12px); }
-    .lv-connector:nth-of-type(4n) { flex-basis: 100%; height: 12px; }
+    .lv-stage { flex-basis: calc(50% - 14px); }
+    .lv-connector:nth-of-type(4n) { flex-basis: 100%; height: 14px; }
   }
   .lv-stage-top { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
   .lv-dot {
     display: grid;
     place-items: center;
-    width: 28px; height: 28px;
+    width: 38px; height: 38px;
     border-radius: 50%;
     background: var(--sunk);
     color: var(--muted);
-    font-size: 13px;
+    font-size: 15px;
     font-weight: 700;
     flex: none;
     transition: background var(--dur-2), color var(--dur-2);
   }
-  .lv-time { font-family: var(--font-mono); font-size: 11.5px; color: var(--muted); }
-  .lv-stage h3 { margin: 2px 0 0; font-size: 14.5px; color: var(--ink); line-height: 1.25; }
-  .lv-detail { font-size: 12.5px; color: var(--ink-soft); line-height: 1.4; }
+  .lv-time { font-family: var(--font-mono); font-size: 12.5px; color: var(--muted); }
+  .lv-stage h3 { margin: 4px 0 0; font-size: 17px; color: var(--ink); line-height: 1.28; }
+  .lv-detail { font-size: 13.5px; color: var(--ink-soft); line-height: 1.48; }
   .lv-stage.is-pending { opacity: .55; }
-  .lv-stage.is-running { border: 2px solid var(--tone); background: var(--tint); opacity: 1; }
+  .lv-stage.is-running { border: 2px solid var(--tone); background: var(--tint); opacity: 1; box-shadow: 0 0 0 5px var(--tint), var(--panel-shadow); }
   .lv-stage.is-running .lv-dot { background: var(--tone); color: #FFFFFF; animation: lv-pulse 1.1s var(--ease-inout) infinite; }
   .lv-stage.is-done { background: var(--tint); border-color: color-mix(in srgb, var(--tone) 30%, transparent); }
   .lv-stage.is-done .lv-dot { background: var(--tone); color: #FFFFFF; }
@@ -1069,8 +1013,6 @@
     <button type="button" class="tab is-active" data-view="overview">Overview</button>
     <button type="button" class="tab" data-view="score">Score</button>
     <button type="button" class="tab" data-view="live">Live traffic</button>
-    <button type="button" class="tab" data-view="model">Model</button>
-    <button type="button" class="tab" data-view="monitoring">Monitoring</button>
     <span class="tab-ink" aria-hidden="true"></span>
   </nav>
 
@@ -1400,87 +1342,6 @@
     </div>
   </section>
 
-  <!-- =========================== MODEL =========================== -->
-  <section class="view" data-view="model">
-    <!-- Paired, because both are key-value lists with a short right-hand
-         column. Stacked full width they left most of the card empty. -->
-    <div class="two-col">
-      <div class="panel">
-        <p class="panel-title">Provenance</p>
-        <p class="panel-sub">Which artifact is answering requests, and where it came from.</p>
-        <dl class="kv" id="modelKv"></dl>
-      </div>
-
-      <div class="panel">
-        <p class="panel-title">Library versions</p>
-        <p class="panel-sub">Pinned at training time — a mismatch here is how artifacts silently break.</p>
-        <dl class="kv" id="modelLibs"></dl>
-        <div class="method" id="modelLibsNote"></div>
-      </div>
-    </div>
-
-    <div class="panel" style="margin-top:22px">
-      <p class="panel-title">Required inputs</p>
-      <p class="panel-sub">Every column the pipeline expects on a request.</p>
-      <div class="chips" id="modelCols"></div>
-    </div>
-
-    <div class="panel" style="margin-top:22px">
-      <p class="panel-title">Reading the drivers</p>
-      <p class="panel-sub">Two things about this model surprise people. Both are real.</p>
-      <dl class="kv">
-        <dt>Auto-renew reads backwards</dt>
-        <dd>
-          Enabling it raises predicted risk sharply — 0.0024 to 0.6037 on an otherwise
-          identical subscriber. On KKBox's data an active auto-renew accompanies the
-          short prepaid plans that churn most, so the model learned the association the
-          data actually contains rather than the one intuition expects.
-        </dd>
-        <dt>Two inputs do nothing</dt>
-        <dd>
-          support_tickets_last_90d and payment_failures_last_6m move the prediction by
-          exactly zero across their whole range. KKBox publishes no customer-service data
-          and records a transaction only when money moved, so both columns are constant in
-          training. They are kept on the form because the request schema requires them.
-        </dd>
-      </dl>
-    </div>
-
-  </section>
-
-  <!-- ========================= MONITORING ========================= -->
-  <section class="view" data-view="monitoring">
-    <div class="panel">
-      <p class="panel-title">Champion vs challenger</p>
-      <p class="panel-sub">Shadow scoring runs both models on live traffic and serves only the champion.</p>
-      <div id="shadowBody"><div class="empty">Loading…</div></div>
-    </div>
-
-    <div class="panel" style="margin-top:22px">
-      <p class="panel-title">Drift detector response</p>
-      <p class="panel-sub">
-        We move two features by a known amount and watch which ones the detector ranks.
-        This is an instrument test, not a health readout — the point is whether the
-        detector responds to a change we control.
-      </p>
-
-      <div class="method-line">
-        baseline &nbsp;· 400 rows jittered from the three presets<br>
-        disengaged · the same rows, sessions cut to near zero, last-active +45 days
-      </div>
-
-      <div class="row-actions">
-        <button type="button" class="ghost" id="driftRun">Run the comparison</button>
-      </div>
-      <div id="driftBody"><div class="empty">Not run yet.</div></div>
-    </div>
-  </section>
-
-  <footer>
-    Full API reference at <a href="/docs">/docs</a>. Every number on this page comes from
-    the running service, not a fixture.
-  </footer>
-
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
@@ -1560,7 +1421,7 @@
     ink.style.transform = `translateX(${active.offsetLeft}px)`;
   }
 
-  const VIEWS = ["overview", "score", "live", "model", "monitoring"];
+  const VIEWS = ["overview", "score", "live"];
 
   function showView(name) {
     if (!VIEWS.includes(name)) name = "overview";
@@ -1594,14 +1455,6 @@
       liveTimer = setInterval(refreshMetrics, 5000);
     }
     if (name === "overview") refreshOverview();
-    if (name === "model") refreshModel();
-    if (name === "monitoring") {
-      refreshShadow();
-      // The comparison is the whole point of this view, so run it on arrival
-      // rather than leaving the tab empty behind a button. Once only: it is
-      // 800 predictions, and re-running on every tab switch would be rude.
-      if (!driftHasRun) { driftHasRun = true; runDrift(); }
-    }
   }
 
   /* ------------------------------- form -------------------------------- */
@@ -2025,28 +1878,58 @@
     });
   }
 
-  // Bigger, better hand-offs: a stage pops in as it starts, flashes and
-  // hands a pulse down the connector as it finishes, and shakes if the gate
-  // rejects it. Steady-state colouring stays plain CSS (the is-* classes);
-  // GSAP only drives the one-shot transition moment.
+  // Bigger, better hand-offs: a stage pops in hard as it starts, keeps
+  // breathing gently while it works, flashes big and hands a pulse down the
+  // connector as it finishes, and shakes if the gate rejects it. Steady-state
+  // colouring stays plain CSS (the is-* classes); GSAP drives every
+  // transition moment plus the one continuous loop while running.
+  const breathingTweens = new WeakMap();
+
+  function stopBreathing(li) {
+    const tween = breathingTweens.get(li);
+    if (tween) { tween.kill(); breathingTweens.delete(li); }
+  }
   function animateStageStart(li) {
     if (!window.gsap) return;
-    gsap.fromTo(li, { scale: .85, opacity: .6 }, { scale: 1, opacity: 1, duration: .4, ease: "back.out(2)" });
+    stopBreathing(li);
+    gsap.killTweensOf(li);
+    gsap.fromTo(li, { scale: .78, opacity: .5, rotate: -1.5 },
+      { scale: 1, opacity: 1, rotate: 0, duration: .55, ease: "back.out(3)" });
+    // A slow, continuous breathe so the running card stays visibly alive
+    // rather than just sitting still behind its highlighted border.
+    const tween = gsap.to(li, {
+      scale: 1.035, duration: .9, ease: "sine.inOut", yoyo: true, repeat: -1, delay: .55,
+    });
+    breathingTweens.set(li, tween);
   }
   function animateStageDone(li) {
     if (!window.gsap) return;
-    gsap.fromTo(li, { boxShadow: "0 0 0 0 var(--tint)" }, { boxShadow: "0 0 0 6px var(--tint)", duration: .3, yoyo: true, repeat: 1, ease: "power1.inOut" });
+    stopBreathing(li);
+    gsap.killTweensOf(li);
+    const tl = gsap.timeline();
+    tl.set(li, { scale: 1 })
+      .to(li, { scale: 1.09, duration: .18, ease: "power2.out" })
+      .to(li, { scale: 1, duration: .3, ease: "elastic.out(1, .45)" })
+      .fromTo(li,
+        { boxShadow: "0 0 0 0 var(--tint)" },
+        { boxShadow: "0 0 0 14px var(--tint)", duration: .4, yoyo: true, repeat: 1, ease: "power1.inOut" },
+        "<");
   }
   function animateStageFailed(li) {
     if (!window.gsap) return;
-    gsap.fromTo(li, { x: -6 }, { x: 0, duration: .4, ease: "elastic.out(1, .3)" });
+    stopBreathing(li);
+    gsap.killTweensOf(li);
+    gsap.fromTo(li, { x: -12 }, { x: 0, duration: .55, ease: "elastic.out(1.2, .25)" });
   }
   function animateConnector(connector) {
     connector.classList.add("is-filled");
     if (!window.gsap) return;
     const dot = connector.querySelector(".lv-connector-dot");
     if (!dot) return;
-    gsap.fromTo(dot, { left: "0%", opacity: 1 }, { left: "100%", opacity: 0, duration: .5, ease: "power1.inOut" });
+    gsap.killTweensOf(dot);
+    const tl = gsap.timeline();
+    tl.fromTo(dot, { left: "0%", opacity: 1, scale: .6 }, { scale: 1.6, duration: .18, ease: "power1.out" })
+      .to(dot, { left: "100%", scale: .6, opacity: 0, duration: .5, ease: "power1.in" }, "<0.02");
   }
 
   function renderStages(state) {
@@ -2089,6 +1972,11 @@
         stage.detail || (stage.status === "pending" ? "waiting" : stage.status === "running" ? "working…" : "");
 
       if (lastStageStatus[stage.key] !== stage.status) {
+        // Leaving "running" (including straight to "skipped", e.g. a drift
+        // check with no champion to compare against yet) must always stop
+        // the continuous breathing loop - only done/rejected/failed restart
+        // it themselves via their own animation, so skipped needs it here.
+        stopBreathing(li);
         if (stage.status === "running") animateStageStart(li);
         else if (stage.status === "done") animateStageDone(li);
         else if (stage.status === "rejected" || stage.status === "failed") animateStageFailed(li);
@@ -2453,309 +2341,11 @@
     }
   }
 
-  /* -------------------------------- model ------------------------------ */
-
-  async function refreshModel() {
-    let meta;
-    try {
-      meta = await fetch("/model-info").then((r) => r.json());
-    } catch (err) {
-      return;
-    }
-
-    const rows = [
-      ["Model", meta.model_name],
-      ["Trained at", meta.trained_at || "unknown"],
-      ["Decision threshold", meta.decision_threshold],
-      ["Loaded from", meta.served_from === "registry"
-        ? "the MLflow registry (@champion)"
-        : "the promoted model's file, mounted into the container"],
-      ["Registry version", meta.registry_version
-        ? meta.registry_version
-        : "not queried: this process loads the promoted file directly"],
-    ];
-    const kv = $("modelKv");
-    kv.replaceChildren();
-    rows.forEach(([k, v]) => {
-      const dt = document.createElement("dt");
-      dt.textContent = k;
-      const dd = document.createElement("dd");
-      dd.textContent = String(v);
-      kv.append(dt, dd);
-    });
-
-    const cols = $("modelCols");
-    cols.replaceChildren();
-    (meta.required_input_columns || []).forEach((c) => {
-      const chip = document.createElement("span");
-      chip.className = "chip";
-      chip.textContent = c;
-      cols.appendChild(chip);
-    });
-
-    const libs = $("modelLibs");
-    libs.replaceChildren();
-    const versions = Object.entries(meta.library_versions || {});
-    versions.forEach(([k, v]) => {
-      const dt = document.createElement("dt");
-      dt.textContent = k;
-      const dd = document.createElement("dd");
-      dd.textContent = v;
-      libs.append(dt, dd);
-    });
-    // The endpoint returns {} for an artifact trained before versions were
-    // recorded. An empty card looked like a rendering failure; this says which
-    // it is, because the two need different fixes.
-    $("modelLibsNote").textContent = versions.length
-      ? ""
-      : "This artifact recorded no library versions at training time.";
-  }
-
-  /* ------------------------------- shadow ------------------------------ */
-
-  async function refreshShadow() {
-    const host = $("shadowBody");
-    let s;
-    try {
-      s = await fetch("/monitoring/shadow").then((r) => r.json());
-    } catch (err) {
-      host.replaceChildren(el("div", "empty", "Could not load shadow report."));
-      return;
-    }
-
-    host.replaceChildren();
-
-    if (!s.enabled || !s.active) {
-      // An idle comparison is still a state worth reporting: which alias is
-      // live, and what shadow scoring would do if a challenger appeared.
-      const idle = document.createElement("div");
-      idle.className = "tiles";
-      [["Champion", s.champion_version ? "@champion v" + s.champion_version : "@champion",
-        "serving every request"],
-       ["Challenger", "none", "@challenger unset or equal"],
-       ["Comparisons", String(s.compared_total || 0), "since the service started"],
-       ["Promotion gate", "PR-AUC", "with margin, never ROC-AUC"]].forEach(([l, v, sub]) => {
-        const t = document.createElement("div");
-        t.className = "tile";
-        t.append(el("span", "tile-l", l), el("span", "tile-v", v), el("span", "tile-s", sub));
-        idle.appendChild(t);
-      });
-      host.appendChild(idle);
-      const why = el("div", "method",
-        s.detail || "Shadow scoring stays idle while @challenger is unset.");
-      why.style.marginTop = "16px";
-      host.appendChild(why);
-      return;
-    }
-
-    const tiles = document.createElement("div");
-    tiles.className = "tiles";
-    const add = (label, value, sub) => {
-      const t = document.createElement("div");
-      t.className = "tile";
-      t.append(
-        el("span", "tile-l", label),
-        el("span", "tile-v", value),
-        el("span", "tile-s", sub)
-      );
-      tiles.appendChild(t);
-    };
-
-    add("Agreement", s.agreement_rate === null ? "—" : pct(s.agreement_rate),
-        `${s.compared_total} comparisons`);
-    add("Outreach delta", s.flagged_rate_delta === null ? "—" : signed(s.flagged_rate_delta, 4),
-        "challenger minus champion");
-    add("Divergence", s.mean_absolute_divergence === null ? "—" : s.mean_absolute_divergence.toFixed(4),
-        "mean absolute");
-    add("Errors", String(s.errors_total), "challenger failures");
-
-    host.appendChild(tiles);
-
-    const note = el("div", "gauge-note",
-      s.sufficient_evidence
-        ? `champion ${s.champion_version || "?"} vs challenger ${s.challenger_version || "?"}`
-        : `not enough evidence yet — ${s.compared_total} of ${s.required} comparisons`);
-    note.style.textAlign = "left";
-    host.appendChild(note);
-  }
-
   function el(tag, cls, text) {
     const node = document.createElement(tag);
     if (cls) node.className = cls;
     if (text !== undefined) node.textContent = text;
     return node;
-  }
-
-  /* -------------------------------- drift ------------------------------ */
-
-  // Drift needs a population, and a browser has none — so build one by
-  // jittering the presets. The shifted variant deliberately pushes the two
-  // features churn is most sensitive to, which is what makes PSI move.
-  function sampleSubscribers(count, shifted) {
-    const base = [PRESETS.healthy, PRESETS.borderline, PRESETS.at_risk];
-    const out = [];
-    for (let i = 0; i < count; i += 1) {
-      const seed = { ...base[i % base.length] };
-      const jitter = (v, spread) => Math.max(0, v + (Math.random() - 0.5) * spread);
-
-      seed.tenure_days = Math.round(jitter(seed.tenure_days, 120));
-      seed.monthly_fee = Number(jitter(seed.monthly_fee, 6).toFixed(2));
-      // Cut to near zero, not merely reduced. The baseline cohort averages
-      // ~11.3 sessions against a training mean of 4.28, so a milder cut lands
-      // *on* the training mean and PSI barely moves - measured: x0.35 shifted
-      // PSI by only 0.22, while x0.05 shifts it by 1.89.
-      seed.avg_session_count_last_30d = Number(
-        jitter(shifted ? seed.avg_session_count_last_30d * 0.05 : seed.avg_session_count_last_30d, 6).toFixed(1)
-      );
-      // Clamped to tenure: the request schema rejects anyone inactive for
-      // longer than they have existed, and jittering both independently
-      // produces exactly that often enough to fail the whole batch.
-      seed.last_activity_days_ago = Math.min(
-        seed.tenure_days,
-        Math.round(jitter(shifted ? seed.last_activity_days_ago + 45 : seed.last_activity_days_ago, 10))
-      );
-      seed.support_tickets_last_90d = Math.round(jitter(seed.support_tickets_last_90d, 2));
-      seed.payment_failures_last_6m = Math.round(jitter(seed.payment_failures_last_6m, 2));
-      seed.discounts_used_last_6m = Math.round(jitter(seed.discounts_used_last_6m, 2));
-      out.push(seed);
-    }
-    return out;
-  }
-
-  async function postDrift(shifted) {
-    const response = await fetch("/monitoring/drift", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ subscribers: sampleSubscribers(400, shifted) }),
-    });
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.detail || "Drift check failed.");
-    return data;
-  }
-
-  // Both cohorts in one action. Either one alone reports "significant" on
-  // nearly every feature - a 400-row synthetic cohort is far from 6.77M real
-  // subscribers however it is jittered - so a single run tells you nothing.
-  // The comparison does: only the features we actually moved should climb.
-  let driftHasRun = false;
-
-  async function runDrift() {
-    const host = $("driftBody");
-    const button = $("driftRun");
-    button.disabled = true;
-
-    try {
-      host.replaceChildren(el("div", "progress", "Scoring cohort 1 of 2…"));
-      const base = await postDrift(false);
-      host.replaceChildren(el("div", "progress", "Scoring cohort 2 of 2…"));
-      const shifted = await postDrift(true);
-      renderDriftComparison(base, shifted);
-    } catch (err) {
-      host.replaceChildren(el("div", "empty", err.message));
-    } finally {
-      button.disabled = false;
-    }
-  }
-
-  // PSI spans two orders of magnitude here, so a linear axis pins everything
-  // at the right-hand edge - which is exactly what the previous bar chart did.
-  const PSI_MIN = 0.01, PSI_MAX = 20;
-  function psiPos(value) {
-    const v = Math.max(PSI_MIN, Math.min(PSI_MAX, value || PSI_MIN));
-    const lo = Math.log10(PSI_MIN), hi = Math.log10(PSI_MAX);
-    return ((Math.log10(v) - lo) / (hi - lo)) * 100;
-  }
-
-  function driftRow(name, from, to, verdict, caption, pinned) {
-    const row = el("div", "dumb" + (pinned ? " pinned" : ""));
-    row.appendChild(el("div", "dumb-name", name));
-
-    const track = el("div", "dumb-track");
-    const a = psiPos(from), b = psiPos(to);
-    const link = el("span", "link");
-    link.style.left = Math.min(a, b) + "%";
-    link.style.width = Math.abs(b - a) + "%";
-    link.style.background = b > a ? "var(--high)" : "var(--line-firm)";
-
-    const p1 = el("span", "pt from");
-    p1.style.left = a + "%";
-    const p2 = el("span", "pt to " + verdict);
-    p2.style.left = b + "%";
-
-    track.append(link, p1, p2);
-    row.appendChild(track);
-    if (caption) row.appendChild(el("div", "dumb-sub", caption));
-    return row;
-  }
-
-  function renderDriftComparison(base, shifted) {
-    const host = $("driftBody");
-    host.replaceChildren();
-
-    const baseBy = Object.fromEntries(base.features.map((f) => [f.feature, f]));
-    const rows = shifted.features
-      .map((f) => ({ now: f, was: baseBy[f.feature] }))
-      .filter((r) => r.was)
-      .map((r) => ({ ...r, delta: r.now.psi - r.was.psi }))
-      .sort((x, y) => Math.abs(y.delta) - Math.abs(x.delta));
-
-    // The headline sentence, computed rather than written: rank position is
-    // meaningful because the API returns features sorted by PSI descending.
-    if (rows.length) {
-      const top = rows[0];
-      const wasRank = base.features.findIndex((f) => f.feature === top.now.feature) + 1;
-      const nowRank = shifted.features.findIndex((f) => f.feature === top.now.feature) + 1;
-      const quiet = rows.filter((r) => Math.abs(r.delta) < 0.5).length;
-      const movers = rows.filter((r) => Math.abs(r.delta) >= 0.5)
-        .map((r) => r.now.feature).join(" and ");
-      host.appendChild(el("div", "finding",
-        `The detector ranked ${movers || "nothing"} highest. ` +
-        `${top.now.feature} went from rank ${wasRank} to rank ${nowRank}, ` +
-        `PSI ${top.was.psi.toFixed(2)} → ${top.now.psi.toFixed(2)}. ` +
-        `The other ${quiet} features moved less than 0.5 — which is the result: ` +
-        `it flagged what we moved, and only that.`));
-    }
-
-    const axis = el("div", "axis");
-    [["moderate", shifted.thresholds.moderate], ["significant", shifted.thresholds.significant]]
-      .forEach(([label, value]) => {
-        const mark = el("i");
-        mark.style.left = psiPos(value) + "%";
-        mark.dataset.l = `${label} ${value}`;
-        axis.appendChild(mark);
-      });
-    host.appendChild(axis);
-
-    // The model's own output first - whether the shift changes what the model
-    // predicts is the only business-relevant question here.
-    if (base.prediction && shifted.prediction) {
-      host.appendChild(driftRow(
-        "dropout_probability",
-        base.prediction.psi, shifted.prediction.psi, shifted.prediction.verdict,
-        `training ${fmt(base.prediction.reference_mean)} → baseline ` +
-        `${fmt(base.prediction.live_mean)} → shifted ${fmt(shifted.prediction.live_mean)}`,
-        true));
-    }
-
-    rows.forEach((r) => {
-      // Discrete features carry no means - only unseen categories.
-      const caption = r.now.reference_mean === null
-        ? "categories only"
-        : `training ${fmt(r.now.reference_mean)} → baseline ${fmt(r.was.live_mean)} → ` +
-          `shifted ${fmt(r.now.live_mean)}`;
-      host.appendChild(driftRow(r.now.feature, r.was.psi, r.now.psi, r.now.verdict, caption));
-    });
-
-    host.appendChild(el("div", "method",
-      "Absolute PSI against 6.77M real subscribers is high for any 400-row synthetic " +
-      "cohort, so both runs sit right of both thresholds. The comparison, not the level, " +
-      "is the result."));
-  }
-
-  function fmt(value) {
-    if (value === null || value === undefined) return "—";
-    const n = Number(value);
-    return Math.abs(n) < 1 ? n.toFixed(3) : n.toFixed(1);
   }
 
   /* -------------------------------- wiring ----------------------------- */
@@ -2787,8 +2377,6 @@
     clearImpacts();
     $("result").classList.add("stale");
   });
-  $("driftRun").addEventListener("click", runDrift);
-
   applyPreset("at_risk");
   syncSliders();
 
