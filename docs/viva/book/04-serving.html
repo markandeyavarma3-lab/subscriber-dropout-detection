@@ -70,7 +70,7 @@
 </figure>
 
 <h2>The live MLOps pipeline (the Overview)</h2>
-<p>The rest of the project runs its pipeline on a schedule, which is invisible in a 15-minute demo. The Overview makes it visible. Each click on <strong>Run</strong> pretends it is a specific day in early 2017 and does exactly what the nightly pipeline would have done that day, on the real KKBox data in Postgres:</p>
+<p>The rest of the project runs its pipeline on a schedule, which is invisible in a 15-minute demo. The Overview makes it visible. One click on <strong>Run replay</strong> plays three replayed days back to back, each one pretending it is a specific day in early 2017 and does exactly what the nightly pipeline would have done that day, on the real KKBox data in Postgres:</p>
 <table>
   <thead><tr><th>Stage</th><th>What happens</th></tr></thead>
   <tr><td>1 · New data arrives</td><td>Counts the rows that landed in the warehouse since the last replayed day (listening days, subscription events, payments)</td></tr>
@@ -116,7 +116,7 @@
 <p>These are the model's own answers, not inferences. The two fields that are always zero in KKBox (tickets, payment failures) are deliberately never offered as levers, because they'd promise an action that changes nothing.</p>
 
 <h3>The live drift test</h3>
-<p>The Monitoring tab builds 400 plausible subscribers from the presets, then a second "disengaged" copy: sessions cut to near zero and last activity pushed back 45 days. It sends both to <code>/monitoring/drift</code> and compares. The detector ranks <strong>exactly the two features that were changed</strong> at the top, while the other seven move by less than 0.5. It's an instrument test: proof the detector responds to a change we control.</p>
+<p><code>POST /monitoring/drift</code> takes a batch of subscribers and returns the PSI of every feature against the training profile. An earlier version of the dashboard had a Monitoring tab that used it as an instrument test: 400 plausible subscribers built from the presets, then a second "disengaged" copy (sessions cut to near zero, last activity pushed back 45 days). The detector ranked <strong>exactly the two features that were changed</strong> at the top, while the other seven moved by less than 0.5: proof it responds to a change we control. That tab was removed to keep the demo to three focused pages; the endpoint is still there, in <code>/docs</code>, and the pipeline's own drift stage is what the Overview shows.</p>
 
 <div class="callout say">
   <div class="callout-title">Say this</div>

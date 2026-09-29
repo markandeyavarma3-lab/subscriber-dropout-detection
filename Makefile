@@ -8,7 +8,15 @@
 # resolves to nothing and every target below fails with "No such file or
 # directory". `?=` still lets an activated venv or an explicit `PYTHON=...`
 # override this, so nothing is lost for anyone who does have `python` on PATH.
-PYTHON ?= python3
+#
+# Prefer this checkout's own .venv over plain `python3` when it exists: a
+# fresh terminal that never ran `source .venv/bin/activate` otherwise falls
+# through to the Command Line Tools' bare python3, which has none of
+# requirements.txt installed - confirmed live, `make monitor` (and so
+# `make demo-prepare`) failing with "No module named 'prefect'" from exactly
+# that interpreter while .venv had it all along. A checkout with no .venv yet
+# (fresh clone, CI) still falls back to plain python3 as before.
+PYTHON ?= $(if $(wildcard .venv/bin/python3),.venv/bin/python3,python3)
 IMAGE  ?= subscriber-dropout-api
 
 help:  ## Show the available targets
@@ -143,6 +151,7 @@ monitor:  ## Check drift on the Postgres warehouse and write the pipeline report
 
 demo-prepare:  ## Once, the day before: build the image and write the drift report
 	docker compose build subscriber-api
+	docker compose up -d postgres
 	$(MAKE) monitor
 
 demo:  ## Start everything for a live demo, warm it up, print the URLs

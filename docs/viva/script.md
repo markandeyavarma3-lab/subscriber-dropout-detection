@@ -87,20 +87,23 @@ replay model", press **Restore original model** first.
 
 ### 1:00 – 3:00 · The pipeline, live (Overview → Run)
 
-1. Click **▶ Run 1 Jan 2017**. The eight stage cards light up one by one (about 30 seconds
-   the first time, 10–30 seconds after that). Talk over it:
+1. Click **▶ Run replay** once. It plays all three months back to back on its own (about
+   1–1½ minutes in total, each month 10–40 seconds). The eight stage cards light up one by
+   one and a pulse travels along each connector as a stage hands off. Talk over it:
    > "It's pretending to be 1 January 2017 and doing what the nightly pipeline did that day,
    > on the real data in Postgres. New data arrives, features are built only from the past,
    > the data is validated, checked for drift, a model is trained, tested on a month it
    > never saw, and then the **gate** decides whether it goes live."
-2. When it finishes, point at **Go live** and the header pill, which now says *live replay
+2. Month 1 finishes: point at **Go live** and the header pill, which now says *live replay
    model · MLflow vN*:
    > "It was promoted, because there was no champion yet, and the website is now serving it.
    > Nothing restarted."
-3. Click **▶ Run 31 Jan 2017**. This one is **rejected**: 0.0475 against 0.0474.
+3. Month 2 starts by itself. Its **Gate** card turns red and shakes: **rejected**, 0.0475
+   against 0.0474.
    > "It's a bit better, but not by the 0.005 margin, so the old model keeps serving. That's
    > the gate doing its job: a new model has to be *measurably* better, not luckily better."
-4. Leave month 3 for later.
+4. Month 3 runs by itself while you move on to the data; it's done by the time you reach
+   MLflow.
 
 If the examiner asks whether it's real: the scores differ each month, the gate rejected one,
 and every run appears in MLflow. See the book, section H.
@@ -143,10 +146,10 @@ Then **Models → subscriber-dropout-classifier**.
 > "The registry holds versions, and the live one carries the **@champion** alias. A new
 > model only takes over if it beats the champion on **PR-AUC**, by a margin."
 
-Then **Models → subscriber-dropout-live**: the versions the Overview just made, one per click,
-with **@champion** on the one that's serving. Back on the dashboard, click **▶ Run 28 Feb
-2017**. It's **promoted** (0.0568 vs 0.0489), and drift is *moderate*: last-activity days
-shifted (PSI 0.153). Refresh MLflow and a new version carries **@champion**.
+Then **Models → subscriber-dropout-live**: the versions the Overview just made, one per
+month, with **@champion** on the one that's serving. Back on the dashboard, point at month 3
+(28 Feb 2017): it was **promoted** (0.0568 vs 0.0489), and its drift check is *moderate*:
+last-activity days shifted (PSI 0.153). That's the version carrying **@champion** in MLflow.
 
 > "That's the whole loop: data in, a retrained model, a gate, and a deployment, with every
 > step recorded."
@@ -181,10 +184,12 @@ On the **Score** tab (it's already scored the at-risk example):
 
 ### 11:30 – 15:00 · Monitoring (dashboard → Grafana → Prometheus)
 
-1. Dashboard **Monitoring** tab: the drift test has already run.
-   > "Drift is when live data stops looking like training data. I measure it with PSI. To
-   > show the detector actually works, I deliberately shift two features, and it ranks
-   > **exactly those two** at the top while the others stay under 0.5."
+1. Dashboard **Live traffic** tab: the 300 predictions `make demo` sent while warming up,
+   plus anything scored on the Score tab.
+   > "This is the serving side in aggregate: how many were scored, how many flagged, the
+   > risk mix, and the **Shift** tile: how far live predictions sit from the training
+   > mean. Drift is when live data stops looking like training data; I measure it with PSI,
+   > and the pipeline's drift stage is what you saw on the Overview."
 2. **Grafana**:
    > "Prometheus collects metrics from the API and the streaming scorer every few seconds,
    > and Grafana shows them."
