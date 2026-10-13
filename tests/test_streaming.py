@@ -438,7 +438,12 @@ def test_makefile_uses_an_interpreter_that_exists_on_a_stock_mac() -> None:
     makefile = (pathlib.Path(__file__).resolve().parents[1] / "Makefile").read_text()
 
     default = next(line for line in makefile.splitlines() if line.startswith("PYTHON"))
-    assert default == "PYTHON ?= python3", (
+    # Either plain python3, or the checkout's .venv with python3 as the fallback.
+    allowed = {
+        "PYTHON ?= python3",
+        "PYTHON ?= $(if $(wildcard .venv/bin/python3),.venv/bin/python3,python3)",
+    }
+    assert default in allowed, (
         f"Makefile's PYTHON default is {default!r}; bare 'python' does not exist "
         "on a stock Mac and every target using $(PYTHON) fails on one"
     )
